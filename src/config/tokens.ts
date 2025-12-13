@@ -39,7 +39,7 @@ export const YAKA: Token = {
 
 // Common stablecoins and tokens on Sei
 export const USDC: Token = {
-    address: '0x3894085Ef7Ff0f0aeDf52E2A2704928d1Ec074F1',
+    address: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
     symbol: 'USDC',
     name: 'USD Coin',
     decimals: 6,
