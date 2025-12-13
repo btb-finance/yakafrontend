@@ -1,19 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
+import { parseUnits, Address, maxUint256, formatUnits } from 'viem';
 import Link from 'next/link';
-import { Token, DEFAULT_TOKEN_LIST, SEI, USDC } from '@/config/tokens';
+import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
+import { CL_CONTRACTS, V2_CONTRACTS, COMMON } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity, usePool } from '@/hooks/useLiquidity';
 import { useTokenBalance } from '@/hooks/useToken';
+import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
+import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 
 type Tab = 'add' | 'positions';
+type PoolType = 'v2' | 'cl';
 
 export default function LiquidityPage() {
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<Tab>('add');
+    const [poolType, setPoolType] = useState<PoolType>('v2');
 
     // Add liquidity state
     const [tokenA, setTokenA] = useState<Token | undefined>(SEI);
@@ -24,12 +30,22 @@ export default function LiquidityPage() {
     const [selectorOpen, setSelectorOpen] = useState<'A' | 'B' | null>(null);
     const [txHash, setTxHash] = useState<string | null>(null);
 
+    // CL specific state
+    const [tickSpacing, setTickSpacing] = useState(100); // Default tick spacing
+    const [priceLower, setPriceLower] = useState('');
+    const [priceUpper, setPriceUpper] = useState('');
+
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
     const { balance: balanceA } = useTokenBalance(tokenA);
     const { balance: balanceB } = useTokenBalance(tokenB);
     const { poolAddress, exists: poolExists } = usePool(tokenA, tokenB, stable);
+    const { positions: clPositions, refetch: refetchCL } = useCLPositions();
+    const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
 
+    const { writeContractAsync } = useWriteContract();
+
+    // Handle V2 liquidity add
     const handleAddLiquidity = async () => {
         if (!tokenA || !tokenB || !amountA || !amountB) return;
 
@@ -39,6 +55,80 @@ export default function LiquidityPage() {
             setTxHash(result.hash);
             setAmountA('');
             setAmountB('');
+            refetchV2();
+        }
+    };
+
+    // Handle CL liquidity add
+    const handleAddCLLiquidity = async () => {
+        if (!tokenA || !tokenB || !amountA || !amountB || !address) return;
+
+        try {
+            // Sort tokens
+            const token0Addr = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
+                ? tokenA.address
+                : tokenB.address;
+            const token1Addr = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
+                ? tokenB.address
+                : tokenA.address;
+            const isToken0First = tokenA.address.toLowerCase() < tokenB.address.toLowerCase();
+
+            const amount0 = isToken0First ? amountA : amountB;
+            const amount1 = isToken0First ? amountB : amountA;
+            const token0 = isToken0First ? tokenA : tokenB;
+            const token1 = isToken0First ? tokenB : tokenA;
+
+            // Approve tokens
+            if (!tokenA.isNative) {
+                await writeContractAsync({
+                    address: tokenA.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
+                });
+            }
+            if (!tokenB.isNative) {
+                await writeContractAsync({
+                    address: tokenB.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
+                });
+            }
+
+            // Calculate tick values (simplified - using full range for now)
+            const tickLower = -887220; // Min tick for tickSpacing 100
+            const tickUpper = 887220;  // Max tick for tickSpacing 100
+
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            const hash = await writeContractAsync({
+                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                abi: NFT_POSITION_MANAGER_ABI,
+                functionName: 'mint',
+                args: [{
+                    token0: token0Addr as Address,
+                    token1: token1Addr as Address,
+                    tickSpacing,
+                    tickLower,
+                    tickUpper,
+                    amount0Desired: parseUnits(amount0, token0.decimals),
+                    amount1Desired: parseUnits(amount1, token1.decimals),
+                    amount0Min: BigInt(0),
+                    amount1Min: BigInt(0),
+                    recipient: address,
+                    deadline,
+                    sqrtPriceX96: BigInt(0), // Let it use existing pool price
+                }],
+                value: tokenA.isNative ? parseUnits(amountA, 18) : tokenB.isNative ? parseUnits(amountB, 18) : BigInt(0),
+            });
+
+            setTxHash(hash);
+            setAmountA('');
+            setAmountB('');
+            refetchCL();
+        } catch (err: any) {
+            console.error('CL mint error:', err);
         }
     };
 
@@ -85,12 +175,12 @@ export default function LiquidityPage() {
                                 : 'text-gray-400 hover:text-white'
                             }`}
                     >
-                        My Positions
+                        My Positions ({v2Positions.length + clPositions.length})
                     </button>
                 </div>
             </div>
 
-            {/* Content */}
+            {/* Add Liquidity Tab */}
             {activeTab === 'add' && (
                 <motion.div
                     className="max-w-md mx-auto"
@@ -112,40 +202,94 @@ export default function LiquidityPage() {
                             <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
                                 Liquidity added!{' '}
                                 <a
-                                    href={`https://seiscan.io/tx/${txHash}`}
+                                    href={`https://seitrace.com/tx/${txHash}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="underline"
                                 >
-                                    View on SeiScan
+                                    View on SeiTrace
                                 </a>
                             </div>
                         )}
 
-                        {/* Pool Type (Stable/Volatile) */}
+                        {/* Pool Type Selection */}
                         <div className="mb-6">
                             <label className="text-sm text-gray-400 mb-2 block">Pool Type</label>
                             <div className="grid grid-cols-2 gap-3">
                                 <button
-                                    onClick={() => setStable(false)}
-                                    className={`p-3 rounded-xl text-center transition ${!stable
+                                    onClick={() => setPoolType('v2')}
+                                    className={`p-3 rounded-xl text-center transition ${poolType === 'v2'
                                             ? 'bg-primary/10 border border-primary/30 text-white'
                                             : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                         }`}
                                 >
-                                    Volatile
+                                    <div className="font-semibold">V2 Pool</div>
+                                    <div className="text-xs text-gray-400">Classic AMM</div>
                                 </button>
                                 <button
-                                    onClick={() => setStable(true)}
-                                    className={`p-3 rounded-xl text-center transition ${stable
-                                            ? 'bg-primary/10 border border-primary/30 text-white'
+                                    onClick={() => setPoolType('cl')}
+                                    className={`p-3 rounded-xl text-center transition ${poolType === 'cl'
+                                            ? 'bg-secondary/10 border border-secondary/30 text-white'
                                             : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                         }`}
                                 >
-                                    Stable
+                                    <div className="font-semibold">CL Pool</div>
+                                    <div className="text-xs text-gray-400">Concentrated</div>
                                 </button>
                             </div>
                         </div>
+
+                        {/* V2 Stable/Volatile Toggle */}
+                        {poolType === 'v2' && (
+                            <div className="mb-6">
+                                <label className="text-sm text-gray-400 mb-2 block">Pool Curve</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setStable(false)}
+                                        className={`p-3 rounded-xl text-center transition ${!stable
+                                                ? 'bg-primary/10 border border-primary/30 text-white'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        Volatile
+                                    </button>
+                                    <button
+                                        onClick={() => setStable(true)}
+                                        className={`p-3 rounded-xl text-center transition ${stable
+                                                ? 'bg-primary/10 border border-primary/30 text-white'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        Stable
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* CL Tick Spacing */}
+                        {poolType === 'cl' && (
+                            <div className="mb-6">
+                                <label className="text-sm text-gray-400 mb-2 block">Fee Tier</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                        { spacing: 1, fee: '0.01%' },
+                                        { spacing: 50, fee: '0.05%' },
+                                        { spacing: 100, fee: '0.30%' },
+                                    ].map(({ spacing, fee }) => (
+                                        <button
+                                            key={spacing}
+                                            onClick={() => setTickSpacing(spacing)}
+                                            className={`p-2 rounded-lg text-center text-sm transition ${tickSpacing === spacing
+                                                    ? 'bg-secondary/10 border border-secondary/30 text-white'
+                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            {fee}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Token A */}
                         <div className="mb-4">
@@ -164,17 +308,8 @@ export default function LiquidityPage() {
                                         placeholder="0.0"
                                         className="flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600"
                                     />
-                                    <button
-                                        onClick={() => setSelectorOpen('A')}
-                                        className="token-select"
-                                    >
-                                        {tokenA ? (
-                                            <>
-                                                <span className="font-semibold">{tokenA.symbol}</span>
-                                            </>
-                                        ) : (
-                                            <span className="text-primary">Select</span>
-                                        )}
+                                    <button onClick={() => setSelectorOpen('A')} className="token-select">
+                                        {tokenA ? <span className="font-semibold">{tokenA.symbol}</span> : <span className="text-primary">Select</span>}
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
@@ -209,17 +344,8 @@ export default function LiquidityPage() {
                                         placeholder="0.0"
                                         className="flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600"
                                     />
-                                    <button
-                                        onClick={() => setSelectorOpen('B')}
-                                        className="token-select"
-                                    >
-                                        {tokenB ? (
-                                            <>
-                                                <span className="font-semibold">{tokenB.symbol}</span>
-                                            </>
-                                        ) : (
-                                            <span className="text-primary">Select</span>
-                                        )}
+                                    <button onClick={() => setSelectorOpen('B')} className="token-select">
+                                        {tokenB ? <span className="font-semibold">{tokenB.symbol}</span> : <span className="text-primary">Select</span>}
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
@@ -233,20 +359,18 @@ export default function LiquidityPage() {
                             <div className="mb-6 p-3 rounded-xl bg-white/5">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-400">Pool</span>
-                                    <span>{tokenA.symbol}/{tokenB.symbol} ({stable ? 'Stable' : 'Volatile'})</span>
+                                    <span>{tokenA.symbol}/{tokenB.symbol}</span>
                                 </div>
                                 <div className="flex justify-between text-sm mt-1">
-                                    <span className="text-gray-400">Status</span>
-                                    <span className={poolExists ? 'text-green-400' : 'text-yellow-400'}>
-                                        {poolExists ? 'Pool Exists' : 'New Pool'}
-                                    </span>
+                                    <span className="text-gray-400">Type</span>
+                                    <span>{poolType === 'cl' ? 'Concentrated' : stable ? 'Stable' : 'Volatile'}</span>
                                 </div>
                             </div>
                         )}
 
                         {/* Action Button */}
                         <motion.button
-                            onClick={handleAddLiquidity}
+                            onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
                             disabled={!canAdd || isLoading}
                             className="w-full btn-primary py-4"
                             whileHover={canAdd ? { scale: 1.01 } : {}}
@@ -267,13 +391,14 @@ export default function LiquidityPage() {
                             ) : !amountA || !amountB ? (
                                 'Enter Amounts'
                             ) : (
-                                'Add Liquidity'
+                                `Add ${poolType === 'cl' ? 'CL' : 'V2'} Liquidity`
                             )}
                         </motion.button>
                     </div>
                 </motion.div>
             )}
 
+            {/* Positions Tab */}
             {activeTab === 'positions' && (
                 <motion.div
                     className="max-w-4xl mx-auto"
@@ -285,18 +410,99 @@ export default function LiquidityPage() {
                             <h3 className="text-xl font-semibold mb-2">Connect Wallet</h3>
                             <p className="text-gray-400 mb-6">Connect your wallet to view your positions</p>
                         </div>
-                    ) : (
+                    ) : v2Positions.length === 0 && clPositions.length === 0 ? (
                         <div className="glass-card p-12 text-center">
-                            <h3 className="text-xl font-semibold mb-2">Your Positions</h3>
+                            <h3 className="text-xl font-semibold mb-2">No Positions Found</h3>
                             <p className="text-gray-400 mb-6">
-                                Your LP positions will appear here once you add liquidity.
+                                You don't have any LP positions yet.
                             </p>
-                            <button
-                                onClick={() => setActiveTab('add')}
-                                className="btn-primary"
-                            >
+                            <button onClick={() => setActiveTab('add')} className="btn-primary">
                                 Add Liquidity
                             </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {/* V2 Positions */}
+                            {v2Positions.length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-4">V2 Positions</h3>
+                                    <div className="space-y-3">
+                                        {v2Positions.map((pos, i) => (
+                                            <div key={i} className="glass-card p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="relative">
+                                                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold">
+                                                                ?
+                                                            </div>
+                                                            <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-sm font-bold absolute -right-2 top-0 border-2 border-bg-primary">
+                                                                ?
+                                                            </div>
+                                                        </div>
+                                                        <div className="ml-2">
+                                                            <div className="font-semibold text-sm">
+                                                                Pool ({pos.stable ? 'Stable' : 'Volatile'})
+                                                            </div>
+                                                            <div className="text-xs text-gray-400 font-mono">
+                                                                {pos.poolAddress.slice(0, 10)}...
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="font-semibold text-sm">
+                                                            {formatUnits(pos.lpBalance, 18).slice(0, 10)} LP
+                                                        </div>
+                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+                                                            V2
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* CL Positions */}
+                            {clPositions.length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-4 mt-6">Concentrated Positions</h3>
+                                    <div className="space-y-3">
+                                        {clPositions.map((pos, i) => (
+                                            <div key={i} className="glass-card p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="relative">
+                                                            <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-sm font-bold">
+                                                                ?
+                                                            </div>
+                                                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold absolute -right-2 top-0 border-2 border-bg-primary">
+                                                                ?
+                                                            </div>
+                                                        </div>
+                                                        <div className="ml-2">
+                                                            <div className="font-semibold text-sm">
+                                                                NFT #{pos.tokenId.toString()}
+                                                            </div>
+                                                            <div className="text-xs text-gray-400">
+                                                                Tick: {pos.tickLower} → {pos.tickUpper}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="font-semibold text-sm">
+                                                            {pos.liquidity.toString().slice(0, 8)}...
+                                                        </div>
+                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-secondary/20 text-secondary">
+                                                            CL
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </motion.div>
@@ -308,47 +514,24 @@ export default function LiquidityPage() {
                 onClose={() => setSelectorOpen(null)}
                 onSelect={(token) => {
                     if (selectorOpen === 'A') {
-                        setTokenA(token);
+                        // For CL pools, replace SEI with WSEI
+                        if (poolType === 'cl' && token.isNative) {
+                            setTokenA(WSEI);
+                        } else {
+                            setTokenA(token);
+                        }
                     } else {
-                        setTokenB(token);
+                        if (poolType === 'cl' && token.isNative) {
+                            setTokenB(WSEI);
+                        } else {
+                            setTokenB(token);
+                        }
                     }
                     setSelectorOpen(null);
                 }}
                 selectedToken={selectorOpen === 'A' ? tokenA : tokenB}
                 excludeToken={selectorOpen === 'A' ? tokenB : tokenA}
             />
-
-            {/* Info Cards */}
-            <motion.div
-                className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-            >
-                <div className="glass-card p-6">
-                    <h3 className="text-lg font-semibold mb-3">Volatile Pools</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                        Standard AMM pools using the x*y=k formula. Best for uncorrelated assets with price volatility.
-                    </p>
-                    <ul className="text-sm text-gray-400 space-y-1">
-                        <li>• Standard constant product formula</li>
-                        <li>• Higher fees (typically 0.3%)</li>
-                        <li>• Ideal for SEI/USDC, TOKEN/SEI pairs</li>
-                    </ul>
-                </div>
-
-                <div className="glass-card p-6">
-                    <h3 className="text-lg font-semibold mb-3">Stable Pools</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                        Optimized pools for correlated assets with minimal price deviation.
-                    </p>
-                    <ul className="text-sm text-gray-400 space-y-1">
-                        <li>• Stable swap curve (x³y + y³x = k)</li>
-                        <li>• Lower fees and slippage</li>
-                        <li>• Ideal for USDC/USDT, stablecoins</li>
-                    </ul>
-                </div>
-            </motion.div>
         </div>
     );
 }
