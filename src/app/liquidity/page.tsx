@@ -64,41 +64,37 @@ export default function LiquidityPage() {
         if (!tokenA || !tokenB || !amountA || !amountB || !address) return;
 
         try {
-            // Sort tokens
-            const token0Addr = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
-                ? tokenA.address
-                : tokenB.address;
-            const token1Addr = tokenA.address.toLowerCase() < tokenB.address.toLowerCase()
-                ? tokenB.address
-                : tokenA.address;
-            const isToken0First = tokenA.address.toLowerCase() < tokenB.address.toLowerCase();
+            // For CL pools, we need to use WSEI instead of native SEI
+            // Get actual token addresses (replace native with WSEI)
+            const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+            const actualTokenB = tokenB.isNative ? WSEI : tokenB;
 
-            const amount0 = isToken0First ? amountA : amountB;
-            const amount1 = isToken0First ? amountB : amountA;
-            const token0 = isToken0First ? tokenA : tokenB;
-            const token1 = isToken0First ? tokenB : tokenA;
+            // Sort tokens by address
+            const isAFirst = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
+            const token0 = isAFirst ? actualTokenA : actualTokenB;
+            const token1 = isAFirst ? actualTokenB : actualTokenA;
+            const amount0 = isAFirst ? amountA : amountB;
+            const amount1 = isAFirst ? amountB : amountA;
 
-            // Approve tokens
-            if (!tokenA.isNative) {
-                await writeContractAsync({
-                    address: tokenA.address as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
-                });
-            }
-            if (!tokenB.isNative) {
-                await writeContractAsync({
-                    address: tokenB.address as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
-                });
-            }
+            // Approve both tokens (WSEI needs approval too)
+            await writeContractAsync({
+                address: token0.address as Address,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
+            });
 
-            // Calculate tick values (simplified - using full range for now)
-            const tickLower = -887220; // Min tick for tickSpacing 100
-            const tickUpper = 887220;  // Max tick for tickSpacing 100
+            await writeContractAsync({
+                address: token1.address as Address,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
+            });
+
+            // Calculate tick values (full range for the selected tick spacing)
+            const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
+            const tickLower = -maxTick;
+            const tickUpper = maxTick;
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
@@ -107,8 +103,8 @@ export default function LiquidityPage() {
                 abi: NFT_POSITION_MANAGER_ABI,
                 functionName: 'mint',
                 args: [{
-                    token0: token0Addr as Address,
-                    token1: token1Addr as Address,
+                    token0: token0.address as Address,
+                    token1: token1.address as Address,
                     tickSpacing,
                     tickLower,
                     tickUpper,
@@ -120,7 +116,7 @@ export default function LiquidityPage() {
                     deadline,
                     sqrtPriceX96: BigInt(0), // Let it use existing pool price
                 }],
-                value: tokenA.isNative ? parseUnits(amountA, 18) : tokenB.isNative ? parseUnits(amountB, 18) : BigInt(0),
+                // No native value needed since we use WSEI (ERC20)
             });
 
             setTxHash(hash);
@@ -162,8 +158,8 @@ export default function LiquidityPage() {
                     <button
                         onClick={() => setActiveTab('add')}
                         className={`px-6 py-2 rounded-lg font-medium transition ${activeTab === 'add'
-                                ? 'bg-primary text-white'
-                                : 'text-gray-400 hover:text-white'
+                            ? 'bg-primary text-white'
+                            : 'text-gray-400 hover:text-white'
                             }`}
                     >
                         Add Liquidity
@@ -171,8 +167,8 @@ export default function LiquidityPage() {
                     <button
                         onClick={() => setActiveTab('positions')}
                         className={`px-6 py-2 rounded-lg font-medium transition ${activeTab === 'positions'
-                                ? 'bg-primary text-white'
-                                : 'text-gray-400 hover:text-white'
+                            ? 'bg-primary text-white'
+                            : 'text-gray-400 hover:text-white'
                             }`}
                     >
                         My Positions ({v2Positions.length + clPositions.length})
@@ -219,8 +215,8 @@ export default function LiquidityPage() {
                                 <button
                                     onClick={() => setPoolType('v2')}
                                     className={`p-3 rounded-xl text-center transition ${poolType === 'v2'
-                                            ? 'bg-primary/10 border border-primary/30 text-white'
-                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                        ? 'bg-primary/10 border border-primary/30 text-white'
+                                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                         }`}
                                 >
                                     <div className="font-semibold">V2 Pool</div>
@@ -229,8 +225,8 @@ export default function LiquidityPage() {
                                 <button
                                     onClick={() => setPoolType('cl')}
                                     className={`p-3 rounded-xl text-center transition ${poolType === 'cl'
-                                            ? 'bg-secondary/10 border border-secondary/30 text-white'
-                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                        ? 'bg-secondary/10 border border-secondary/30 text-white'
+                                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                         }`}
                                 >
                                     <div className="font-semibold">CL Pool</div>
@@ -247,8 +243,8 @@ export default function LiquidityPage() {
                                     <button
                                         onClick={() => setStable(false)}
                                         className={`p-3 rounded-xl text-center transition ${!stable
-                                                ? 'bg-primary/10 border border-primary/30 text-white'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            ? 'bg-primary/10 border border-primary/30 text-white'
+                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                             }`}
                                     >
                                         Volatile
@@ -256,8 +252,8 @@ export default function LiquidityPage() {
                                     <button
                                         onClick={() => setStable(true)}
                                         className={`p-3 rounded-xl text-center transition ${stable
-                                                ? 'bg-primary/10 border border-primary/30 text-white'
-                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                            ? 'bg-primary/10 border border-primary/30 text-white'
+                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                             }`}
                                     >
                                         Stable
@@ -280,8 +276,8 @@ export default function LiquidityPage() {
                                             key={spacing}
                                             onClick={() => setTickSpacing(spacing)}
                                             className={`p-2 rounded-lg text-center text-sm transition ${tickSpacing === spacing
-                                                    ? 'bg-secondary/10 border border-secondary/30 text-white'
-                                                    : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                ? 'bg-secondary/10 border border-secondary/30 text-white'
+                                                : 'bg-white/5 border border-white/10 hover:bg-white/10'
                                                 }`}
                                         >
                                             {fee}
