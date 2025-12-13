@@ -1,0 +1,415 @@
+// Minimal ABIs for YAKA Finance contracts
+// These contain only the functions needed for the frontend
+
+export const ERC20_ABI = [
+    {
+        inputs: [{ name: 'owner', type: 'address' }],
+        name: 'balanceOf',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'decimals',
+        outputs: [{ name: '', type: 'uint8' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'symbol',
+        outputs: [{ name: '', type: 'string' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'name',
+        outputs: [{ name: '', type: 'string' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'spender', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+        ],
+        name: 'approve',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' },
+        ],
+        name: 'allowance',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// V2 Router ABI
+export const ROUTER_ABI = [
+    // Read functions
+    {
+        inputs: [],
+        name: 'defaultFactory',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'weth',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amountIn', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+        ],
+        name: 'getAmountsOut',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'tokenA', type: 'address' },
+            { name: 'tokenB', type: 'address' },
+            { name: 'stable', type: 'bool' },
+            { name: '_factory', type: 'address' },
+        ],
+        name: 'getReserves',
+        outputs: [
+            { name: 'reserveA', type: 'uint256' },
+            { name: 'reserveB', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    // Swap functions
+    {
+        inputs: [
+            { name: 'amountIn', type: 'uint256' },
+            { name: 'amountOutMin', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'swapExactTokensForTokens',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amountOutMin', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'swapExactETHForTokens',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amountIn', type: 'uint256' },
+            { name: 'amountOutMin', type: 'uint256' },
+            {
+                components: [
+                    { name: 'from', type: 'address' },
+                    { name: 'to', type: 'address' },
+                    { name: 'stable', type: 'bool' },
+                    { name: 'factory', type: 'address' },
+                ],
+                name: 'routes',
+                type: 'tuple[]',
+            },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'swapExactTokensForETH',
+        outputs: [{ name: 'amounts', type: 'uint256[]' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    // Add Liquidity
+    {
+        inputs: [
+            { name: 'tokenA', type: 'address' },
+            { name: 'tokenB', type: 'address' },
+            { name: 'stable', type: 'bool' },
+            { name: 'amountADesired', type: 'uint256' },
+            { name: 'amountBDesired', type: 'uint256' },
+            { name: 'amountAMin', type: 'uint256' },
+            { name: 'amountBMin', type: 'uint256' },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'addLiquidity',
+        outputs: [
+            { name: 'amountA', type: 'uint256' },
+            { name: 'amountB', type: 'uint256' },
+            { name: 'liquidity', type: 'uint256' },
+        ],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'token', type: 'address' },
+            { name: 'stable', type: 'bool' },
+            { name: 'amountTokenDesired', type: 'uint256' },
+            { name: 'amountTokenMin', type: 'uint256' },
+            { name: 'amountETHMin', type: 'uint256' },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'addLiquidityETH',
+        outputs: [
+            { name: 'amountToken', type: 'uint256' },
+            { name: 'amountETH', type: 'uint256' },
+            { name: 'liquidity', type: 'uint256' },
+        ],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    // Remove Liquidity
+    {
+        inputs: [
+            { name: 'tokenA', type: 'address' },
+            { name: 'tokenB', type: 'address' },
+            { name: 'stable', type: 'bool' },
+            { name: 'liquidity', type: 'uint256' },
+            { name: 'amountAMin', type: 'uint256' },
+            { name: 'amountBMin', type: 'uint256' },
+            { name: 'to', type: 'address' },
+            { name: 'deadline', type: 'uint256' },
+        ],
+        name: 'removeLiquidity',
+        outputs: [
+            { name: 'amountA', type: 'uint256' },
+            { name: 'amountB', type: 'uint256' },
+        ],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'tokenA', type: 'address' },
+            { name: 'tokenB', type: 'address' },
+            { name: 'stable', type: 'bool' },
+            { name: '_factory', type: 'address' },
+            { name: 'amountADesired', type: 'uint256' },
+            { name: 'amountBDesired', type: 'uint256' },
+        ],
+        name: 'quoteAddLiquidity',
+        outputs: [
+            { name: 'amountA', type: 'uint256' },
+            { name: 'amountB', type: 'uint256' },
+            { name: 'liquidity', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// CL SwapRouter ABI (Slipstream)
+export const CL_SWAP_ROUTER_ABI = [
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'tokenIn', type: 'address' },
+                    { name: 'tokenOut', type: 'address' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'recipient', type: 'address' },
+                    { name: 'deadline', type: 'uint256' },
+                    { name: 'amountIn', type: 'uint256' },
+                    { name: 'amountOutMinimum', type: 'uint256' },
+                    { name: 'sqrtPriceLimitX96', type: 'uint160' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'exactInputSingle',
+        outputs: [{ name: 'amountOut', type: 'uint256' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'path', type: 'bytes' },
+                    { name: 'recipient', type: 'address' },
+                    { name: 'deadline', type: 'uint256' },
+                    { name: 'amountIn', type: 'uint256' },
+                    { name: 'amountOutMinimum', type: 'uint256' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'exactInput',
+        outputs: [{ name: 'amountOut', type: 'uint256' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+] as const;
+
+// QuoterV2 ABI for getting swap quotes
+export const QUOTER_V2_ABI = [
+    {
+        inputs: [
+            {
+                components: [
+                    { name: 'tokenIn', type: 'address' },
+                    { name: 'tokenOut', type: 'address' },
+                    { name: 'amountIn', type: 'uint256' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'sqrtPriceLimitX96', type: 'uint160' },
+                ],
+                name: 'params',
+                type: 'tuple',
+            },
+        ],
+        name: 'quoteExactInputSingle',
+        outputs: [
+            { name: 'amountOut', type: 'uint256' },
+            { name: 'sqrtPriceX96After', type: 'uint160' },
+            { name: 'initializedTicksCrossed', type: 'uint32' },
+            { name: 'gasEstimate', type: 'uint256' },
+        ],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+] as const;
+
+// Pool Factory ABI
+export const POOL_FACTORY_ABI = [
+    {
+        inputs: [
+            { name: 'tokenA', type: 'address' },
+            { name: 'tokenB', type: 'address' },
+            { name: 'stable', type: 'bool' },
+        ],
+        name: 'getPool',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'allPoolsLength',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'index', type: 'uint256' }],
+        name: 'allPools',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Pool ABI
+export const POOL_ABI = [
+    {
+        inputs: [],
+        name: 'token0',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'token1',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'stable',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'getReserves',
+        outputs: [
+            { name: '_reserve0', type: 'uint256' },
+            { name: '_reserve1', type: 'uint256' },
+            { name: '_blockTimestampLast', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'totalSupply',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// WETH ABI
+export const WETH_ABI = [
+    {
+        inputs: [],
+        name: 'deposit',
+        outputs: [],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'amount', type: 'uint256' }],
+        name: 'withdraw',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    ...ERC20_ABI,
+] as const;

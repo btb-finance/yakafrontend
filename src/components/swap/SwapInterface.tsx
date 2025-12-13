@@ -1,27 +1,78 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
+import { parseUnits, formatUnits, Address } from 'viem';
 import { Token, SEI, USDC } from '@/config/tokens';
+import { V2_CONTRACTS } from '@/config/contracts';
+import { ROUTER_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
 import { SwapSettings } from './SwapSettings';
+import { useSwap } from '@/hooks/useSwap';
+import { useTokenBalance } from '@/hooks/useToken';
+
+interface Route {
+    from: Address;
+    to: Address;
+    stable: boolean;
+    factory: Address;
+}
 
 export function SwapInterface() {
-    const { isConnected } = useAccount();
+    const { isConnected, address } = useAccount();
 
     // Token state
     const [tokenIn, setTokenIn] = useState<Token | undefined>(SEI);
     const [tokenOut, setTokenOut] = useState<Token | undefined>(USDC);
     const [amountIn, setAmountIn] = useState('');
     const [amountOut, setAmountOut] = useState('');
+    const [stable, setStable] = useState(false);
 
     // Settings state
     const [slippage, setSlippage] = useState(0.5);
     const [deadline, setDeadline] = useState(30);
 
     // UI state
-    const [isLoading, setIsLoading] = useState(false);
+    const [txHash, setTxHash] = useState<string | null>(null);
+
+    // Hooks
+    const { executeSwap, isLoading, error } = useSwap();
+    const { balance: balanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
+    const { balance: balanceOut, formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
+
+    // Build route for quote
+    const route: Route[] = tokenIn && tokenOut ? [
+        {
+            from: (tokenIn.isNative ? '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7' : tokenIn.address) as Address,
+            to: (tokenOut.isNative ? '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7' : tokenOut.address) as Address,
+            stable,
+            factory: V2_CONTRACTS.PoolFactory as Address,
+        },
+    ] : [];
+
+    // Get quote from router
+    const { data: quoteData, refetch: refetchQuote } = useReadContract({
+        address: V2_CONTRACTS.Router as Address,
+        abi: ROUTER_ABI,
+        functionName: 'getAmountsOut',
+        args: amountIn && tokenIn && parseFloat(amountIn) > 0
+            ? [parseUnits(amountIn, tokenIn.decimals), route]
+            : undefined,
+        query: {
+            enabled: !!tokenIn && !!tokenOut && !!amountIn && parseFloat(amountIn) > 0,
+        },
+    });
+
+    // Update amountOut when quote changes
+    useEffect(() => {
+        if (quoteData && tokenOut && Array.isArray(quoteData) && quoteData.length > 1) {
+            const outAmount = formatUnits(quoteData[quoteData.length - 1] as bigint, tokenOut.decimals);
+            setAmountOut(outAmount);
+        } else if (!amountIn || parseFloat(amountIn) === 0) {
+            setAmountOut('');
+        }
+    }, [quoteData, tokenOut, amountIn]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
@@ -34,25 +85,27 @@ export function SwapInterface() {
     // Handle amount changes
     const handleAmountInChange = (amount: string) => {
         setAmountIn(amount);
-        // TODO: Fetch quote from QuoterV2 or Router
-        if (amount && parseFloat(amount) > 0) {
-            // Simulated quote - in production, this would call the contract
-            const simulatedOut = (parseFloat(amount) * 0.95).toFixed(6);
-            setAmountOut(simulatedOut);
-        } else {
-            setAmountOut('');
-        }
+        // Quote will be fetched automatically via useReadContract
     };
+
+    // Calculate min amount out with slippage
+    const amountOutMin = amountOut
+        ? (parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6)
+        : '0';
 
     // Check if swap is valid
     const canSwap = isConnected &&
         tokenIn &&
         tokenOut &&
         amountIn &&
-        parseFloat(amountIn) > 0;
+        parseFloat(amountIn) > 0 &&
+        amountOut &&
+        parseFloat(amountOut) > 0;
 
-    // Calculate price impact (placeholder)
-    const priceImpact = amountIn && amountOut ? '< 0.01%' : '--';
+    // Calculate price impact
+    const priceImpact = amountIn && amountOut && parseFloat(amountIn) > 0
+        ? '< 0.5%' // TODO: Calculate real price impact
+        : '--';
 
     // Calculate rate
     const rate = amountIn && amountOut && parseFloat(amountIn) > 0
@@ -60,30 +113,21 @@ export function SwapInterface() {
         : null;
 
     const handleSwap = async () => {
-        if (!canSwap) return;
+        if (!canSwap || !tokenIn || !tokenOut) return;
 
-        setIsLoading(true);
-        try {
-            // TODO: Execute swap transaction
-            console.log('Executing swap...', {
-                tokenIn: tokenIn?.symbol,
-                tokenOut: tokenOut?.symbol,
-                amountIn,
-                amountOut,
-                slippage,
-                deadline,
-            });
+        const result = await executeSwap(
+            tokenIn,
+            tokenOut,
+            amountIn,
+            amountOutMin,
+            stable,
+            deadline
+        );
 
-            // Simulate delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Reset amounts
+        if (result) {
+            setTxHash(result.hash);
             setAmountIn('');
             setAmountOut('');
-        } catch (error) {
-            console.error('Swap failed:', error);
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -92,13 +136,45 @@ export function SwapInterface() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold">Swap</h2>
-                <SwapSettings
-                    slippage={slippage}
-                    deadline={deadline}
-                    onSlippageChange={setSlippage}
-                    onDeadlineChange={setDeadline}
-                />
+                <div className="flex items-center gap-2">
+                    {/* Stable/Volatile Toggle */}
+                    <button
+                        onClick={() => setStable(!stable)}
+                        className={`px-3 py-1 text-xs rounded-lg transition ${stable ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'
+                            }`}
+                    >
+                        {stable ? 'Stable' : 'Volatile'}
+                    </button>
+                    <SwapSettings
+                        slippage={slippage}
+                        deadline={deadline}
+                        onSlippageChange={setSlippage}
+                        onDeadlineChange={setDeadline}
+                    />
+                </div>
             </div>
+
+            {/* Error Display */}
+            {error && (
+                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    {error}
+                </div>
+            )}
+
+            {/* Success Display */}
+            {txHash && (
+                <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+                    Transaction submitted!{' '}
+                    <a
+                        href={`https://seiscan.io/tx/${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline"
+                    >
+                        View on SeiScan
+                    </a>
+                </div>
+            )}
 
             {/* Input Token */}
             <TokenInput
@@ -109,6 +185,7 @@ export function SwapInterface() {
                 onTokenSelect={setTokenIn}
                 excludeToken={tokenOut}
                 showMaxButton={true}
+                balance={formattedBalanceIn}
             />
 
             {/* Swap Direction Button */}
@@ -144,6 +221,7 @@ export function SwapInterface() {
                 onTokenSelect={setTokenOut}
                 excludeToken={tokenIn}
                 disabled={true}
+                balance={formattedBalanceOut}
             />
 
             {/* Rate Display */}
@@ -157,9 +235,11 @@ export function SwapInterface() {
                     </div>
                     <div className="flex justify-between text-sm mt-1">
                         <span className="text-gray-400">Price Impact</span>
-                        <span className={parseFloat(priceImpact) > 3 ? 'text-warning' : 'text-green-400'}>
-                            {priceImpact}
-                        </span>
+                        <span className="text-green-400">{priceImpact}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-1">
+                        <span className="text-gray-400">Min. Received</span>
+                        <span>{parseFloat(amountOutMin).toFixed(4)} {tokenOut.symbol}</span>
                     </div>
                     <div className="flex justify-between text-sm mt-1">
                         <span className="text-gray-400">Slippage</span>
@@ -202,6 +282,8 @@ export function SwapInterface() {
                     'Select Tokens'
                 ) : !amountIn || parseFloat(amountIn) <= 0 ? (
                     'Enter Amount'
+                ) : !amountOut || parseFloat(amountOut) <= 0 ? (
+                    'Insufficient Liquidity'
                 ) : (
                     `Swap ${tokenIn.symbol} for ${tokenOut.symbol}`
                 )}
@@ -209,7 +291,7 @@ export function SwapInterface() {
 
             {/* Powered by */}
             <div className="mt-4 text-center text-xs text-gray-500">
-                Powered by YAKA Router & Slipstream
+                Powered by YAKA V2 Router
             </div>
         </div>
     );
