@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { parseUnits, Address, maxUint256, formatUnits } from 'viem';
 import Link from 'next/link';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
@@ -11,7 +11,7 @@ import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity, usePool } from '@/hooks/useLiquidity';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
-import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
+import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, CL_FACTORY_ABI } from '@/config/abis';
 
 type Tab = 'add' | 'positions';
 type PoolType = 'v2' | 'cl';
@@ -65,31 +65,17 @@ export default function LiquidityPage() {
 
         try {
             // For CL pools, we need to use WSEI instead of native SEI
-            // Get actual token addresses (replace native with WSEI)
             const actualTokenA = tokenA.isNative ? WSEI : tokenA;
             const actualTokenB = tokenB.isNative ? WSEI : tokenB;
 
-            // Sort tokens by address
+            // Sort tokens by address (token0 < token1)
             const isAFirst = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
             const token0 = isAFirst ? actualTokenA : actualTokenB;
             const token1 = isAFirst ? actualTokenB : actualTokenA;
             const amount0 = isAFirst ? amountA : amountB;
             const amount1 = isAFirst ? amountB : amountA;
-
-            // Approve both tokens (WSEI needs approval too)
-            await writeContractAsync({
-                address: token0.address as Address,
-                abi: ERC20_ABI,
-                functionName: 'approve',
-                args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
-            });
-
-            await writeContractAsync({
-                address: token1.address as Address,
-                abi: ERC20_ABI,
-                functionName: 'approve',
-                args: [CL_CONTRACTS.NonfungiblePositionManager as Address, maxUint256],
-            });
+            const amount0Wei = parseUnits(amount0, token0.decimals);
+            const amount1Wei = parseUnits(amount1, token1.decimals);
 
             // Calculate tick values (full range for the selected tick spacing)
             const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
@@ -98,6 +84,37 @@ export default function LiquidityPage() {
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
+            // Check if pool exists by calling CLFactory.getPool
+            // We'll make a raw eth_call to check
+            const poolCheckData = `0x79a4dc41${token0.address.slice(2).padStart(64, '0')}${token1.address.slice(2).padStart(64, '0')}${(tickSpacing >= 0 ? tickSpacing.toString(16) : (0xFFFFFFFF + tickSpacing + 1).toString(16)).padStart(64, '0')}`;
+
+            let poolExists = false;
+            try {
+                const poolResult = await (window as any).ethereum?.request({
+                    method: 'eth_call',
+                    params: [{
+                        to: CL_CONTRACTS.CLFactory,
+                        data: poolCheckData
+                    }, 'latest']
+                });
+                // If result is not zero address, pool exists
+                poolExists = poolResult && poolResult !== '0x0000000000000000000000000000000000000000000000000000000000000000';
+            } catch {
+                // If check fails, assume pool doesn't exist
+                poolExists = false;
+            }
+
+            // If pool exists, use sqrtPriceX96 = 0 (skip createPool)
+            // If pool doesn't exist, calculate sqrtPriceX96 from amounts to create it
+            let sqrtPriceX96 = BigInt(0);
+            if (!poolExists) {
+                const price = Number(amount1Wei) / Number(amount0Wei);
+                const sqrtPrice = Math.sqrt(price);
+                // 2^96 = 79228162514264337593543950336
+                sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 79228162514264337593543950336));
+            }
+
+            // Mint position (will create pool if sqrtPriceX96 != 0 and pool doesn't exist)
             const hash = await writeContractAsync({
                 address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                 abi: NFT_POSITION_MANAGER_ABI,
@@ -108,15 +125,14 @@ export default function LiquidityPage() {
                     tickSpacing,
                     tickLower,
                     tickUpper,
-                    amount0Desired: parseUnits(amount0, token0.decimals),
-                    amount1Desired: parseUnits(amount1, token1.decimals),
+                    amount0Desired: amount0Wei,
+                    amount1Desired: amount1Wei,
                     amount0Min: BigInt(0),
                     amount1Min: BigInt(0),
                     recipient: address,
                     deadline,
-                    sqrtPriceX96: BigInt(0), // Let it use existing pool price
+                    sqrtPriceX96,
                 }],
-                // No native value needed since we use WSEI (ERC20)
             });
 
             setTxHash(hash);

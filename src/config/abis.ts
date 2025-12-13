@@ -352,6 +352,21 @@ export const POOL_FACTORY_ABI = [
     },
 ] as const;
 
+// CL Factory ABI (Slipstream)
+export const CL_FACTORY_ABI = [
+    {
+        inputs: [
+            { name: 'tokenA', type: 'address' },
+            { name: 'tokenB', type: 'address' },
+            { name: 'tickSpacing', type: 'int24' },
+        ],
+        name: 'getPool',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
 // Pool ABI
 export const POOL_ABI = [
     {
