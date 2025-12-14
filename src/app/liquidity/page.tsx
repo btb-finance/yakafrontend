@@ -304,33 +304,27 @@ export default function LiquidityPage() {
             const priceToTick = (userPrice: number, spacing: number): number => {
                 if (userPrice <= 0) return 0;
 
-                // User price is in terms of tokenB per tokenA
-                // We need to convert to token1/token0 accounting for decimals
-                // token0 = USDC (6 dec), token1 = WSEI (18 dec)
-                // Raw price = userPrice * 10^(token0.decimals) / 10^(token1.decimals)
-                // But we also need to consider if tokenA is token0 or token1
-
-                // If tokenA (the one user puts first) is token1:
-                // User says "X tokenB per tokenA" = X USDC per SEI = X USDC per WSEI
-                // Pool price is token1/token0 = WSEI/USDC = 1/X
-                // Raw pool price = (1/X) * 10^6 / 10^18 = 1/(X * 10^12)
-
-                // If tokenA is token0:
-                // Pool price is token1/token0 = tokenB/tokenA = X
-                // Raw pool price = X * 10^(decA) / 10^(decB)
+                // Pool price = token1_wei / token0_wei
+                // If user entered X USDC per SEI, and SEI is token1, USDC is token0:
+                //   User price = USDC/SEI = token0/token1 = 1/poolPrice
+                //   So poolPrice = 1/X = SEI/USDC = token1/token0
+                //   Raw price = poolPrice * 10^token1.decimals / 10^token0.decimals
 
                 const isAFirst = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
                 let rawPrice: number;
+
                 if (isAFirst) {
-                    // tokenA is token0, so user price is already token1/token0
-                    rawPrice = userPrice * Math.pow(10, token0.decimals) / Math.pow(10, token1.decimals);
+                    // tokenA is token0, tokenB is token1
+                    // User price = tokenB/tokenA = token1/token0 = pool price (already correct)
+                    rawPrice = userPrice * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
                 } else {
-                    // tokenA is token1, user price is tokenB/tokenA = token0/token1
-                    // Pool stores token1/token0, so we need to invert
-                    rawPrice = (1 / userPrice) * Math.pow(10, token0.decimals) / Math.pow(10, token1.decimals);
+                    // tokenA is token1, tokenB is token0
+                    // User price = tokenB/tokenA = token0/token1 = 1/poolPrice
+                    // So poolPrice = 1/userPrice
+                    rawPrice = (1 / userPrice) * Math.pow(10, token1.decimals) / Math.pow(10, token0.decimals);
                 }
 
-                console.log('priceToTick:', { userPrice, isAFirst, rawPrice });
+                console.log('priceToTick:', { userPrice, isAFirst, rawPrice, tick: Math.floor(Math.log(rawPrice) / Math.log(1.0001)) });
 
                 const tick = Math.floor(Math.log(rawPrice) / Math.log(1.0001));
                 return Math.round(tick / spacing) * spacing;
