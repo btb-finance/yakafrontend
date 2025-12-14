@@ -147,10 +147,13 @@ export default function LiquidityPage() {
         const pUpper = priceUpper ? parseFloat(priceUpper) : Infinity;
         const pCurrent = clPoolPrice;
 
+        console.log('CL Auto-calculation:', { pCurrent, pLower, pUpper, amountA });
+
         if (pLower <= 0 && pUpper === Infinity) {
             // Full range - use 50/50 split based on current price
             const amtA = parseFloat(amountA);
             const amtB = amtA * pCurrent;
+            console.log('Full range - calculated amountB:', amtB);
             setAmountB(amtB.toFixed(6));
             return;
         }
@@ -169,10 +172,12 @@ export default function LiquidityPage() {
 
         if (pCurrent <= pLower) {
             // Price is below range - all token A, no token B needed
+            console.log('Price below range - no token B needed');
             setAmountB('0');
         } else if (pCurrent >= pUpper) {
             // Price is above range - all token B, but user entered A which doesn't make sense
             // In this case, they can't add A to this range
+            console.log('Price above range - cannot add token A');
             setAmountB('0');
         } else {
             // Price is in range - calculate token B based on liquidity math
@@ -180,6 +185,7 @@ export default function LiquidityPage() {
             // amountB = L * (sqrtP - sqrtPl)
             const L = amtA * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
             const amtB = L * (sqrtPriceCurrent - sqrtPriceLower);
+            console.log('In range - calculated amountB:', amtB);
             setAmountB(amtB.toFixed(6));
         }
     }, [poolType, clPoolPrice, amountA, priceLower, priceUpper]);
@@ -272,6 +278,12 @@ export default function LiquidityPage() {
     const handleAddCLLiquidity = async () => {
         if (!tokenA || !tokenB || !amountA || !amountB || !address) return;
 
+        console.log('CL Liquidity Add - tokens:', {
+            tokenA: { symbol: tokenA.symbol, isNative: tokenA.isNative, address: tokenA.address },
+            tokenB: { symbol: tokenB.symbol, isNative: tokenB.isNative, address: tokenB.address },
+            amountA, amountB
+        });
+
         try {
             // For CL pools, we need to use WSEI instead of native SEI
             const actualTokenA = tokenA.isNative ? WSEI : tokenA;
@@ -314,22 +326,34 @@ export default function LiquidityPage() {
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
-            // Check if pool exists by calling CLFactory.getPool
-            // We'll make a raw eth_call to check
-            const poolCheckData = `0x79a4dc41${token0.address.slice(2).padStart(64, '0')}${token1.address.slice(2).padStart(64, '0')}${(tickSpacing >= 0 ? tickSpacing.toString(16) : (0xFFFFFFFF + tickSpacing + 1).toString(16)).padStart(64, '0')}`;
+            // Check if pool exists by calling CLFactory.getPool(address,address,int24)
+            // Selector: 0x28af8d0b
+            const tickSpacingHex = tickSpacing >= 0
+                ? tickSpacing.toString(16).padStart(64, '0')
+                : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(tickSpacing) + BigInt(1)).toString(16);
+            const poolCheckData = `0x28af8d0b${token0.address.slice(2).padStart(64, '0')}${token1.address.slice(2).padStart(64, '0')}${tickSpacingHex}`;
+
+            console.log('Pool check data:', poolCheckData);
 
             let poolExists = false;
             try {
-                const poolResult = await (window as any).ethereum?.request({
-                    method: 'eth_call',
-                    params: [{
-                        to: CL_CONTRACTS.CLFactory,
-                        data: poolCheckData
-                    }, 'latest']
-                });
+                const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{ to: CL_CONTRACTS.CLFactory, data: poolCheckData }, 'latest'],
+                        id: 1
+                    })
+                }).then(r => r.json());
+
+                console.log('Pool check result:', poolResult);
                 // If result is not zero address, pool exists
-                poolExists = poolResult && poolResult !== '0x0000000000000000000000000000000000000000000000000000000000000000';
-            } catch {
+                poolExists = poolResult.result && poolResult.result !== '0x0000000000000000000000000000000000000000000000000000000000000000';
+                console.log('Pool exists:', poolExists);
+            } catch (err) {
+                console.error('Pool check error:', err);
                 // If check fails, assume pool doesn't exist
                 poolExists = false;
             }
@@ -342,53 +366,68 @@ export default function LiquidityPage() {
                 const sqrtPrice = Math.sqrt(price);
                 // 2^96 = 79228162514264337593543950336
                 sqrtPriceX96 = BigInt(Math.floor(sqrtPrice * 79228162514264337593543950336));
+                console.log('Creating new pool with sqrtPriceX96:', sqrtPriceX96.toString());
+            } else {
+                console.log('Pool exists, skipping creation (sqrtPriceX96=0)');
             }
 
-            // Approve tokens if not native (native SEI will be sent as value and auto-wrapped)
-            if (!tokenA.isNative) {
-                const tokenToApprove = isAFirst ? token0 : token1;
-                const amountToApprove = isAFirst ? amount0Wei : amount1Wei;
-                await writeContractAsync({
-                    address: tokenToApprove.address as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amountToApprove],
-                });
+            // Approve tokens for CL mint
+            // For CL, we always use WSEI (actualTokenA/B), so approve based on sorted token order
+            // If token0 is not WSEI (being sent as native), approve it
+            if (token0.address.toLowerCase() !== WSEI.address.toLowerCase() || !tokenA.isNative && !tokenB.isNative) {
+                // Check if token0 is an ERC20 that needs approval (not native SEI being wrapped)
+                const token0IsNative = (tokenA.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase()) ||
+                    (tokenB.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase());
+                if (!token0IsNative) {
+                    console.log('Approving token0:', token0.symbol, 'amount:', amount0Wei.toString());
+                    await writeContractAsync({
+                        address: token0.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Wei],
+                    });
+                }
             }
 
-            if (!tokenB.isNative) {
-                const tokenToApprove = isAFirst ? token1 : token0;
-                const amountToApprove = isAFirst ? amount1Wei : amount0Wei;
+            // Approve token1 if it's not native SEI
+            const token1IsNative = (tokenA.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase()) ||
+                (tokenB.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase());
+            if (!token1IsNative) {
+                console.log('Approving token1:', token1.symbol, 'amount:', amount1Wei.toString());
                 await writeContractAsync({
-                    address: tokenToApprove.address as Address,
+                    address: token1.address as Address,
                     abi: ERC20_ABI,
                     functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amountToApprove],
+                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Wei],
                 });
             }
 
             // Calculate native SEI value to send (if any token is native)
             // When sending native value, the contract auto-wraps to WSEI
-            // Need to use the actual wei amount based on token position
             let nativeValue = BigInt(0);
-            if (tokenA.isNative) {
-                // tokenA is SEI, which became WSEI in actualTokenA
-                // Check if WSEI is token0 or token1
+
+            console.log('Token isNative check:', {
+                tokenAIsNative: tokenA.isNative,
+                tokenBIsNative: tokenB.isNative,
+                token0Addr: token0.address.toLowerCase(),
+                token1Addr: token1.address.toLowerCase(),
+                WSEIAddr: WSEI.address.toLowerCase(),
+                amount0Wei: amount0Wei.toString(),
+                amount1Wei: amount1Wei.toString()
+            });
+
+            if (tokenA.isNative || tokenB.isNative) {
+                // Find which sorted token (token0 or token1) is WSEI
                 if (token0.address.toLowerCase() === WSEI.address.toLowerCase()) {
                     nativeValue = amount0Wei;
-                } else {
+                    console.log('Native value from token0 (WSEI):', nativeValue.toString());
+                } else if (token1.address.toLowerCase() === WSEI.address.toLowerCase()) {
                     nativeValue = amount1Wei;
-                }
-            } else if (tokenB.isNative) {
-                // tokenB is SEI, which became WSEI in actualTokenB
-                if (token0.address.toLowerCase() === WSEI.address.toLowerCase()) {
-                    nativeValue = amount0Wei;
-                } else {
-                    nativeValue = amount1Wei;
+                    console.log('Native value from token1 (WSEI):', nativeValue.toString());
                 }
             }
 
-            console.log('Native value to send:', nativeValue.toString());
+            console.log('Final native value to send:', nativeValue.toString());
 
             // Mint position (will create pool if sqrtPriceX96 != 0 and pool doesn't exist)
             const hash = await writeContractAsync({
@@ -766,7 +805,12 @@ export default function LiquidityPage() {
                         {/* Token B */}
                         <div className="mb-6">
                             <div className="flex items-center justify-between mb-2">
-                                <label className="text-sm text-gray-400">Token B</label>
+                                <label className="text-sm text-gray-400">
+                                    Token B
+                                    {poolType === 'cl' && (
+                                        <span className="ml-2 text-xs text-primary">(auto-calculated)</span>
+                                    )}
+                                </label>
                                 <span className="text-sm text-gray-400">
                                     Balance: {balanceB ? parseFloat(balanceB).toFixed(4) : '--'}
                                 </span>
@@ -776,9 +820,10 @@ export default function LiquidityPage() {
                                     <input
                                         type="text"
                                         value={amountB}
-                                        onChange={(e) => setAmountB(e.target.value)}
-                                        placeholder="0.0"
-                                        className="flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600"
+                                        onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
+                                        readOnly={poolType === 'cl'}
+                                        placeholder={poolType === 'cl' ? 'Enter Token A first' : '0.0'}
+                                        className={`flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600 ${poolType === 'cl' ? 'cursor-not-allowed text-gray-400' : ''}`}
                                     />
                                     <button onClick={() => setSelectorOpen('B')} className="token-select">
                                         {tokenB ? <span className="font-semibold">{tokenB.symbol}</span> : <span className="text-primary">Select</span>}

@@ -110,7 +110,7 @@ export function useVeYAKA() {
             })
         }).then(r => r.json());
 
-        // Get voting power
+        // Get voting power - balanceOfNFT(uint256) selector 0xe7e242d4
         const votingPowerData = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -119,7 +119,7 @@ export function useVeYAKA() {
                 method: 'eth_call',
                 params: [{
                     to: V2_CONTRACTS.VotingEscrow,
-                    data: `0x7fbd945a${tokenId.toString(16).padStart(64, '0')}`
+                    data: `0xe7e242d4${tokenId.toString(16).padStart(64, '0')}`
                 }, 'latest'],
                 id: 3
             })

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { formatUnits, Address } from 'viem';
@@ -49,6 +49,13 @@ export default function VotePage() {
     } = useVoter();
 
     const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(YAKA);
+
+    // Auto-select first veNFT when positions load
+    useEffect(() => {
+        if (positions.length > 0 && selectedVeNFT === null) {
+            setSelectedVeNFT(positions[0].tokenId);
+        }
+    }, [positions, selectedVeNFT]);
 
     // Calculate estimated voting power
     const estimatedVotingPower = lockAmount && parseFloat(lockAmount) > 0
@@ -330,8 +337,8 @@ export default function VotePage() {
                                             key={pos.tokenId.toString()}
                                             onClick={() => setSelectedVeNFT(pos.tokenId)}
                                             className={`px-4 py-2 rounded-lg text-sm transition ${selectedVeNFT === pos.tokenId
-                                                    ? 'bg-primary text-white'
-                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                ? 'bg-primary text-white'
+                                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
                                                 }`}
                                         >
                                             veYAKA #{pos.tokenId.toString()}
@@ -391,7 +398,22 @@ export default function VotePage() {
                                         <div className="col-span-3 text-right text-gray-400 text-sm">
                                             {formatUnits(gauge.weight, 18).slice(0, 10)}
                                         </div>
-                                        <div className="col-span-3 text-center">
+                                        <div className="col-span-3 flex items-center justify-center gap-1">
+                                            <div className="flex gap-1">
+                                                {[100, 50, 25, 10].map((pct) => (
+                                                    <button
+                                                        key={pct}
+                                                        onClick={() => updateVoteWeight(gauge.pool, pct)}
+                                                        disabled={!selectedVeNFT || !gauge.isAlive}
+                                                        className={`px-2 py-1 text-xs rounded transition ${voteWeights[gauge.pool] === pct
+                                                            ? 'bg-primary text-white'
+                                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                    >
+                                                        {pct}%
+                                                    </button>
+                                                ))}
+                                            </div>
                                             <input
                                                 type="number"
                                                 min="0"
@@ -399,7 +421,7 @@ export default function VotePage() {
                                                 value={voteWeights[gauge.pool] || ''}
                                                 onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
                                                 disabled={!selectedVeNFT || !gauge.isAlive}
-                                                className="w-20 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                                                className="w-14 p-1 rounded-lg bg-white/5 text-center text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
                                             />
                                         </div>
                                     </motion.div>
