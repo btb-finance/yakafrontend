@@ -75,7 +75,7 @@ export function useVeYAKA() {
     const fetchPosition = async (owner: Address, index: number): Promise<VeYAKAPosition> => {
         const rpcUrl = 'https://evm-rpc.sei-apis.com';
 
-        // Get tokenId from index
+        // Get tokenId from index using ownerToNFTokenIdList(address,uint256)
         const tokenIdData = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -84,7 +84,7 @@ export function useVeYAKA() {
                 method: 'eth_call',
                 params: [{
                     to: V2_CONTRACTS.VotingEscrow,
-                    data: `0xb3cc3c16${owner.slice(2).padStart(64, '0')}${index.toString(16).padStart(64, '0')}`
+                    data: `0x8bf9d84c${owner.slice(2).padStart(64, '0')}${index.toString(16).padStart(64, '0')}`
                 }, 'latest'],
                 id: 1
             })

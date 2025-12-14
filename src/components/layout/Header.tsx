@@ -11,7 +11,6 @@ const navLinks = [
     { href: '/liquidity', label: 'Liquidity' },
     { href: '/pools', label: 'Pools' },
     { href: '/vote', label: 'Vote' },
-    { href: '/admin', label: 'Admin' },
 ];
 
 export function Header() {

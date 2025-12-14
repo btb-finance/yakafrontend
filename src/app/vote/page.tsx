@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
-import { formatUnits } from 'viem';
+import { formatUnits, Address } from 'viem';
 import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
 import { useTokenBalance } from '@/hooks/useToken';
+import { useVoter } from '@/hooks/useVoter';
 import { YAKA } from '@/config/tokens';
 
 export default function VotePage() {
@@ -16,6 +17,11 @@ export default function VotePage() {
     const [lockAmount, setLockAmount] = useState('');
     const [lockDuration, setLockDuration] = useState<keyof typeof LOCK_DURATIONS>('1Y');
     const [txHash, setTxHash] = useState<string | null>(null);
+
+    // Vote state
+    const [selectedVeNFT, setSelectedVeNFT] = useState<bigint | null>(null);
+    const [voteWeights, setVoteWeights] = useState<Record<string, number>>({});
+    const [isVoting, setIsVoting] = useState(false);
 
     // Hooks
     const {
@@ -31,6 +37,17 @@ export default function VotePage() {
         refetch,
     } = useVeYAKA();
 
+    const {
+        gauges,
+        totalWeight,
+        poolCount,
+        isLoading: isLoadingGauges,
+        error: voterError,
+        vote: castVote,
+        resetVotes,
+        refetch: refetchGauges,
+    } = useVoter();
+
     const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(YAKA);
 
     // Calculate estimated voting power
@@ -43,6 +60,9 @@ export default function VotePage() {
 
     // Calculate total claimable
     const totalClaimable = positions.reduce((acc, p) => acc + p.claimable, BigInt(0));
+
+    // Calculate total vote weight
+    const totalVoteWeight = Object.values(voteWeights).reduce((acc, w) => acc + w, 0);
 
     const handleCreateLock = async () => {
         if (!lockAmount || parseFloat(lockAmount) <= 0) return;
@@ -63,13 +83,35 @@ export default function VotePage() {
         if (result) setTxHash(result.hash);
     };
 
-    // Placeholder gauge data
-    const gauges = [
-        { id: 1, pool: 'SEI/USDC', type: 'V2', votes: '12.5%', totalVotes: '1,234,567 veYAKA', apr: '45.2%', bribes: '$12,500' },
-        { id: 2, pool: 'SEI/USDT', type: 'CL', votes: '8.3%', totalVotes: '823,456 veYAKA', apr: '38.7%', bribes: '$8,200' },
-        { id: 3, pool: 'USDC/USDT', type: 'V2', votes: '15.1%', totalVotes: '1,567,890 veYAKA', apr: '12.4%', bribes: '$3,400' },
-        { id: 4, pool: 'YAKA/SEI', type: 'CL', votes: '22.4%', totalVotes: '2,345,678 veYAKA', apr: '67.8%', bribes: '$28,900' },
-    ];
+    const handleVote = async () => {
+        if (!selectedVeNFT || totalVoteWeight === 0) return;
+        setIsVoting(true);
+        const poolVotes = Object.entries(voteWeights)
+            .filter(([_, weight]) => weight > 0)
+            .map(([pool, weight]) => ({ pool: pool as Address, weight }));
+
+        const result = await castVote(selectedVeNFT, poolVotes);
+        if (result) {
+            setTxHash(result.hash);
+            setVoteWeights({});
+        }
+        setIsVoting(false);
+    };
+
+    const handleResetVotes = async () => {
+        if (!selectedVeNFT) return;
+        setIsVoting(true);
+        const result = await resetVotes(selectedVeNFT);
+        if (result) setTxHash(result.hash);
+        setIsVoting(false);
+    };
+
+    const updateVoteWeight = (pool: string, weight: number) => {
+        setVoteWeights(prev => ({
+            ...prev,
+            [pool]: Math.max(0, weight),
+        }));
+    };
 
     return (
         <div className="container mx-auto px-6">
@@ -176,8 +218,8 @@ export default function VotePage() {
                                         key={duration}
                                         onClick={() => setLockDuration(duration)}
                                         className={`py-3 rounded-xl text-sm font-medium transition ${lockDuration === duration
-                                                ? 'bg-primary text-white'
-                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                            ? 'bg-primary text-white'
+                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
                                             }`}
                                     >
                                         {duration}
@@ -271,58 +313,126 @@ export default function VotePage() {
                                 Lock YAKA
                             </button>
                         </div>
+                    ) : gauges.length === 0 ? (
+                        <div className="glass-card p-12 text-center max-w-md mx-auto">
+                            <div className="text-4xl mb-4">🗳️</div>
+                            <h3 className="text-xl font-semibold mb-2">No Gauges Available</h3>
+                            <p className="text-gray-400">No pools with gauges found yet</p>
+                        </div>
                     ) : (
                         <>
+                            {/* veNFT Selector */}
+                            <div className="glass-card p-4 mb-6 max-w-4xl mx-auto">
+                                <label className="text-sm text-gray-400 mb-2 block">Select veNFT to Vote With</label>
+                                <div className="flex gap-2 flex-wrap">
+                                    {positions.map((pos) => (
+                                        <button
+                                            key={pos.tokenId.toString()}
+                                            onClick={() => setSelectedVeNFT(pos.tokenId)}
+                                            className={`px-4 py-2 rounded-lg text-sm transition ${selectedVeNFT === pos.tokenId
+                                                    ? 'bg-primary text-white'
+                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                }`}
+                                        >
+                                            veYAKA #{pos.tokenId.toString()}
+                                            <span className="text-xs ml-1 opacity-70">
+                                                ({formatUnits(pos.votingPower, 18).slice(0, 6)} power)
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Gauges List */}
                             <div className="glass-card overflow-hidden max-w-4xl mx-auto">
-                                <div className="p-4 border-b border-white/5">
-                                    <h2 className="text-lg font-semibold">Gauges</h2>
+                                <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                                    <h2 className="text-lg font-semibold">Gauges ({gauges.length})</h2>
+                                    <div className="text-sm text-gray-400">
+                                        Total Weight: {formatUnits(totalWeight, 18).slice(0, 10)} veYAKA
+                                    </div>
                                 </div>
 
                                 {/* Table Header */}
                                 <div className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 text-sm text-gray-400 font-medium">
-                                    <div className="col-span-3">Pool</div>
-                                    <div className="col-span-2 text-right">Vote Weight</div>
-                                    <div className="col-span-2 text-right">Total Votes</div>
-                                    <div className="col-span-2 text-right">APR</div>
-                                    <div className="col-span-2 text-right">Bribes</div>
-                                    <div className="col-span-1 text-center">Vote</div>
+                                    <div className="col-span-4">Pool</div>
+                                    <div className="col-span-2 text-right">Current %</div>
+                                    <div className="col-span-3 text-right">Weight</div>
+                                    <div className="col-span-3 text-center">Your Vote</div>
                                 </div>
+
+                                {/* Loading State */}
+                                {isLoadingGauges && (
+                                    <div className="p-8 text-center text-gray-400">Loading gauges...</div>
+                                )}
 
                                 {/* Gauges */}
                                 {gauges.map((gauge, index) => (
                                     <motion.div
-                                        key={gauge.id}
+                                        key={gauge.pool}
                                         className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 hover:bg-white/5 transition items-center"
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.05 }}
                                     >
-                                        <div className="col-span-3 flex items-center gap-2">
-                                            <span className="font-semibold">{gauge.pool}</span>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full ${gauge.type === 'CL' ? 'bg-accent/20 text-accent' : 'bg-primary/20 text-primary'}`}>
-                                                {gauge.type}
+                                        <div className="col-span-4 flex items-center gap-2">
+                                            <span className="font-semibold">{gauge.symbol0}/{gauge.symbol1}</span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full ${gauge.poolType === 'CL' ? 'bg-accent/20 text-accent' : 'bg-primary/20 text-primary'}`}>
+                                                {gauge.poolType}
                                             </span>
+                                            {!gauge.isAlive && (
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                                                    Killed
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="col-span-2 text-right">{gauge.votes}</div>
-                                        <div className="col-span-2 text-right text-gray-400 text-sm">{gauge.totalVotes}</div>
-                                        <div className="col-span-2 text-right text-green-400 font-semibold">{gauge.apr}</div>
-                                        <div className="col-span-2 text-right text-yellow-400">{gauge.bribes}</div>
-                                        <div className="col-span-1 text-center">
+                                        <div className="col-span-2 text-right text-sm">
+                                            {gauge.weightPercent.toFixed(2)}%
+                                        </div>
+                                        <div className="col-span-3 text-right text-gray-400 text-sm">
+                                            {formatUnits(gauge.weight, 18).slice(0, 10)}
+                                        </div>
+                                        <div className="col-span-3 text-center">
                                             <input
                                                 type="number"
+                                                min="0"
                                                 placeholder="0"
-                                                className="w-16 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary"
+                                                value={voteWeights[gauge.pool] || ''}
+                                                onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
+                                                disabled={!selectedVeNFT || !gauge.isAlive}
+                                                className="w-20 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
                                             />
                                         </div>
                                     </motion.div>
                                 ))}
                             </div>
 
+                            {/* Vote Summary */}
+                            {totalVoteWeight > 0 && (
+                                <div className="max-w-4xl mx-auto mt-4 p-4 rounded-xl bg-primary/10 border border-primary/30">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-400">Total Vote Weight Allocated</span>
+                                        <span className="font-semibold">{totalVoteWeight}</span>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Submit Vote */}
-                            <div className="max-w-4xl mx-auto mt-6 flex justify-end">
-                                <button className="btn-primary px-8" disabled>
-                                    Cast Votes
+                            <div className="max-w-4xl mx-auto mt-6 flex gap-4 justify-end">
+                                {selectedVeNFT && (
+                                    <button
+                                        onClick={handleResetVotes}
+                                        disabled={isVoting}
+                                        className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+                                    >
+                                        Reset Votes
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleVote}
+                                    disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
+                                    className="btn-primary px-8 disabled:opacity-50"
+                                >
+                                    {isVoting ? 'Voting...' : 'Cast Votes'}
                                 </button>
                             </div>
                         </>
