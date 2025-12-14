@@ -10,6 +10,7 @@ import { ROUTER_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
 import { SwapSettings } from './SwapSettings';
 import { useSwap } from '@/hooks/useSwap';
+import { useSwapV3 } from '@/hooks/useSwapV3';
 import { useTokenBalance } from '@/hooks/useToken';
 
 interface Route {
@@ -18,6 +19,8 @@ interface Route {
     stable: boolean;
     factory: Address;
 }
+
+type SwapMode = 'v2' | 'v3';
 
 export function SwapInterface() {
     const { isConnected, address } = useAccount();
@@ -29,19 +32,28 @@ export function SwapInterface() {
     const [amountOut, setAmountOut] = useState('');
     const [stable, setStable] = useState(false);
 
+    // Swap mode (V2 or V3)
+    const [swapMode, setSwapMode] = useState<SwapMode>('v2');
+    const [tickSpacing, setTickSpacing] = useState(100);
+
     // Settings state
     const [slippage, setSlippage] = useState(0.5);
     const [deadline, setDeadline] = useState(30);
 
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
+    const [v3Quote, setV3Quote] = useState<string>('');
 
     // Hooks
-    const { executeSwap, isLoading, error } = useSwap();
+    const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
+    const { getQuoteV3, executeSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
     const { balance: balanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { balance: balanceOut, formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
 
-    // Build route for quote
+    const isLoading = swapMode === 'v2' ? isLoadingV2 : isLoadingV3;
+    const error = swapMode === 'v2' ? errorV2 : errorV3;
+
+    // Build route for V2 quote
     const route: Route[] = tokenIn && tokenOut ? [
         {
             from: (tokenIn.isNative ? '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7' : tokenIn.address) as Address,
@@ -50,8 +62,6 @@ export function SwapInterface() {
             factory: V2_CONTRACTS.PoolFactory as Address,
         },
     ] : [];
-
-    // Get quote from router
     const { data: quoteData, refetch: refetchQuote } = useReadContract({
         address: V2_CONTRACTS.Router as Address,
         abi: ROUTER_ABI,
@@ -64,15 +74,27 @@ export function SwapInterface() {
         },
     });
 
-    // Update amountOut when quote changes
+    // Fetch V3 quote when in V3 mode
     useEffect(() => {
-        if (quoteData && tokenOut && Array.isArray(quoteData) && quoteData.length > 1) {
+        if (swapMode === 'v3' && tokenIn && tokenOut && amountIn && parseFloat(amountIn) > 0) {
+            getQuoteV3(tokenIn, tokenOut, amountIn, tickSpacing).then((quote) => {
+                if (quote) {
+                    setAmountOut(quote.amountOut);
+                    setV3Quote(quote.amountOut);
+                }
+            });
+        }
+    }, [swapMode, tokenIn, tokenOut, amountIn, tickSpacing, getQuoteV3]);
+
+    // Update amountOut when V2 quote changes
+    useEffect(() => {
+        if (swapMode === 'v2' && quoteData && tokenOut && Array.isArray(quoteData) && quoteData.length > 1) {
             const outAmount = formatUnits(quoteData[quoteData.length - 1] as bigint, tokenOut.decimals);
             setAmountOut(outAmount);
         } else if (!amountIn || parseFloat(amountIn) === 0) {
             setAmountOut('');
         }
-    }, [quoteData, tokenOut, amountIn]);
+    }, [quoteData, tokenOut, amountIn, swapMode]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
@@ -85,7 +107,6 @@ export function SwapInterface() {
     // Handle amount changes
     const handleAmountInChange = (amount: string) => {
         setAmountIn(amount);
-        // Quote will be fetched automatically via useReadContract
     };
 
     // Calculate min amount out with slippage
@@ -104,7 +125,7 @@ export function SwapInterface() {
 
     // Calculate price impact
     const priceImpact = amountIn && amountOut && parseFloat(amountIn) > 0
-        ? '< 0.5%' // TODO: Calculate real price impact
+        ? '< 0.5%'
         : '--';
 
     // Calculate rate
@@ -115,14 +136,26 @@ export function SwapInterface() {
     const handleSwap = async () => {
         if (!canSwap || !tokenIn || !tokenOut) return;
 
-        const result = await executeSwap(
-            tokenIn,
-            tokenOut,
-            amountIn,
-            amountOutMin,
-            stable,
-            deadline
-        );
+        let result;
+        if (swapMode === 'v2') {
+            result = await executeSwap(
+                tokenIn,
+                tokenOut,
+                amountIn,
+                amountOutMin,
+                stable,
+                deadline
+            );
+        } else {
+            result = await executeSwapV3(
+                tokenIn,
+                tokenOut,
+                amountIn,
+                amountOutMin,
+                tickSpacing,
+                slippage
+            );
+        }
 
         if (result) {
             setTxHash(result.hash);
@@ -137,14 +170,44 @@ export function SwapInterface() {
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold">Swap</h2>
                 <div className="flex items-center gap-2">
-                    {/* Stable/Volatile Toggle */}
-                    <button
-                        onClick={() => setStable(!stable)}
-                        className={`px-3 py-1 text-xs rounded-lg transition ${stable ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'
-                            }`}
-                    >
-                        {stable ? 'Stable' : 'Volatile'}
-                    </button>
+                    {/* V2/V3 Toggle */}
+                    <div className="flex rounded-lg overflow-hidden border border-glass-border">
+                        <button
+                            onClick={() => setSwapMode('v2')}
+                            className={`px-3 py-1 text-xs transition ${swapMode === 'v2' ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
+                        >
+                            V2
+                        </button>
+                        <button
+                            onClick={() => setSwapMode('v3')}
+                            className={`px-3 py-1 text-xs transition ${swapMode === 'v3' ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
+                        >
+                            V3
+                        </button>
+                    </div>
+                    {/* Stable/Volatile Toggle (V2 only) */}
+                    {swapMode === 'v2' && (
+                        <button
+                            onClick={() => setStable(!stable)}
+                            className={`px-3 py-1 text-xs rounded-lg transition ${stable ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
+                        >
+                            {stable ? 'Stable' : 'Volatile'}
+                        </button>
+                    )}
+                    {/* Tick Spacing (V3 only) */}
+                    {swapMode === 'v3' && (
+                        <select
+                            value={tickSpacing}
+                            onChange={(e) => setTickSpacing(Number(e.target.value))}
+                            className="px-2 py-1 text-xs rounded-lg bg-white/5 border border-glass-border text-gray-300"
+                        >
+                            <option value={1}>0.01%</option>
+                            <option value={50}>0.05%</option>
+                            <option value={100}>0.05%</option>
+                            <option value={200}>0.30%</option>
+                            <option value={2000}>1.00%</option>
+                        </select>
+                    )}
                     <SwapSettings
                         slippage={slippage}
                         deadline={deadline}
@@ -291,7 +354,7 @@ export function SwapInterface() {
 
             {/* Powered by */}
             <div className="mt-4 text-center text-xs text-gray-500">
-                Powered by YAKA V2 Router
+                Powered by YAKA {swapMode === 'v2' ? 'V2 Router' : 'V3 SwapRouter'}
             </div>
         </div>
     );

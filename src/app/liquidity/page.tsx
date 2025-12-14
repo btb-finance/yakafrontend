@@ -77,10 +77,31 @@ export default function LiquidityPage() {
             const amount0Wei = parseUnits(amount0, token0.decimals);
             const amount1Wei = parseUnits(amount1, token1.decimals);
 
-            // Calculate tick values (full range for the selected tick spacing)
-            const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
-            const tickLower = -maxTick;
-            const tickUpper = maxTick;
+            // Helper: Convert price to tick
+            const priceToTick = (price: number, spacing: number): number => {
+                if (price <= 0) return 0;
+                const tick = Math.floor(Math.log(price) / Math.log(1.0001));
+                return Math.round(tick / spacing) * spacing;
+            };
+
+            // Calculate tick values
+            let tickLower: number;
+            let tickUpper: number;
+
+            if (priceLower && priceUpper && parseFloat(priceLower) > 0 && parseFloat(priceUpper) > 0) {
+                // Custom price range
+                tickLower = priceToTick(parseFloat(priceLower), tickSpacing);
+                tickUpper = priceToTick(parseFloat(priceUpper), tickSpacing);
+                // Ensure tickLower < tickUpper
+                if (tickLower > tickUpper) {
+                    [tickLower, tickUpper] = [tickUpper, tickLower];
+                }
+            } else {
+                // Full range
+                const maxTick = Math.floor(887272 / tickSpacing) * tickSpacing;
+                tickLower = -maxTick;
+                tickUpper = maxTick;
+            }
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
@@ -303,6 +324,142 @@ export default function LiquidityPage() {
                             </div>
                         )}
 
+                        {/* CL Price Range - Uniswap Style */}
+                        {poolType === 'cl' && (() => {
+                            // Calculate current price from entered amounts
+                            const currentPrice = amountA && amountB && parseFloat(amountA) > 0
+                                ? parseFloat(amountB) / parseFloat(amountA)
+                                : null;
+
+                            const setPresetRange = (percent: number) => {
+                                if (currentPrice) {
+                                    setPriceLower((currentPrice * (1 - percent / 100)).toFixed(6));
+                                    setPriceUpper((currentPrice * (1 + percent / 100)).toFixed(6));
+                                }
+                            };
+
+                            return (
+                                <div className="mb-6">
+                                    {/* Current Price Display */}
+                                    <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                        <div className="text-xs text-gray-400 mb-1">Current Price (from amounts)</div>
+                                        <div className="text-lg font-semibold">
+                                            {tokenA && tokenB && currentPrice ? (
+                                                <>1 {tokenA.symbol} = <span className="text-primary">{currentPrice.toFixed(6)}</span> {tokenB.symbol}</>
+                                            ) : tokenA && tokenB ? (
+                                                <>Enter amounts to see price</>
+                                            ) : 'Select tokens'}
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1">
+                                            {tokenA && tokenB && `${tokenB.symbol} per ${tokenA.symbol}`}
+                                        </div>
+                                    </div>
+
+                                    {/* Preset Range Buttons */}
+                                    <div className="flex gap-2 mb-4">
+                                        <button
+                                            onClick={() => { setPriceLower(''); setPriceUpper(''); }}
+                                            className={`flex-1 py-2 text-xs rounded-lg transition ${!priceLower && !priceUpper ? 'bg-primary text-white' : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
+                                        >
+                                            Full Range
+                                        </button>
+                                        <button
+                                            onClick={() => setPresetRange(5)}
+                                            disabled={!currentPrice}
+                                            className={`flex-1 py-2 text-xs rounded-lg transition ${currentPrice ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
+                                        >
+                                            ±5%
+                                        </button>
+                                        <button
+                                            onClick={() => setPresetRange(10)}
+                                            disabled={!currentPrice}
+                                            className={`flex-1 py-2 text-xs rounded-lg transition ${currentPrice ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
+                                        >
+                                            ±10%
+                                        </button>
+                                        <button
+                                            onClick={() => setPresetRange(25)}
+                                            disabled={!currentPrice}
+                                            className={`flex-1 py-2 text-xs rounded-lg transition ${currentPrice ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
+                                        >
+                                            ±25%
+                                        </button>
+                                    </div>
+
+                                    {/* Min/Max Price Inputs */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Min Price */}
+                                        <div className="p-4 rounded-xl bg-white/5 border border-glass-border">
+                                            <div className="text-xs text-gray-500 mb-2">Min Price</div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || '1') * 0.95).toFixed(4))}
+                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                >
+                                                    −
+                                                </button>
+                                                <input
+                                                    type="text"
+                                                    value={priceLower}
+                                                    onChange={(e) => setPriceLower(e.target.value)}
+                                                    placeholder="0"
+                                                    className="flex-1 bg-transparent text-xl font-medium text-center outline-none placeholder-gray-600"
+                                                />
+                                                <button
+                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || '1') * 1.05).toFixed(4))}
+                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-2 text-center">
+                                                {tokenA && tokenB ? `${tokenB.symbol} per ${tokenA.symbol}` : ''}
+                                            </div>
+                                        </div>
+
+                                        {/* Max Price */}
+                                        <div className="p-4 rounded-xl bg-white/5 border border-glass-border">
+                                            <div className="text-xs text-gray-500 mb-2">Max Price</div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || '1') * 0.95).toFixed(4))}
+                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                >
+                                                    −
+                                                </button>
+                                                <input
+                                                    type="text"
+                                                    value={priceUpper}
+                                                    onChange={(e) => setPriceUpper(e.target.value)}
+                                                    placeholder="∞"
+                                                    className="flex-1 bg-transparent text-xl font-medium text-center outline-none placeholder-gray-600"
+                                                />
+                                                <button
+                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || '1') * 1.05).toFixed(4))}
+                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-2 text-center">
+                                                {tokenA && tokenB ? `${tokenB.symbol} per ${tokenA.symbol}` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Range Info */}
+                                    {priceLower && priceUpper && (
+                                        <div className="mt-3 p-3 rounded-lg bg-white/5 text-center">
+                                            <span className="text-xs text-gray-400">
+                                                Your position will earn fees when price is between{' '}
+                                                <span className="text-white font-medium">{priceLower}</span> and{' '}
+                                                <span className="text-white font-medium">{priceUpper}</span>
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                         {/* Token A */}
                         <div className="mb-4">
                             <div className="flex items-center justify-between mb-2">
