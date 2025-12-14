@@ -1,9 +1,10 @@
 'use client';
 
-import { useAccount, useReadContract, useReadContracts } from 'wagmi';
-import { Address } from 'viem';
+import { useAccount, useReadContract } from 'wagmi';
+import { Address, formatUnits } from 'viem';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, POOL_FACTORY_ABI, POOL_ABI } from '@/config/abis';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface CLPosition {
     tokenId: bigint;
@@ -15,6 +16,8 @@ export interface CLPosition {
     liquidity: bigint;
     tokensOwed0: bigint;
     tokensOwed1: bigint;
+    token0Symbol?: string;
+    token1Symbol?: string;
 }
 
 export interface V2Position {
@@ -28,6 +31,8 @@ export interface V2Position {
 // Hook to fetch CL positions from NonfungiblePositionManager
 export function useCLPositions() {
     const { address } = useAccount();
+    const [positions, setPositions] = useState<CLPosition[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     // Get number of positions
     const { data: positionCount, refetch: refetchCount } = useReadContract({
@@ -39,19 +44,172 @@ export function useCLPositions() {
     });
 
     const count = positionCount ? Number(positionCount) : 0;
-    const clPositions: CLPosition[] = [];
 
-    // For simplicity, we'll fetch positions in a single batch if count > 0
-    // In a real app you'd use multicall or pagination
+    // Fetch all position details
+    const fetchPositions = useCallback(async () => {
+        if (!address || count === 0) {
+            setPositions([]);
+            return;
+        }
+
+        setIsLoading(true);
+
+        try {
+            const positionPromises: Promise<CLPosition | null>[] = [];
+
+            for (let i = 0; i < count; i++) {
+                positionPromises.push(fetchPositionByIndex(address, i));
+            }
+
+            const results = await Promise.all(positionPromises);
+            const validPositions = results.filter((p): p is CLPosition => p !== null);
+            setPositions(validPositions);
+        } catch (err) {
+            console.error('Error fetching CL positions:', err);
+            setPositions([]);
+        }
+
+        setIsLoading(false);
+    }, [address, count]);
+
+    useEffect(() => {
+        fetchPositions();
+    }, [fetchPositions]);
+
     const refetch = () => {
         refetchCount();
+        fetchPositions();
     };
 
     return {
-        positions: clPositions,
+        positions,
         positionCount: count,
+        isLoading,
         refetch,
     };
+}
+
+// Fetch a single position by owner index
+async function fetchPositionByIndex(owner: string, index: number): Promise<CLPosition | null> {
+    const rpcUrl = 'https://evm-rpc.sei-apis.com';
+
+    try {
+        // 1. Get tokenId at index using tokenOfOwnerByIndex
+        const tokenIdResponse = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'eth_call',
+                params: [{
+                    to: CL_CONTRACTS.NonfungiblePositionManager,
+                    data: encodeTokenOfOwnerByIndex(owner, index),
+                }, 'latest'],
+                id: 1,
+            }),
+        });
+
+        const tokenIdResult = await tokenIdResponse.json();
+        if (!tokenIdResult.result || tokenIdResult.result === '0x') {
+            return null;
+        }
+
+        const tokenId = BigInt(tokenIdResult.result);
+
+        // 2. Get position data using positions(tokenId)
+        const positionResponse = await fetch(rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'eth_call',
+                params: [{
+                    to: CL_CONTRACTS.NonfungiblePositionManager,
+                    data: encodePositions(tokenId),
+                }, 'latest'],
+                id: 2,
+            }),
+        });
+
+        const positionResult = await positionResponse.json();
+        if (!positionResult.result || positionResult.result === '0x') {
+            return null;
+        }
+
+        const decoded = decodePositionResult(positionResult.result);
+
+        return {
+            tokenId,
+            ...decoded,
+        };
+    } catch (err) {
+        console.error(`Error fetching position at index ${index}:`, err);
+        return null;
+    }
+}
+
+// Encode tokenOfOwnerByIndex(address,uint256)
+function encodeTokenOfOwnerByIndex(owner: string, index: number): string {
+    const selector = '2f745c59'; // cast sig "tokenOfOwnerByIndex(address,uint256)"
+    const ownerPadded = owner.slice(2).toLowerCase().padStart(64, '0');
+    const indexHex = index.toString(16).padStart(64, '0');
+    return `0x${selector}${ownerPadded}${indexHex}`;
+}
+
+// Encode positions(uint256)
+function encodePositions(tokenId: bigint): string {
+    const selector = '99fbab88'; // cast sig "positions(uint256)"
+    const tokenIdHex = tokenId.toString(16).padStart(64, '0');
+    return `0x${selector}${tokenIdHex}`;
+}
+
+// Decode positions() result
+function decodePositionResult(data: string): Omit<CLPosition, 'tokenId'> {
+    const hex = data.slice(2);
+
+    // positions() returns:
+    // uint96 nonce, address operator, address token0, address token1,
+    // int24 tickSpacing, int24 tickLower, int24 tickUpper, uint128 liquidity,
+    // uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128,
+    // uint128 tokensOwed0, uint128 tokensOwed1
+
+    // Each slot is 32 bytes (64 hex chars)
+    // nonce + operator packed in slot 0-1
+    const token0 = '0x' + hex.slice(128, 192).slice(-40);
+    const token1 = '0x' + hex.slice(192, 256).slice(-40);
+
+    // tickSpacing, tickLower, tickUpper
+    const tickSpacing = parseSignedInt24(hex.slice(256, 320));
+    const tickLower = parseSignedInt24(hex.slice(320, 384));
+    const tickUpper = parseSignedInt24(hex.slice(384, 448));
+
+    // liquidity (uint128)
+    const liquidity = BigInt('0x' + hex.slice(448, 512));
+
+    // Skip feeGrowthInside (slots 8-9)
+    // tokensOwed0 and tokensOwed1 (uint128 each)
+    const tokensOwed0 = BigInt('0x' + hex.slice(640, 704));
+    const tokensOwed1 = BigInt('0x' + hex.slice(704, 768));
+
+    return {
+        token0: token0 as Address,
+        token1: token1 as Address,
+        tickSpacing,
+        tickLower,
+        tickUpper,
+        liquidity,
+        tokensOwed0,
+        tokensOwed1,
+    };
+}
+
+function parseSignedInt24(hex64: string): number {
+    const val = BigInt('0x' + hex64);
+    // Check if negative (signed int24)
+    if (val > BigInt(0x7fffff)) {
+        return Number(val - BigInt(0x1000000));
+    }
+    return Number(val);
 }
 
 // Hook to fetch V2 LP token balances

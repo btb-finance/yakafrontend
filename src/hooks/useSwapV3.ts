@@ -1,16 +1,25 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
 import { parseUnits, formatUnits, Address } from 'viem';
 import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
-import { SWAP_ROUTER_ABI, QUOTER_V2_ABI, ERC20_ABI } from '@/config/abis';
+import { SWAP_ROUTER_ABI, ERC20_ABI } from '@/config/abis';
+
+// All available tick spacings in CLFactory
+const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
 
 interface SwapQuoteV3 {
     amountOut: string;
     gasEstimate: bigint;
     sqrtPriceX96After: bigint;
+    tickSpacing: number;
+    poolExists: boolean;
+}
+
+interface BestQuote extends SwapQuoteV3 {
+    allQuotes: SwapQuoteV3[];
 }
 
 export function useSwapV3() {
@@ -21,23 +30,76 @@ export function useSwapV3() {
 
     const { writeContractAsync } = useWriteContract();
 
-    // Get quote from QuoterV2
-    const getQuoteV3 = useCallback(async (
+    // Check if a pool exists for given token pair and tick spacing
+    const checkPoolExists = useCallback(async (
+        tokenIn: string,
+        tokenOut: string,
+        tickSpacing: number
+    ): Promise<boolean> => {
+        try {
+            // Sort tokens
+            const [token0, token1] = tokenIn.toLowerCase() < tokenOut.toLowerCase()
+                ? [tokenIn, tokenOut]
+                : [tokenOut, tokenIn];
+
+            // Call CLFactory.getPool
+            const response = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{
+                        to: CL_CONTRACTS.CLFactory,
+                        data: encodeGetPoolCall(token0, token1, tickSpacing)
+                    }, 'latest'],
+                    id: 1
+                })
+            });
+
+            const result = await response.json();
+            const poolAddress = result.result;
+
+            // If pool address is not zero, pool exists
+            return poolAddress && poolAddress !== '0x' + '0'.repeat(64);
+        } catch {
+            return false;
+        }
+    }, []);
+
+    // Get quote for specific tick spacing
+    const getQuoteForTickSpacing = useCallback(async (
         tokenIn: Token,
         tokenOut: Token,
         amountIn: string,
-        tickSpacing: number = 100
+        tickSpacing: number
     ): Promise<SwapQuoteV3 | null> => {
         if (!amountIn || parseFloat(amountIn) <= 0) return null;
 
         try {
-            // For V3, use WSEI instead of native SEI
             const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
+            // Check if pool exists first
+            const poolExists = await checkPoolExists(
+                actualTokenIn.address,
+                actualTokenOut.address,
+                tickSpacing
+            );
+
+            if (!poolExists) {
+                return {
+                    amountOut: '0',
+                    gasEstimate: BigInt(0),
+                    sqrtPriceX96After: BigInt(0),
+                    tickSpacing,
+                    poolExists: false,
+                };
+            }
+
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
-            // Call quoter via eth_call (QuoterV2 reverts with data)
+            // Call quoter
             const response = await fetch('https://evm-rpc.sei-apis.com', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -60,21 +122,66 @@ export function useSwapV3() {
             const result = await response.json();
 
             if (result.result && result.result !== '0x') {
-                // Decode the result
                 const decoded = decodeQuoterResult(result.result);
                 return {
                     amountOut: formatUnits(decoded.amountOut, actualTokenOut.decimals),
                     gasEstimate: decoded.gasEstimate,
-                    sqrtPriceX96After: decoded.sqrtPriceX96After
+                    sqrtPriceX96After: decoded.sqrtPriceX96After,
+                    tickSpacing,
+                    poolExists: true,
                 };
             }
 
             return null;
         } catch (err) {
+            console.error(`Quote error for tickSpacing ${tickSpacing}:`, err);
+            return null;
+        }
+    }, [checkPoolExists]);
+
+    // Get best quote across all tick spacings (AUTO mode)
+    const getQuoteV3 = useCallback(async (
+        tokenIn: Token,
+        tokenOut: Token,
+        amountIn: string,
+        tickSpacing?: number // Optional - if not provided, finds best
+    ): Promise<BestQuote | null> => {
+        if (!amountIn || parseFloat(amountIn) <= 0) return null;
+
+        try {
+            // If specific tick spacing provided, only check that one
+            if (tickSpacing !== undefined) {
+                const quote = await getQuoteForTickSpacing(tokenIn, tokenOut, amountIn, tickSpacing);
+                if (quote && quote.poolExists && parseFloat(quote.amountOut) > 0) {
+                    return { ...quote, allQuotes: [quote] };
+                }
+                return null;
+            }
+
+            // Try all tick spacings in parallel
+            const quotePromises = TICK_SPACINGS.map(ts =>
+                getQuoteForTickSpacing(tokenIn, tokenOut, amountIn, ts)
+            );
+
+            const allQuotes = (await Promise.all(quotePromises)).filter(
+                (q): q is SwapQuoteV3 => q !== null && q.poolExists && parseFloat(q.amountOut) > 0
+            );
+
+            if (allQuotes.length === 0) {
+                return null;
+            }
+
+            // Find the best quote (highest amountOut)
+            const bestQuote = allQuotes.reduce((best, current) =>
+                parseFloat(current.amountOut) > parseFloat(best.amountOut) ? current : best
+            );
+
+            return { ...bestQuote, allQuotes };
+        } catch (err) {
             console.error('V3 quote error:', err);
             return null;
         }
-    }, []);
+    }, [getQuoteForTickSpacing]);
 
     // Execute V3 swap
     const executeSwapV3 = useCallback(async (
@@ -82,7 +189,7 @@ export function useSwapV3() {
         tokenOut: Token,
         amountIn: string,
         amountOutMin: string,
-        tickSpacing: number = 100,
+        tickSpacing: number, // Required - from quote
         slippage: number = 0.5
     ) => {
         if (!address) {
@@ -94,7 +201,6 @@ export function useSwapV3() {
         setError(null);
 
         try {
-            // For V3, use WSEI instead of native SEI
             const actualTokenIn = tokenIn.isNative ? WSEI : tokenIn;
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
@@ -147,10 +253,32 @@ export function useSwapV3() {
     return {
         getQuoteV3,
         executeSwapV3,
+        checkPoolExists,
         isLoading,
         error,
         txHash,
+        TICK_SPACINGS,
     };
+}
+
+// Helper: Encode CLFactory.getPool(token0, token1, tickSpacing) call
+function encodeGetPoolCall(token0: string, token1: string, tickSpacing: number): string {
+    // Function selector for getPool(address,address,int24) - verified via cast sig
+    const selector = '28af8d0b';
+
+    const token0Padded = token0.slice(2).toLowerCase().padStart(64, '0');
+    const token1Padded = token1.slice(2).toLowerCase().padStart(64, '0');
+
+    // Handle signed int24
+    let tickHex: string;
+    if (tickSpacing >= 0) {
+        tickHex = tickSpacing.toString(16).padStart(64, '0');
+    } else {
+        const uint256Value = BigInt(2) ** BigInt(256) + BigInt(tickSpacing);
+        tickHex = uint256Value.toString(16);
+    }
+
+    return `0x${selector}${token0Padded}${token1Padded}${tickHex}`;
 }
 
 // Helper: Encode QuoterV2.quoteExactInputSingle call
@@ -160,28 +288,35 @@ function encodeQuoterCall(
     amountIn: bigint,
     tickSpacing: number
 ): string {
-    // Function selector for quoteExactInputSingle
-    const selector = 'c6a5026a'; // keccak256("quoteExactInputSingle((address,address,uint256,int24,uint160))")
+    // Function selector for quoteExactInputSingle((address,address,uint256,int24,uint160)) - verified via cast sig
+    const selector = '9e7defe6';
 
     // Encode tuple: (tokenIn, tokenOut, amountIn, tickSpacing, sqrtPriceLimitX96)
     const tokenInPadded = tokenIn.slice(2).padStart(64, '0');
     const tokenOutPadded = tokenOut.slice(2).padStart(64, '0');
     const amountInHex = amountIn.toString(16).padStart(64, '0');
-    const tickSpacingHex = (tickSpacing >= 0 ? tickSpacing : 0xFFFFFFFF + tickSpacing + 1).toString(16).padStart(64, '0');
+
+    // Handle signed int24
+    let tickHex: string;
+    if (tickSpacing >= 0) {
+        tickHex = tickSpacing.toString(16).padStart(64, '0');
+    } else {
+        const uint256Value = BigInt(2) ** BigInt(256) + BigInt(tickSpacing);
+        tickHex = uint256Value.toString(16);
+    }
+
     const sqrtPriceLimitHex = '0'.padStart(64, '0');
 
-    return `0x${selector}${'0'.padStart(64, '0').slice(0, 62)}20${tokenInPadded}${tokenOutPadded}${amountInHex}${tickSpacingHex}${sqrtPriceLimitHex}`;
+    // Struct tuple encoding - just concatenate the fields directly after selector
+    return `0x${selector}${tokenInPadded}${tokenOutPadded}${amountInHex}${tickHex}${sqrtPriceLimitHex}`;
 }
 
 // Helper: Decode QuoterV2 result
 function decodeQuoterResult(data: string): { amountOut: bigint; sqrtPriceX96After: bigint; gasEstimate: bigint } {
-    // Remove 0x prefix
     const hex = data.slice(2);
 
-    // Each value is 32 bytes (64 hex chars)
     const amountOut = BigInt('0x' + hex.slice(0, 64));
     const sqrtPriceX96After = BigInt('0x' + hex.slice(64, 128));
-    // Skip initializedTicksCrossed (128-192)
     const gasEstimate = BigInt('0x' + hex.slice(192, 256));
 
     return { amountOut, sqrtPriceX96After, gasEstimate };

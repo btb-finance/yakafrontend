@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { parseUnits, Address, maxUint256, formatUnits } from 'viem';
@@ -34,6 +34,8 @@ export default function LiquidityPage() {
     const [tickSpacing, setTickSpacing] = useState(100); // Default tick spacing
     const [priceLower, setPriceLower] = useState('');
     const [priceUpper, setPriceUpper] = useState('');
+    const [clPoolPrice, setClPoolPrice] = useState<number | null>(null);
+    const [clPoolAddress, setClPoolAddress] = useState<string | null>(null);
 
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
@@ -44,6 +46,95 @@ export default function LiquidityPage() {
     const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
 
     const { writeContractAsync } = useWriteContract();
+
+    // Fetch CL pool price when tokens or tickSpacing change
+    useEffect(() => {
+        const fetchPoolPrice = async () => {
+            if (!tokenA || !tokenB || poolType !== 'cl') {
+                setClPoolPrice(null);
+                setClPoolAddress(null);
+                return;
+            }
+
+            const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+            const actualTokenB = tokenB.isNative ? WSEI : tokenB;
+
+            // Sort tokens
+            const [token0, token1] = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase()
+                ? [actualTokenA, actualTokenB]
+                : [actualTokenB, actualTokenA];
+
+            try {
+                // 1. Get pool address from CLFactory
+                const getPoolSelector = '28af8d0b';
+                const token0Padded = token0.address.slice(2).toLowerCase().padStart(64, '0');
+                const token1Padded = token1.address.slice(2).toLowerCase().padStart(64, '0');
+                const tickHex = tickSpacing.toString(16).padStart(64, '0');
+                const getPoolData = `0x${getPoolSelector}${token0Padded}${token1Padded}${tickHex}`;
+
+                const poolResponse = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{ to: CL_CONTRACTS.CLFactory, data: getPoolData }, 'latest'],
+                        id: 1,
+                    }),
+                });
+
+                const poolResult = await poolResponse.json();
+                if (!poolResult.result || poolResult.result === '0x' + '0'.repeat(64)) {
+                    setClPoolPrice(null);
+                    setClPoolAddress(null);
+                    return;
+                }
+
+                const pool = '0x' + poolResult.result.slice(-40);
+                setClPoolAddress(pool);
+
+                // 2. Get slot0 from pool to get sqrtPriceX96
+                const slot0Selector = '3850c7bd'; // cast sig "slot0()"
+                const slot0Response = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{ to: pool, data: `0x${slot0Selector}` }, 'latest'],
+                        id: 2,
+                    }),
+                });
+
+                const slot0Result = await slot0Response.json();
+                if (!slot0Result.result || slot0Result.result === '0x') {
+                    setClPoolPrice(null);
+                    return;
+                }
+
+                // Decode sqrtPriceX96 from first 32 bytes
+                const sqrtPriceX96 = BigInt('0x' + slot0Result.result.slice(2, 66));
+
+                // Price = (sqrtPriceX96 / 2^96)^2
+                // Adjust for decimals
+                const Q96 = BigInt(2) ** BigInt(96);
+                const priceRaw = Number(sqrtPriceX96 * sqrtPriceX96 * BigInt(10 ** token0.decimals)) / Number(Q96 * Q96 * BigInt(10 ** token1.decimals));
+
+                // If tokenA is not token0, invert the price
+                const price = actualTokenA.address.toLowerCase() === token0.address.toLowerCase()
+                    ? priceRaw
+                    : 1 / priceRaw;
+
+                setClPoolPrice(price);
+            } catch (err) {
+                console.error('Error fetching CL pool price:', err);
+                setClPoolPrice(null);
+                setClPoolAddress(null);
+            }
+        };
+
+        fetchPoolPrice();
+    }, [tokenA, tokenB, tickSpacing, poolType]);
 
     // Handle V2 liquidity add
     const handleAddLiquidity = async () => {
@@ -326,10 +417,12 @@ export default function LiquidityPage() {
 
                         {/* CL Price Range - Uniswap Style */}
                         {poolType === 'cl' && (() => {
-                            // Calculate current price from entered amounts
-                            const currentPrice = amountA && amountB && parseFloat(amountA) > 0
-                                ? parseFloat(amountB) / parseFloat(amountA)
-                                : null;
+                            // Use pool price if available, otherwise calculate from amounts
+                            const currentPrice = clPoolPrice !== null
+                                ? clPoolPrice
+                                : (amountA && amountB && parseFloat(amountA) > 0
+                                    ? parseFloat(amountB) / parseFloat(amountA)
+                                    : null);
 
                             const setPresetRange = (percent: number) => {
                                 if (currentPrice) {
@@ -342,16 +435,25 @@ export default function LiquidityPage() {
                                 <div className="mb-6">
                                     {/* Current Price Display */}
                                     <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                        <div className="text-xs text-gray-400 mb-1">Current Price (from amounts)</div>
+                                        <div className="text-xs text-gray-400 mb-1">
+                                            {clPoolPrice !== null ? (
+                                                <span className="text-green-400">● Pool Price (from existing pool)</span>
+                                            ) : clPoolAddress ? (
+                                                'Loading pool price...'
+                                            ) : (
+                                                'Current Price (enter amounts or pool will be created)'
+                                            )}
+                                        </div>
                                         <div className="text-lg font-semibold">
                                             {tokenA && tokenB && currentPrice ? (
                                                 <>1 {tokenA.symbol} = <span className="text-primary">{currentPrice.toFixed(6)}</span> {tokenB.symbol}</>
                                             ) : tokenA && tokenB ? (
-                                                <>Enter amounts to see price</>
+                                                clPoolAddress ? 'Loading...' : 'No pool exists - enter amounts to set initial price'
                                             ) : 'Select tokens'}
                                         </div>
                                         <div className="text-xs text-gray-500 mt-1">
                                             {tokenA && tokenB && `${tokenB.symbol} per ${tokenA.symbol}`}
+                                            {clPoolAddress && <span className="ml-2 text-gray-600">Pool: {clPoolAddress.slice(0, 10)}...</span>}
                                         </div>
                                     </div>
 

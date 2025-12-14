@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useReadContract } from 'wagmi';
 import { parseUnits, formatUnits, Address } from 'viem';
-import { Token, SEI, USDC } from '@/config/tokens';
+import { Token, SEI, USDC, WSEI } from '@/config/tokens';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { ROUTER_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
@@ -20,7 +20,13 @@ interface Route {
     factory: Address;
 }
 
-type SwapMode = 'v2' | 'v3';
+interface BestRoute {
+    type: 'v2' | 'v3';
+    amountOut: string;
+    tickSpacing?: number;
+    feeLabel: string;
+    stable?: boolean;
+}
 
 export function SwapInterface() {
     const { isConnected, address } = useAccount();
@@ -30,11 +36,11 @@ export function SwapInterface() {
     const [tokenOut, setTokenOut] = useState<Token | undefined>(USDC);
     const [amountIn, setAmountIn] = useState('');
     const [amountOut, setAmountOut] = useState('');
-    const [stable, setStable] = useState(false);
 
-    // Swap mode (V2 or V3)
-    const [swapMode, setSwapMode] = useState<SwapMode>('v2');
-    const [tickSpacing, setTickSpacing] = useState(100);
+    // Best route (auto-detected)
+    const [bestRoute, setBestRoute] = useState<BestRoute | null>(null);
+    const [isQuoting, setIsQuoting] = useState(false);
+    const [noRouteFound, setNoRouteFound] = useState(false);
 
     // Settings state
     const [slippage, setSlippage] = useState(0.5);
@@ -42,59 +48,138 @@ export function SwapInterface() {
 
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
-    const [v3Quote, setV3Quote] = useState<string>('');
 
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
     const { getQuoteV3, executeSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
-    const { balance: balanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
-    const { balance: balanceOut, formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
+    const { formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
+    const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
 
-    const isLoading = swapMode === 'v2' ? isLoadingV2 : isLoadingV3;
-    const error = swapMode === 'v2' ? errorV2 : errorV3;
+    const isLoading = isLoadingV2 || isLoadingV3;
+    const error = errorV2 || errorV3;
 
-    // Build route for V2 quote
-    const route: Route[] = tokenIn && tokenOut ? [
-        {
-            from: (tokenIn.isNative ? '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7' : tokenIn.address) as Address,
-            to: (tokenOut.isNative ? '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7' : tokenOut.address) as Address,
-            stable,
-            factory: V2_CONTRACTS.PoolFactory as Address,
-        },
-    ] : [];
-    const { data: quoteData, refetch: refetchQuote } = useReadContract({
+    // Get actual token addresses (use WSEI for native SEI)
+    const actualTokenIn = tokenIn?.isNative ? WSEI : tokenIn;
+    const actualTokenOut = tokenOut?.isNative ? WSEI : tokenOut;
+
+    // ===== V2 Volatile Quote (using wagmi hook) =====
+    const v2VolatileRoute: Route[] = actualTokenIn && actualTokenOut ? [{
+        from: actualTokenIn.address as Address,
+        to: actualTokenOut.address as Address,
+        stable: false,
+        factory: V2_CONTRACTS.PoolFactory as Address,
+    }] : [];
+
+    const { data: v2VolatileQuote } = useReadContract({
         address: V2_CONTRACTS.Router as Address,
         abi: ROUTER_ABI,
         functionName: 'getAmountsOut',
-        args: amountIn && tokenIn && parseFloat(amountIn) > 0
-            ? [parseUnits(amountIn, tokenIn.decimals), route]
+        args: amountIn && actualTokenIn && parseFloat(amountIn) > 0
+            ? [parseUnits(amountIn, actualTokenIn.decimals), v2VolatileRoute]
             : undefined,
         query: {
-            enabled: !!tokenIn && !!tokenOut && !!amountIn && parseFloat(amountIn) > 0,
+            enabled: !!actualTokenIn && !!actualTokenOut && !!amountIn && parseFloat(amountIn) > 0,
         },
     });
 
-    // Fetch V3 quote when in V3 mode
-    useEffect(() => {
-        if (swapMode === 'v3' && tokenIn && tokenOut && amountIn && parseFloat(amountIn) > 0) {
-            getQuoteV3(tokenIn, tokenOut, amountIn, tickSpacing).then((quote) => {
-                if (quote) {
-                    setAmountOut(quote.amountOut);
-                    setV3Quote(quote.amountOut);
-                }
-            });
-        }
-    }, [swapMode, tokenIn, tokenOut, amountIn, tickSpacing, getQuoteV3]);
+    // ===== V2 Stable Quote (using wagmi hook) =====
+    const v2StableRoute: Route[] = actualTokenIn && actualTokenOut ? [{
+        from: actualTokenIn.address as Address,
+        to: actualTokenOut.address as Address,
+        stable: true,
+        factory: V2_CONTRACTS.PoolFactory as Address,
+    }] : [];
 
-    // Update amountOut when V2 quote changes
+    const { data: v2StableQuote } = useReadContract({
+        address: V2_CONTRACTS.Router as Address,
+        abi: ROUTER_ABI,
+        functionName: 'getAmountsOut',
+        args: amountIn && actualTokenIn && parseFloat(amountIn) > 0
+            ? [parseUnits(amountIn, actualTokenIn.decimals), v2StableRoute]
+            : undefined,
+        query: {
+            enabled: !!actualTokenIn && !!actualTokenOut && !!amountIn && parseFloat(amountIn) > 0,
+        },
+    });
+
+    // ===== Find Best Route (V2 + V3) =====
     useEffect(() => {
-        if (swapMode === 'v2' && quoteData && tokenOut && Array.isArray(quoteData) && quoteData.length > 1) {
-            const outAmount = formatUnits(quoteData[quoteData.length - 1] as bigint, tokenOut.decimals);
-            setAmountOut(outAmount);
-        } else if (!amountIn || parseFloat(amountIn) === 0) {
-            setAmountOut('');
-        }
-    }, [quoteData, tokenOut, amountIn, swapMode]);
+        const findBestRoute = async () => {
+            if (!tokenIn || !tokenOut || !amountIn || parseFloat(amountIn) <= 0 || !actualTokenOut) {
+                setBestRoute(null);
+                setAmountOut('');
+                setNoRouteFound(false);
+                return;
+            }
+
+            setIsQuoting(true);
+            setNoRouteFound(false);
+
+            try {
+                const routes: BestRoute[] = [];
+
+                // === Get V3 Quote (auto-detects best pool) ===
+                const v3Quote = await getQuoteV3(tokenIn, tokenOut, amountIn);
+                if (v3Quote && v3Quote.poolExists && parseFloat(v3Quote.amountOut) > 0) {
+                    const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 100: '0.05%', 200: '0.30%', 2000: '1.00%' };
+                    routes.push({
+                        type: 'v3',
+                        amountOut: v3Quote.amountOut,
+                        tickSpacing: v3Quote.tickSpacing,
+                        feeLabel: `V3 ${feeMap[v3Quote.tickSpacing] || ''}`,
+                    });
+                }
+
+                // === V2 Volatile Quote ===
+                if (v2VolatileQuote && Array.isArray(v2VolatileQuote) && v2VolatileQuote.length > 1) {
+                    const outAmount = formatUnits(v2VolatileQuote[v2VolatileQuote.length - 1] as bigint, actualTokenOut.decimals);
+                    if (parseFloat(outAmount) > 0) {
+                        routes.push({
+                            type: 'v2',
+                            amountOut: outAmount,
+                            stable: false,
+                            feeLabel: 'V2 Volatile',
+                        });
+                    }
+                }
+
+                // === V2 Stable Quote ===
+                if (v2StableQuote && Array.isArray(v2StableQuote) && v2StableQuote.length > 1) {
+                    const outAmount = formatUnits(v2StableQuote[v2StableQuote.length - 1] as bigint, actualTokenOut.decimals);
+                    if (parseFloat(outAmount) > 0) {
+                        routes.push({
+                            type: 'v2',
+                            amountOut: outAmount,
+                            stable: true,
+                            feeLabel: 'V2 Stable',
+                        });
+                    }
+                }
+
+                // Find best route
+                if (routes.length > 0) {
+                    const best = routes.reduce((a, b) =>
+                        parseFloat(a.amountOut) > parseFloat(b.amountOut) ? a : b
+                    );
+                    setBestRoute(best);
+                    setAmountOut(best.amountOut);
+                } else {
+                    setBestRoute(null);
+                    setAmountOut('');
+                    setNoRouteFound(true);
+                }
+            } catch (err) {
+                console.error('Quote error:', err);
+                setBestRoute(null);
+                setNoRouteFound(true);
+            }
+
+            setIsQuoting(false);
+        };
+
+        const debounce = setTimeout(findBestRoute, 300);
+        return () => clearTimeout(debounce);
+    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, getQuoteV3]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
@@ -102,12 +187,8 @@ export function SwapInterface() {
         setTokenOut(tokenIn);
         setAmountIn(amountOut);
         setAmountOut(amountIn);
+        setBestRoute(null);
     }, [tokenIn, tokenOut, amountIn, amountOut]);
-
-    // Handle amount changes
-    const handleAmountInChange = (amount: string) => {
-        setAmountIn(amount);
-    };
 
     // Calculate min amount out with slippage
     const amountOutMin = amountOut
@@ -120,13 +201,8 @@ export function SwapInterface() {
         tokenOut &&
         amountIn &&
         parseFloat(amountIn) > 0 &&
-        amountOut &&
-        parseFloat(amountOut) > 0;
-
-    // Calculate price impact
-    const priceImpact = amountIn && amountOut && parseFloat(amountIn) > 0
-        ? '< 0.5%'
-        : '--';
+        bestRoute &&
+        parseFloat(bestRoute.amountOut) > 0;
 
     // Calculate rate
     const rate = amountIn && amountOut && parseFloat(amountIn) > 0
@@ -134,25 +210,26 @@ export function SwapInterface() {
         : null;
 
     const handleSwap = async () => {
-        if (!canSwap || !tokenIn || !tokenOut) return;
+        if (!canSwap || !tokenIn || !tokenOut || !bestRoute) return;
 
         let result;
-        if (swapMode === 'v2') {
+        if (bestRoute.type === 'v2') {
             result = await executeSwap(
                 tokenIn,
                 tokenOut,
                 amountIn,
                 amountOutMin,
-                stable,
+                bestRoute.stable || false,
                 deadline
             );
         } else {
+            if (!bestRoute.tickSpacing) return;
             result = await executeSwapV3(
                 tokenIn,
                 tokenOut,
                 amountIn,
                 amountOutMin,
-                tickSpacing,
+                bestRoute.tickSpacing,
                 slippage
             );
         }
@@ -161,6 +238,7 @@ export function SwapInterface() {
             setTxHash(result.hash);
             setAmountIn('');
             setAmountOut('');
+            setBestRoute(null);
         }
     };
 
@@ -170,43 +248,24 @@ export function SwapInterface() {
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold">Swap</h2>
                 <div className="flex items-center gap-2">
-                    {/* V2/V3 Toggle */}
-                    <div className="flex rounded-lg overflow-hidden border border-glass-border">
-                        <button
-                            onClick={() => setSwapMode('v2')}
-                            className={`px-3 py-1 text-xs transition ${swapMode === 'v2' ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
-                        >
-                            V2
-                        </button>
-                        <button
-                            onClick={() => setSwapMode('v3')}
-                            className={`px-3 py-1 text-xs transition ${swapMode === 'v3' ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
-                        >
-                            V3
-                        </button>
-                    </div>
-                    {/* Stable/Volatile Toggle (V2 only) */}
-                    {swapMode === 'v2' && (
-                        <button
-                            onClick={() => setStable(!stable)}
-                            className={`px-3 py-1 text-xs rounded-lg transition ${stable ? 'bg-primary text-white' : 'bg-white/5 text-gray-400'}`}
-                        >
-                            {stable ? 'Stable' : 'Volatile'}
-                        </button>
+                    {/* Best Route Badge */}
+                    {bestRoute && (
+                        <span className={`px-2 py-1 text-xs rounded-lg ${bestRoute.type === 'v3'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-primary/20 text-primary'
+                            }`}>
+                            Best: {bestRoute.feeLabel}
+                        </span>
                     )}
-                    {/* Tick Spacing (V3 only) */}
-                    {swapMode === 'v3' && (
-                        <select
-                            value={tickSpacing}
-                            onChange={(e) => setTickSpacing(Number(e.target.value))}
-                            className="px-2 py-1 text-xs rounded-lg bg-white/5 border border-glass-border text-gray-300"
-                        >
-                            <option value={1}>0.01%</option>
-                            <option value={50}>0.05%</option>
-                            <option value={100}>0.05%</option>
-                            <option value={200}>0.30%</option>
-                            <option value={2000}>1.00%</option>
-                        </select>
+                    {noRouteFound && (
+                        <span className="px-2 py-1 text-xs rounded-lg bg-red-500/20 text-red-400">
+                            No Route
+                        </span>
+                    )}
+                    {isQuoting && (
+                        <span className="px-2 py-1 text-xs rounded-lg bg-white/10 text-gray-400">
+                            Finding best...
+                        </span>
                     )}
                     <SwapSettings
                         slippage={slippage}
@@ -239,55 +298,42 @@ export function SwapInterface() {
                 </div>
             )}
 
-            {/* Input Token */}
+            {/* Token In */}
             <TokenInput
-                label="You Pay"
+                label="You pay"
                 token={tokenIn}
                 amount={amountIn}
-                onAmountChange={handleAmountInChange}
-                onTokenSelect={setTokenIn}
-                excludeToken={tokenOut}
-                showMaxButton={true}
                 balance={formattedBalanceIn}
+                onAmountChange={setAmountIn}
+                onTokenSelect={setTokenIn}
             />
 
             {/* Swap Direction Button */}
-            <div className="flex justify-center -my-2 relative z-10">
+            <div className="relative h-0 flex items-center justify-center z-10">
                 <motion.button
                     onClick={handleSwapTokens}
-                    className="p-3 rounded-xl bg-bg-secondary border border-glass-border hover:bg-white/5 transition group"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    className="swap-arrow-btn"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
                 >
-                    <svg
-                        className="w-5 h-5 text-gray-400 group-hover:text-white transition transform group-hover:rotate-180 duration-300"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                    >
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                        />
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                     </svg>
                 </motion.button>
             </div>
 
-            {/* Output Token */}
+            {/* Token Out */}
             <TokenInput
-                label="You Receive"
+                label="You receive"
                 token={tokenOut}
                 amount={amountOut}
-                onAmountChange={setAmountOut}
-                onTokenSelect={setTokenOut}
-                excludeToken={tokenIn}
-                disabled={true}
                 balance={formattedBalanceOut}
+                onAmountChange={() => { }}
+                onTokenSelect={setTokenOut}
+                disabled
             />
 
-            {/* Rate Display */}
+            {/* Rate Info */}
             {rate && tokenIn && tokenOut && (
                 <div className="mt-4 p-3 rounded-xl bg-white/5">
                     <div className="flex justify-between text-sm">
@@ -297,16 +343,14 @@ export function SwapInterface() {
                         </span>
                     </div>
                     <div className="flex justify-between text-sm mt-1">
-                        <span className="text-gray-400">Price Impact</span>
-                        <span className="text-green-400">{priceImpact}</span>
+                        <span className="text-gray-400">Route</span>
+                        <span className={bestRoute?.type === 'v3' ? 'text-green-400' : 'text-primary'}>
+                            {bestRoute?.feeLabel || '--'}
+                        </span>
                     </div>
                     <div className="flex justify-between text-sm mt-1">
-                        <span className="text-gray-400">Min. Received</span>
-                        <span>{parseFloat(amountOutMin).toFixed(4)} {tokenOut.symbol}</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-1">
-                        <span className="text-gray-400">Slippage</span>
-                        <span>{slippage}%</span>
+                        <span className="text-gray-400">Min. received</span>
+                        <span>{amountOutMin} {tokenOut.symbol}</span>
                     </div>
                 </div>
             )}
@@ -315,46 +359,24 @@ export function SwapInterface() {
             <motion.button
                 onClick={handleSwap}
                 disabled={!canSwap || isLoading}
-                className="w-full btn-primary mt-6 py-4 text-lg"
-                whileHover={canSwap && !isLoading ? { scale: 1.01 } : {}}
-                whileTap={canSwap && !isLoading ? { scale: 0.99 } : {}}
+                className="w-full btn-primary py-4 mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={canSwap ? { scale: 1.01 } : {}}
+                whileTap={canSwap ? { scale: 0.99 } : {}}
             >
-                {isLoading ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                            <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                                fill="none"
-                            />
-                            <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                        </svg>
-                        Swapping...
-                    </span>
-                ) : !isConnected ? (
-                    'Connect Wallet'
-                ) : !tokenIn || !tokenOut ? (
-                    'Select Tokens'
-                ) : !amountIn || parseFloat(amountIn) <= 0 ? (
-                    'Enter Amount'
-                ) : !amountOut || parseFloat(amountOut) <= 0 ? (
-                    'Insufficient Liquidity'
-                ) : (
-                    `Swap ${tokenIn.symbol} for ${tokenOut.symbol}`
-                )}
+                {isLoading
+                    ? 'Swapping...'
+                    : !isConnected
+                        ? 'Connect Wallet'
+                        : noRouteFound
+                            ? 'No Route Found'
+                            : !amountIn
+                                ? 'Enter Amount'
+                                : 'Swap'}
             </motion.button>
 
-            {/* Powered by */}
+            {/* Footer */}
             <div className="mt-4 text-center text-xs text-gray-500">
-                Powered by YAKA {swapMode === 'v2' ? 'V2 Router' : 'V3 SwapRouter'}
+                Powered by YAKA Smart Router (V2 + V3)
             </div>
         </div>
     );
