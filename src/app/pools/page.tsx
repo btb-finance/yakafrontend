@@ -266,8 +266,22 @@ export default function PoolsPage() {
             const tickSpacing = Number(tickSpacingResult.result);
             const liquidity = liquidityResult?.status === 'success' ? BigInt(liquidityResult.result as bigint) : BigInt(0);
 
-            // Estimate TVL from liquidity (simplified)
-            const tvl = (Number(liquidity) / 1e18).toFixed(2);
+            // For CL pools, show liquidity in a human-readable way
+            // Note: This is raw liquidity units, not USD - requires price feeds for true TVL
+            let tvl = '0';
+            if (liquidity > BigInt(0)) {
+                // Display liquidity scaled appropriately
+                const liqNum = Number(liquidity);
+                if (liqNum > 1e18) {
+                    tvl = (liqNum / 1e18).toFixed(2);
+                } else if (liqNum > 1e12) {
+                    tvl = (liqNum / 1e12).toFixed(2);
+                } else if (liqNum > 1e6) {
+                    tvl = (liqNum / 1e6).toFixed(2);
+                } else {
+                    tvl = liqNum.toFixed(2);
+                }
+            }
 
             newPools.push({
                 address: validClPoolAddresses[i],
@@ -316,12 +330,17 @@ export default function PoolsPage() {
     };
 
     // Format TVL nicely
-    const formatTVL = (tvl: string) => {
+    const formatTVL = (tvl: string, pool?: PoolData) => {
         const num = parseFloat(tvl);
         if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
         if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-        if (num > 0) return `$${num.toFixed(2)}`;
-        return '--';
+        if (num >= 1) return `$${num.toFixed(2)}`;
+        if (num > 0) return `$${num.toFixed(4)}`;
+        // For pools with 0 TVL, show liquidity indicator
+        if (pool?.poolType === 'CL') {
+            return 'New Pool';
+        }
+        return 'Low';
     };
 
     const totalPoolCount = (v2PoolCount ? Number(v2PoolCount) : 0) + (clPoolCount ? Number(clPoolCount) : 0);
@@ -522,7 +541,7 @@ export default function PoolsPage() {
 
                             {/* TVL */}
                             <div className="col-span-2 text-right">
-                                <div className="font-semibold">{formatTVL(pool.tvl)}</div>
+                                <div className="font-semibold">{formatTVL(pool.tvl, pool)}</div>
                             </div>
 
                             {/* Action */}
