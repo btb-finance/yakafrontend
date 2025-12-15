@@ -10,6 +10,7 @@ const navLinks = [
     { href: '/swap', label: 'Swap' },
     { href: '/liquidity', label: 'Liquidity' },
     { href: '/stake', label: 'Stake' },
+    { href: '/portfolio', label: 'Portfolio' },
     { href: '/pools', label: 'Pools' },
     { href: '/vote', label: 'Vote' },
 ];
