@@ -5,84 +5,174 @@ import { motion } from 'framer-motion';
 import { useReadContract, useReadContracts } from 'wagmi';
 import { formatUnits, Address } from 'viem';
 import Link from 'next/link';
-import { V2_CONTRACTS } from '@/config/contracts';
+import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { POOL_FACTORY_ABI, POOL_ABI, ERC20_ABI } from '@/config/abis';
 import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
 
+// CL Factory ABI
+const CL_FACTORY_ABI = [
+    {
+        inputs: [],
+        name: 'allPoolsLength',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: '', type: 'uint256' }],
+        name: 'allPools',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// CL Pool ABI
+const CL_POOL_ABI = [
+    {
+        inputs: [],
+        name: 'token0',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'token1',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'tickSpacing',
+        outputs: [{ name: '', type: 'int24' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'liquidity',
+        outputs: [{ name: '', type: 'uint128' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
 type PoolType = 'all' | 'v2' | 'cl';
-type SortBy = 'tvl' | 'apr' | 'volume';
+type SortBy = 'tvl' | 'apr';
 
 interface PoolData {
     address: Address;
     token0: { address: Address; symbol: string; decimals: number };
     token1: { address: Address; symbol: string; decimals: number };
-    stable: boolean;
+    poolType: 'V2' | 'CL';
+    stable?: boolean;
+    tickSpacing?: number;
     reserve0: string;
     reserve1: string;
     tvl: string;
     estimatedApr?: number;
 }
 
+// Fee tier mapping for CL pools
+const FEE_TIERS: Record<number, string> = {
+    1: '0.01%',
+    50: '0.05%',
+    100: '0.05%',
+    200: '0.30%',
+};
+
 export default function PoolsPage() {
     const [poolType, setPoolType] = useState<PoolType>('all');
     const [sortBy, setSortBy] = useState<SortBy>('tvl');
     const [search, setSearch] = useState('');
-    const [pools, setPools] = useState<PoolData[]>([]);
+    const [v2Pools, setV2Pools] = useState<PoolData[]>([]);
+    const [clPools, setClPools] = useState<PoolData[]>([]);
 
-    // Get total number of pools
-    const { data: poolCount } = useReadContract({
+    // ============================================
+    // V2 POOLS
+    // ============================================
+    const { data: v2PoolCount } = useReadContract({
         address: V2_CONTRACTS.PoolFactory as Address,
         abi: POOL_FACTORY_ABI,
         functionName: 'allPoolsLength',
     });
 
-    // Get first 10 pool addresses (for demo)
-    const poolIndexes = poolCount ? Array.from({ length: Math.min(Number(poolCount), 10) }, (_, i) => i) : [];
+    const v2PoolIndexes = v2PoolCount ? Array.from({ length: Math.min(Number(v2PoolCount), 20) }, (_, i) => i) : [];
 
-    const { data: poolAddresses } = useReadContracts({
-        contracts: poolIndexes.map((index) => ({
+    const { data: v2PoolAddresses } = useReadContracts({
+        contracts: v2PoolIndexes.map((index) => ({
             address: V2_CONTRACTS.PoolFactory as Address,
             abi: POOL_FACTORY_ABI,
             functionName: 'allPools',
             args: [BigInt(index)],
         })),
-        query: {
-            enabled: poolIndexes.length > 0,
-        },
+        query: { enabled: v2PoolIndexes.length > 0 },
     });
 
-    // Get pool details for each address
-    const validPoolAddresses = (poolAddresses?.filter(p => p.status === 'success').map(p => p.result as unknown as Address) || []);
+    const validV2PoolAddresses = (v2PoolAddresses?.filter(p => p.status === 'success').map(p => p.result as unknown as Address) || []);
 
-    const { data: poolDetails } = useReadContracts({
-        contracts: validPoolAddresses.flatMap((addr) => [
+    const { data: v2PoolDetails } = useReadContracts({
+        contracts: validV2PoolAddresses.flatMap((addr) => [
             { address: addr, abi: POOL_ABI, functionName: 'token0' },
             { address: addr, abi: POOL_ABI, functionName: 'token1' },
             { address: addr, abi: POOL_ABI, functionName: 'stable' },
             { address: addr, abi: POOL_ABI, functionName: 'getReserves' },
         ]),
-        query: {
-            enabled: validPoolAddresses.length > 0,
-        },
+        query: { enabled: validV2PoolAddresses.length > 0 },
     });
 
-    // Get token symbols
-    const tokenAddresses = poolDetails
-        ?.filter((_, i) => i % 4 === 0 || i % 4 === 1)
-        .filter(d => d.status === 'success')
-        .map(d => d.result as Address) || [];
+    // ============================================
+    // CL POOLS
+    // ============================================
+    const { data: clPoolCount } = useReadContract({
+        address: CL_CONTRACTS.CLFactory as Address,
+        abi: CL_FACTORY_ABI,
+        functionName: 'allPoolsLength',
+    });
 
-    const uniqueTokens = [...new Set(tokenAddresses)];
+    const clPoolIndexes = clPoolCount ? Array.from({ length: Math.min(Number(clPoolCount), 20) }, (_, i) => i) : [];
+
+    const { data: clPoolAddresses } = useReadContracts({
+        contracts: clPoolIndexes.map((index) => ({
+            address: CL_CONTRACTS.CLFactory as Address,
+            abi: CL_FACTORY_ABI,
+            functionName: 'allPools',
+            args: [BigInt(index)],
+        })),
+        query: { enabled: clPoolIndexes.length > 0 },
+    });
+
+    const validClPoolAddresses = (clPoolAddresses?.filter(p => p.status === 'success').map(p => p.result as unknown as Address) || []);
+
+    const { data: clPoolDetails } = useReadContracts({
+        contracts: validClPoolAddresses.flatMap((addr) => [
+            { address: addr, abi: CL_POOL_ABI, functionName: 'token0' },
+            { address: addr, abi: CL_POOL_ABI, functionName: 'token1' },
+            { address: addr, abi: CL_POOL_ABI, functionName: 'tickSpacing' },
+            { address: addr, abi: CL_POOL_ABI, functionName: 'liquidity' },
+        ]),
+        query: { enabled: validClPoolAddresses.length > 0 },
+    });
+
+    // ============================================
+    // TOKEN INFO
+    // ============================================
+    const allTokenAddresses = [
+        ...(v2PoolDetails?.filter((_, i) => i % 4 === 0 || i % 4 === 1).filter(d => d.status === 'success').map(d => d.result as Address) || []),
+        ...(clPoolDetails?.filter((_, i) => i % 4 === 0 || i % 4 === 1).filter(d => d.status === 'success').map(d => d.result as Address) || []),
+    ];
+
+    const uniqueTokens = [...new Set(allTokenAddresses)];
 
     const { data: tokenSymbols } = useReadContracts({
         contracts: uniqueTokens.flatMap((addr) => [
             { address: addr, abi: ERC20_ABI, functionName: 'symbol' },
             { address: addr, abi: ERC20_ABI, functionName: 'decimals' },
         ]),
-        query: {
-            enabled: uniqueTokens.length > 0,
-        },
+        query: { enabled: uniqueTokens.length > 0 },
     });
 
     // Build token info map
@@ -100,17 +190,17 @@ export default function PoolsPage() {
         });
     }
 
-    // Build pools data
+    // Build V2 pools data
     useEffect(() => {
-        if (!poolDetails || !validPoolAddresses.length || tokenInfoMap.size === 0) return;
+        if (!v2PoolDetails || !validV2PoolAddresses.length || tokenInfoMap.size === 0) return;
 
         const newPools: PoolData[] = [];
 
-        for (let i = 0; i < validPoolAddresses.length; i++) {
-            const token0Result = poolDetails[i * 4];
-            const token1Result = poolDetails[i * 4 + 1];
-            const stableResult = poolDetails[i * 4 + 2];
-            const reservesResult = poolDetails[i * 4 + 3];
+        for (let i = 0; i < validV2PoolAddresses.length; i++) {
+            const token0Result = v2PoolDetails[i * 4];
+            const token1Result = v2PoolDetails[i * 4 + 1];
+            const stableResult = v2PoolDetails[i * 4 + 2];
+            const reservesResult = v2PoolDetails[i * 4 + 3];
 
             if (
                 token0Result?.status !== 'success' ||
@@ -129,29 +219,78 @@ export default function PoolsPage() {
             const reserves = reservesResult.result as [bigint, bigint, bigint];
             const reserve0 = formatUnits(reserves[0], token0Info.decimals);
             const reserve1 = formatUnits(reserves[1], token1Info.decimals);
-
-            // Estimate TVL (simplified - would need price feeds for accurate TVL)
             const tvl = (parseFloat(reserve0) + parseFloat(reserve1)).toFixed(2);
 
-            // Estimate APR (mock data - would come from actual fee data)
-            const estimatedApr = Math.random() * 50 + 5; // 5-55% mock APR
-
             newPools.push({
-                address: validPoolAddresses[i],
+                address: validV2PoolAddresses[i],
                 token0: { address: token0Result.result as Address, ...token0Info },
                 token1: { address: token1Result.result as Address, ...token1Info },
+                poolType: 'V2',
                 stable: stableResult.result as boolean,
                 reserve0,
                 reserve1,
                 tvl,
-                estimatedApr,
             });
         }
 
-        setPools(newPools);
-    }, [poolDetails, validPoolAddresses, tokenInfoMap.size]);
+        setV2Pools(newPools);
+    }, [v2PoolDetails, validV2PoolAddresses.length, tokenInfoMap.size]);
 
-    const filteredPools = pools.filter((pool) => {
+    // Build CL pools data
+    useEffect(() => {
+        if (!clPoolDetails || !validClPoolAddresses.length || tokenInfoMap.size === 0) return;
+
+        const newPools: PoolData[] = [];
+
+        for (let i = 0; i < validClPoolAddresses.length; i++) {
+            const token0Result = clPoolDetails[i * 4];
+            const token1Result = clPoolDetails[i * 4 + 1];
+            const tickSpacingResult = clPoolDetails[i * 4 + 2];
+            const liquidityResult = clPoolDetails[i * 4 + 3];
+
+            if (
+                token0Result?.status !== 'success' ||
+                token1Result?.status !== 'success' ||
+                tickSpacingResult?.status !== 'success'
+            ) continue;
+
+            const token0Addr = (token0Result.result as Address).toLowerCase();
+            const token1Addr = (token1Result.result as Address).toLowerCase();
+            const token0Info = tokenInfoMap.get(token0Addr);
+            const token1Info = tokenInfoMap.get(token1Addr);
+
+            if (!token0Info || !token1Info) continue;
+
+            const tickSpacing = Number(tickSpacingResult.result);
+            const liquidity = liquidityResult?.status === 'success' ? BigInt(liquidityResult.result as bigint) : BigInt(0);
+
+            // Estimate TVL from liquidity (simplified)
+            const tvl = (Number(liquidity) / 1e18).toFixed(2);
+
+            newPools.push({
+                address: validClPoolAddresses[i],
+                token0: { address: token0Result.result as Address, ...token0Info },
+                token1: { address: token1Result.result as Address, ...token1Info },
+                poolType: 'CL',
+                tickSpacing,
+                reserve0: '0',
+                reserve1: '0',
+                tvl,
+            });
+        }
+
+        setClPools(newPools);
+    }, [clPoolDetails, validClPoolAddresses.length, tokenInfoMap.size]);
+
+    // Combine and filter pools
+    const allPools = [...v2Pools, ...clPools];
+
+    const filteredPools = allPools.filter((pool) => {
+        // Filter by pool type
+        if (poolType === 'v2' && pool.poolType !== 'V2') return false;
+        if (poolType === 'cl' && pool.poolType !== 'CL') return false;
+
+        // Filter by search
         if (search) {
             const searchLower = search.toLowerCase();
             return (
@@ -165,16 +304,13 @@ export default function PoolsPage() {
     // Sort pools
     const sortedPools = [...filteredPools].sort((a, b) => {
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
-        if (sortBy === 'apr') return (b.estimatedApr || 0) - (a.estimatedApr || 0);
         return 0;
     });
 
-    // APR badge helper
-    const getAprBadge = (apr?: number) => {
-        if (!apr) return { class: 'apr-badge-low', label: '--' };
-        if (apr >= 30) return { class: 'apr-badge-high', label: `${apr.toFixed(1)}%` };
-        if (apr >= 10) return { class: 'apr-badge-medium', label: `${apr.toFixed(1)}%` };
-        return { class: 'apr-badge-low', label: `${apr.toFixed(1)}%` };
+    // Get fee tier string for CL pools
+    const getFeeTier = (tickSpacing?: number) => {
+        if (!tickSpacing) return '';
+        return FEE_TIERS[tickSpacing] || `${tickSpacing}ts`;
     };
 
     // Format TVL nicely
@@ -182,8 +318,11 @@ export default function PoolsPage() {
         const num = parseFloat(tvl);
         if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
         if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-        return `$${num.toFixed(2)}`;
+        if (num > 0) return `$${num.toFixed(2)}`;
+        return '--';
     };
+
+    const totalPoolCount = (v2PoolCount ? Number(v2PoolCount) : 0) + (clPoolCount ? Number(clPoolCount) : 0);
 
     return (
         <div className="container mx-auto px-6">
@@ -197,8 +336,34 @@ export default function PoolsPage() {
                     <span className="gradient-text">Explore</span> Pools
                 </h1>
                 <p className="text-gray-400 max-w-xl mx-auto">
-                    Discover trading pools and find the best opportunities to earn. {poolCount ? `${Number(poolCount)} pools available for you to explore.` : ''}
+                    Discover trading pools and find the best opportunities to earn.
+                    {totalPoolCount > 0 && ` ${totalPoolCount} pools available.`}
                 </p>
+            </motion.div>
+
+            {/* Pool Type Stats */}
+            <motion.div
+                className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
+                <div className="stat-card text-center">
+                    <p className="text-sm text-gray-400 mb-1">Total Pools</p>
+                    <p className="text-2xl font-bold">{totalPoolCount || '--'}</p>
+                </div>
+                <div className="stat-card text-center">
+                    <p className="text-sm text-gray-400 mb-1">V2 (Classic)</p>
+                    <p className="text-2xl font-bold">{v2PoolCount ? Number(v2PoolCount) : '--'}</p>
+                </div>
+                <div className="stat-card text-center bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/20">
+                    <p className="text-sm text-gray-400 mb-1">V3 (Concentrated)</p>
+                    <p className="text-2xl font-bold text-cyan-400">{clPoolCount ? Number(clPoolCount) : '--'}</p>
+                </div>
+                <div className="stat-card text-center">
+                    <p className="text-sm text-gray-400 mb-1">Network</p>
+                    <p className="text-2xl font-bold">Sei</p>
+                </div>
             </motion.div>
 
             {/* Filters Row */}
@@ -206,21 +371,27 @@ export default function PoolsPage() {
                 className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
+                transition={{ delay: 0.15 }}
             >
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-4 items-center flex-wrap">
                     {/* Pool Type Toggle */}
                     <div className="glass p-1 rounded-xl inline-flex">
-                        {(['all', 'v2'] as PoolType[]).map((type) => (
+                        {[
+                            { key: 'all' as PoolType, label: 'All' },
+                            { key: 'v2' as PoolType, label: 'V2' },
+                            { key: 'cl' as PoolType, label: 'V3' },
+                        ].map((type) => (
                             <button
-                                key={type}
-                                onClick={() => setPoolType(type)}
-                                className={`px-4 py-2 rounded-lg font-medium transition text-sm ${poolType === type
-                                    ? 'bg-primary text-white'
+                                key={type.key}
+                                onClick={() => setPoolType(type.key)}
+                                className={`px-4 py-2 rounded-lg font-medium transition text-sm ${poolType === type.key
+                                    ? type.key === 'cl'
+                                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
+                                        : 'bg-primary text-white'
                                     : 'text-gray-400 hover:text-white'
                                     }`}
                             >
-                                {type === 'all' ? 'All Pools' : 'V2 Pools'}
+                                {type.label}
                             </button>
                         ))}
                     </div>
@@ -232,7 +403,6 @@ export default function PoolsPage() {
                         className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary cursor-pointer"
                     >
                         <option value="tvl">Sort by TVL</option>
-                        <option value="apr">Sort by APR</option>
                     </select>
                 </div>
 
@@ -260,21 +430,16 @@ export default function PoolsPage() {
             >
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
-                    <div className="col-span-4">Pool</div>
-                    <div className="col-span-2 text-center">
-                        <Tooltip content="Annual Percentage Rate - your estimated yearly earnings">
-                            APR
-                        </Tooltip>
-                    </div>
+                    <div className="col-span-5">Pool</div>
+                    <div className="col-span-2 text-center">Type</div>
                     <div className="col-span-2 text-right">TVL</div>
-                    <div className="col-span-2 text-right">My Deposit</div>
-                    <div className="col-span-2 text-center">Action</div>
+                    <div className="col-span-3 text-center">Action</div>
                 </div>
 
                 {/* Table Body */}
                 {sortedPools.length === 0 ? (
                     <div className="p-12">
-                        {pools.length === 0 ? (
+                        {allPools.length === 0 ? (
                             <div className="text-center">
                                 <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                                 <p className="text-gray-400">Loading pools...</p>
@@ -288,111 +453,80 @@ export default function PoolsPage() {
                         )}
                     </div>
                 ) : (
-                    sortedPools.map((pool, index) => {
-                        const aprBadge = getAprBadge(pool.estimatedApr);
-                        return (
-                            <motion.div
-                                key={pool.address}
-                                className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 hover:bg-white/5 transition items-center"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 + index * 0.03 }}
-                            >
-                                {/* Pool */}
-                                <div className="col-span-4 flex items-center gap-3">
-                                    <div className="relative">
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-sm font-bold">
-                                            {pool.token0.symbol[0]}
-                                        </div>
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-secondary to-accent flex items-center justify-center text-sm font-bold absolute left-6 top-0 border-2 border-[var(--bg-primary)]">
-                                            {pool.token1.symbol[0]}
-                                        </div>
+                    sortedPools.map((pool, index) => (
+                        <motion.div
+                            key={pool.address}
+                            className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 hover:bg-white/5 transition items-center"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 + index * 0.02 }}
+                        >
+                            {/* Pool */}
+                            <div className="col-span-5 flex items-center gap-3">
+                                <div className="relative">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
+                                        ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                                        : 'bg-gradient-to-br from-primary to-secondary'
+                                        }`}>
+                                        {pool.token0.symbol[0]}
                                     </div>
-                                    <div className="ml-4">
-                                        <div className="font-semibold text-lg">
-                                            {pool.token0.symbol}/{pool.token1.symbol}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full ${pool.stable ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                                                {pool.stable ? '🔷 Stable' : '🔶 Volatile'}
-                                            </span>
-                                            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-                                                V2
-                                            </span>
-                                        </div>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold absolute left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                        ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                        : 'bg-gradient-to-br from-secondary to-accent'
+                                        }`}>
+                                        {pool.token1.symbol[0]}
                                     </div>
                                 </div>
-
-                                {/* APR */}
-                                <div className="col-span-2 text-center">
-                                    <span className={`apr-badge ${aprBadge.class}`}>
-                                        {aprBadge.label}
-                                    </span>
+                                <div className="ml-4">
+                                    <div className="font-semibold text-lg">
+                                        {pool.token0.symbol}/{pool.token1.symbol}
+                                    </div>
+                                    {pool.poolType === 'CL' && pool.tickSpacing && (
+                                        <div className="text-xs text-cyan-400">
+                                            {getFeeTier(pool.tickSpacing)} fee
+                                        </div>
+                                    )}
+                                    {pool.poolType === 'V2' && (
+                                        <div className="text-xs text-gray-500">
+                                            {pool.stable ? 'Stable' : 'Volatile'}
+                                        </div>
+                                    )}
                                 </div>
+                            </div>
 
-                                {/* TVL */}
-                                <div className="col-span-2 text-right">
-                                    <div className="font-semibold">{formatTVL(pool.tvl)}</div>
-                                    <div className="text-xs text-gray-500">Total Value</div>
-                                </div>
+                            {/* Type */}
+                            <div className="col-span-2 text-center">
+                                <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${pool.poolType === 'CL'
+                                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30'
+                                    : 'bg-primary/20 text-primary border border-primary/30'
+                                    }`}>
+                                    {pool.poolType === 'CL' ? '⚡ V3' : '💧 V2'}
+                                </span>
+                            </div>
 
-                                {/* My Deposit */}
-                                <div className="col-span-2 text-right text-gray-400">
-                                    <span className="text-sm">--</span>
-                                </div>
+                            {/* TVL */}
+                            <div className="col-span-2 text-right">
+                                <div className="font-semibold">{formatTVL(pool.tvl)}</div>
+                            </div>
 
-                                {/* Action */}
-                                <div className="col-span-2 text-center">
-                                    <Link href="/liquidity">
-                                        <motion.button
-                                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 text-primary font-medium hover:from-primary/30 hover:to-secondary/30 transition-all text-sm"
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
-                                        >
-                                            Add Liquidity
-                                        </motion.button>
-                                    </Link>
-                                </div>
-                            </motion.div>
-                        );
-                    })
+                            {/* Action */}
+                            <div className="col-span-3 text-center">
+                                <Link href="/liquidity">
+                                    <motion.button
+                                        className={`px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
+                                            ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
+                                            : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
+                                            }`}
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        Add Liquidity
+                                    </motion.button>
+                                </Link>
+                            </div>
+                        </motion.div>
+                    ))
                 )}
-            </motion.div>
-
-            {/* Stats Summary */}
-            <motion.div
-                className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-            >
-                <div className="stat-card">
-                    <div className="flex items-center gap-3">
-                        <div className="icon-container icon-container-sm">📊</div>
-                        <div>
-                            <p className="text-sm text-gray-400 mb-0.5">Total Pools</p>
-                            <p className="text-2xl font-bold">{poolCount ? Number(poolCount).toLocaleString() : '--'}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="flex items-center gap-3">
-                        <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #10b981, #34d399)' }}>✓</div>
-                        <div>
-                            <p className="text-sm text-gray-400 mb-0.5">Showing</p>
-                            <p className="text-2xl font-bold">{sortedPools.length} pools</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="flex items-center gap-3">
-                        <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #8b5cf6, #6366f1)' }}>⛓️</div>
-                        <div>
-                            <p className="text-sm text-gray-400 mb-0.5">Network</p>
-                            <p className="text-2xl font-bold">Sei Mainnet</p>
-                        </div>
-                    </div>
-                </div>
             </motion.div>
         </div>
     );
