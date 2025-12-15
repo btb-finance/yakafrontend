@@ -195,7 +195,7 @@ export default function PortfolioPage() {
             const positions: StakedPosition[] = [];
 
             try {
-                // Get all CL pools
+                // Step 1: Get all CL pools from CLFactory
                 const poolCountResult = await fetch('https://evm-rpc.sei-apis.com', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -204,14 +204,17 @@ export default function PortfolioPage() {
                         method: 'eth_call',
                         params: [{
                             to: CL_CONTRACTS.CLFactory,
-                            data: '0xefde4e64'
+                            data: '0xefde4e64' // allPoolsLength()
                         }, 'latest']
                     })
                 }).then(r => r.json());
 
                 const poolCount = poolCountResult.result ? parseInt(poolCountResult.result, 16) : 0;
+                console.log('[Portfolio] Total CL pools:', poolCount);
 
-                for (let i = 0; i < Math.min(poolCount, 20); i++) {
+                // Step 2: Get all pool addresses
+                const clPools: string[] = [];
+                for (let i = 0; i < Math.min(poolCount, 50); i++) {
                     const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -220,15 +223,23 @@ export default function PortfolioPage() {
                             method: 'eth_call',
                             params: [{
                                 to: CL_CONTRACTS.CLFactory,
-                                data: `0x41d1de97${i.toString(16).padStart(64, '0')}`
+                                data: `0x41d1de97${i.toString(16).padStart(64, '0')}` // allPools(uint256)
                             }, 'latest']
                         })
                     }).then(r => r.json());
 
-                    if (!poolResult.result) continue;
-                    const poolAddr = '0x' + poolResult.result.slice(26);
+                    if (poolResult.result) {
+                        const poolAddr = '0x' + poolResult.result.slice(26);
+                        if (poolAddr !== '0x0000000000000000000000000000000000000000') {
+                            clPools.push(poolAddr);
+                        }
+                    }
+                }
+                console.log('[Portfolio] CL pools found:', clPools);
 
-                    // Get gauge
+                // Step 3: Check each pool for a gauge and staked positions
+                for (const poolAddress of clPools) {
+                    // Get gauge address for pool from Voter
                     const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -237,15 +248,19 @@ export default function PortfolioPage() {
                             method: 'eth_call',
                             params: [{
                                 to: V2_CONTRACTS.Voter,
-                                data: `0xb9a09fd5${poolAddr.slice(2).toLowerCase().padStart(64, '0')}`
+                                data: `0xb9a09fd5${poolAddress.slice(2).toLowerCase().padStart(64, '0')}` // gauges(address)
                             }, 'latest']
                         })
                     }).then(r => r.json());
 
                     const gaugeAddr = '0x' + gaugeResult.result?.slice(26);
-                    if (gaugeAddr === '0x0000000000000000000000000000000000000000') continue;
+                    if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') {
+                        continue;
+                    }
 
-                    // Get staked values for user
+                    console.log('[Portfolio] Found gauge for pool:', poolAddress, '->', gaugeAddr);
+
+                    // Get staked token IDs for this user
                     const stakedResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -254,15 +269,21 @@ export default function PortfolioPage() {
                             method: 'eth_call',
                             params: [{
                                 to: gaugeAddr,
-                                data: `0x17e710a8${address.slice(2).toLowerCase().padStart(64, '0')}`
+                                data: `0x17e710a8${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
                             }, 'latest']
                         })
                     }).then(r => r.json());
 
-                    if (!stakedResult.result || stakedResult.result.length < 130) continue;
+                    if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) {
+                        continue;
+                    }
 
+                    // Parse the array of token IDs
                     const data = stakedResult.result.slice(2);
+                    const offset = parseInt(data.slice(0, 64), 16);
                     const length = parseInt(data.slice(64, 128), 16);
+
+                    console.log('[Portfolio] User has', length, 'staked positions in gauge', gaugeAddr);
 
                     for (let j = 0; j < length; j++) {
                         const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
@@ -316,10 +337,11 @@ export default function PortfolioPage() {
 
                         if (positionResult.result && positionResult.result.length > 130) {
                             const posData = positionResult.result.slice(2);
-                            token0 = '0x' + posData.slice(128, 192).slice(-40);
-                            token1 = '0x' + posData.slice(192, 256).slice(-40);
-                            tickSpacing = parseInt(posData.slice(256, 320), 16);
-                            liquidity = BigInt('0x' + posData.slice(448, 512));
+                            // Match stake page offsets: slot layout for positions()
+                            token0 = '0x' + posData.slice(64 + 24, 128); // slot 1, last 40 chars
+                            token1 = '0x' + posData.slice(128 + 24, 192); // slot 2, last 40 chars
+                            tickSpacing = parseInt(posData.slice(192, 256), 16);
+                            liquidity = BigInt('0x' + posData.slice(320, 384));
 
                             // Get token symbols
                             const t0Info = getTokenInfo(token0);
@@ -333,7 +355,7 @@ export default function PortfolioPage() {
                         positions.push({
                             tokenId,
                             gaugeAddress: gaugeAddr,
-                            poolAddress: poolAddr,
+                            poolAddress: poolAddress,
                             token0,
                             token1,
                             token0Symbol,
