@@ -1020,105 +1020,175 @@ function LiquidityPageContent() {
                                     </div>
 
                                     {/* Preset Range Buttons */}
-                                    <div className="flex gap-2 mb-4">
-                                        <button
-                                            onClick={() => { setPriceLower(''); setPriceUpper(''); }}
-                                            className={`flex-1 py-2 text-xs rounded-lg transition ${!priceLower && !priceUpper ? 'bg-primary text-white' : 'bg-white/5 hover:bg-white/10 text-gray-400'}`}
-                                        >
-                                            Full Range
-                                        </button>
-                                        <button
-                                            onClick={() => setPresetRange(5)}
-                                            disabled={!currentPrice}
-                                            className={`flex-1 py-2 text-xs rounded-lg transition ${currentPrice ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
-                                        >
-                                            ±5%
-                                        </button>
-                                        <button
-                                            onClick={() => setPresetRange(10)}
-                                            disabled={!currentPrice}
-                                            className={`flex-1 py-2 text-xs rounded-lg transition ${currentPrice ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
-                                        >
-                                            ±10%
-                                        </button>
-                                        <button
-                                            onClick={() => setPresetRange(25)}
-                                            disabled={!currentPrice}
-                                            className={`flex-1 py-2 text-xs rounded-lg transition ${currentPrice ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-white/5 text-gray-600 cursor-not-allowed'}`}
-                                        >
-                                            ±25%
-                                        </button>
+                                    <div className="mb-6">
+                                        <div className="text-xs text-gray-400 mb-2">Quick Range Presets</div>
+                                        <div className="grid grid-cols-5 gap-2">
+                                            <button
+                                                onClick={() => { setPriceLower(''); setPriceUpper(''); }}
+                                                className={`py-3 text-sm rounded-xl transition font-medium ${!priceLower && !priceUpper
+                                                    ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
+                                                    : 'bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10'}`}
+                                            >
+                                                Full
+                                            </button>
+                                            <button
+                                                onClick={() => setPresetRange(5)}
+                                                disabled={!currentPrice}
+                                                className={`py-3 text-sm rounded-xl transition font-medium ${currentPrice
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                            >
+                                                ±5%
+                                            </button>
+                                            <button
+                                                onClick={() => setPresetRange(10)}
+                                                disabled={!currentPrice}
+                                                className={`py-3 text-sm rounded-xl transition font-medium ${currentPrice
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                            >
+                                                ±10%
+                                            </button>
+                                            <button
+                                                onClick={() => setPresetRange(25)}
+                                                disabled={!currentPrice}
+                                                className={`py-3 text-sm rounded-xl transition font-medium ${currentPrice
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                            >
+                                                ±25%
+                                            </button>
+                                            <button
+                                                onClick={() => setPresetRange(50)}
+                                                disabled={!currentPrice}
+                                                className={`py-3 text-sm rounded-xl transition font-medium ${currentPrice
+                                                    ? 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'
+                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                            >
+                                                ±50%
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    {/* Min/Max Price Inputs */}
+                                    {/* Min/Max Price Inputs - Improved */}
                                     <div className="grid grid-cols-2 gap-4">
                                         {/* Min Price */}
-                                        <div className="p-4 rounded-xl bg-white/5 border border-glass-border">
-                                            <div className="text-xs text-gray-500 mb-2">Min Price</div>
-                                            <div className="flex items-center gap-2">
+                                        <div className="p-4 rounded-xl bg-gradient-to-br from-red-500/5 to-orange-500/5 border border-red-500/20">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className="text-xs text-red-400 font-medium uppercase tracking-wide">Min Price</span>
+                                                <span className="text-xs text-gray-500">{tokenB?.symbol}/{tokenA?.symbol}</span>
+                                            </div>
+
+                                            {/* Main Input */}
+                                            <input
+                                                type="number"
+                                                value={priceLower}
+                                                onChange={(e) => setPriceLower(e.target.value)}
+                                                placeholder="0"
+                                                className="w-full bg-transparent text-2xl font-bold text-center outline-none placeholder-gray-600 mb-3"
+                                            />
+
+                                            {/* Step Buttons */}
+                                            <div className="grid grid-cols-3 gap-1">
                                                 <button
-                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || '1') * 0.95).toFixed(4))}
-                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || String(currentPrice || 1)) * 0.99).toFixed(6))}
+                                                    className="py-2 text-xs rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition font-medium"
                                                 >
-                                                    −
+                                                    -1%
                                                 </button>
-                                                <input
-                                                    type="text"
-                                                    value={priceLower}
-                                                    onChange={(e) => setPriceLower(e.target.value)}
-                                                    placeholder="0"
-                                                    className="flex-1 bg-transparent text-xl font-medium text-center outline-none placeholder-gray-600"
-                                                />
                                                 <button
-                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || '1') * 1.05).toFixed(4))}
-                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || String(currentPrice || 1)) * 0.95).toFixed(6))}
+                                                    className="py-2 text-xs rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition font-medium"
                                                 >
-                                                    +
+                                                    -5%
+                                                </button>
+                                                <button
+                                                    onClick={() => setPriceLower(prev => (parseFloat(prev || String(currentPrice || 1)) * 0.90).toFixed(6))}
+                                                    className="py-2 text-xs rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition font-medium"
+                                                >
+                                                    -10%
                                                 </button>
                                             </div>
-                                            <div className="text-xs text-gray-500 mt-2 text-center">
-                                                {tokenA && tokenB ? `${tokenB.symbol} per ${tokenA.symbol}` : ''}
-                                            </div>
+
+                                            {/* Set to Current Button */}
+                                            {currentPrice && (
+                                                <button
+                                                    onClick={() => setPriceLower(currentPrice.toFixed(6))}
+                                                    className="w-full mt-2 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition"
+                                                >
+                                                    Set to Current ({currentPrice.toFixed(4)})
+                                                </button>
+                                            )}
                                         </div>
 
                                         {/* Max Price */}
-                                        <div className="p-4 rounded-xl bg-white/5 border border-glass-border">
-                                            <div className="text-xs text-gray-500 mb-2">Max Price</div>
-                                            <div className="flex items-center gap-2">
+                                        <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/5 to-emerald-500/5 border border-green-500/20">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className="text-xs text-green-400 font-medium uppercase tracking-wide">Max Price</span>
+                                                <span className="text-xs text-gray-500">{tokenB?.symbol}/{tokenA?.symbol}</span>
+                                            </div>
+
+                                            {/* Main Input */}
+                                            <input
+                                                type="number"
+                                                value={priceUpper}
+                                                onChange={(e) => setPriceUpper(e.target.value)}
+                                                placeholder="∞"
+                                                className="w-full bg-transparent text-2xl font-bold text-center outline-none placeholder-gray-600 mb-3"
+                                            />
+
+                                            {/* Step Buttons */}
+                                            <div className="grid grid-cols-3 gap-1">
                                                 <button
-                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || '1') * 0.95).toFixed(4))}
-                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || String(currentPrice || 1)) * 1.01).toFixed(6))}
+                                                    className="py-2 text-xs rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 transition font-medium"
                                                 >
-                                                    −
+                                                    +1%
                                                 </button>
-                                                <input
-                                                    type="text"
-                                                    value={priceUpper}
-                                                    onChange={(e) => setPriceUpper(e.target.value)}
-                                                    placeholder="∞"
-                                                    className="flex-1 bg-transparent text-xl font-medium text-center outline-none placeholder-gray-600"
-                                                />
                                                 <button
-                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || '1') * 1.05).toFixed(4))}
-                                                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg"
+                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || String(currentPrice || 1)) * 1.05).toFixed(6))}
+                                                    className="py-2 text-xs rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 transition font-medium"
                                                 >
-                                                    +
+                                                    +5%
+                                                </button>
+                                                <button
+                                                    onClick={() => setPriceUpper(prev => (parseFloat(prev || String(currentPrice || 1)) * 1.10).toFixed(6))}
+                                                    className="py-2 text-xs rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 transition font-medium"
+                                                >
+                                                    +10%
                                                 </button>
                                             </div>
-                                            <div className="text-xs text-gray-500 mt-2 text-center">
-                                                {tokenA && tokenB ? `${tokenB.symbol} per ${tokenA.symbol}` : ''}
-                                            </div>
+
+                                            {/* Set to Current Button */}
+                                            {currentPrice && (
+                                                <button
+                                                    onClick={() => setPriceUpper(currentPrice.toFixed(6))}
+                                                    className="w-full mt-2 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 transition"
+                                                >
+                                                    Set to Current ({currentPrice.toFixed(4)})
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Range Info */}
-                                    {priceLower && priceUpper && (
-                                        <div className="mt-3 p-3 rounded-lg bg-white/5 text-center">
-                                            <span className="text-xs text-gray-400">
-                                                Your position will earn fees when price is between{' '}
-                                                <span className="text-white font-medium">{priceLower}</span> and{' '}
-                                                <span className="text-white font-medium">{priceUpper}</span>
-                                            </span>
+                                    {/* Range Summary */}
+                                    {(priceLower || priceUpper) && (
+                                        <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span className="text-gray-400">Your Position Range:</span>
+                                                <span className="font-medium">
+                                                    <span className="text-red-400">{priceLower || '0'}</span>
+                                                    <span className="text-gray-500 mx-2">→</span>
+                                                    <span className="text-green-400">{priceUpper || '∞'}</span>
+                                                </span>
+                                            </div>
+                                            {currentPrice && priceLower && priceUpper && (
+                                                <div className="mt-2 text-xs text-gray-500 text-center">
+                                                    {parseFloat(priceLower) <= currentPrice && parseFloat(priceUpper) >= currentPrice
+                                                        ? '✅ Current price is within range - position will be active'
+                                                        : '⚠️ Current price is outside range - position will not earn fees'}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
