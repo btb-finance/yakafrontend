@@ -129,6 +129,65 @@ const CL_FACTORY_ABI = [
     },
 ] as const;
 
+const MINTER_ABI = [
+    {
+        inputs: [],
+        name: 'weekly',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'activePeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'epochCount',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'tailEmissionRate',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'teamRate',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'initialized',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'team',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'updatePeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+] as const;
+
 type AdminTab = 'tokens' | 'gauges' | 'factories' | 'config';
 
 export default function AdminPage() {
@@ -197,6 +256,90 @@ export default function AdminPage() {
             enabled: tokenAddress.length === 42 && tokenAddress.startsWith('0x'),
         },
     });
+
+    // Minter data for weekly epoch info
+    const { data: weeklyEmissions } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'weekly',
+    });
+
+    const { data: activePeriod } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'activePeriod',
+    });
+
+    const { data: epochCount } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'epochCount',
+    });
+
+    const { data: tailEmissionRate } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'tailEmissionRate',
+    });
+
+    const { data: teamRate } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'teamRate',
+    });
+
+    const { data: minterInitialized } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'initialized',
+    });
+
+    const { data: minterTeam } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'team',
+    });
+
+    // Helper to format epoch times
+    const formatEpochTime = (timestamp: bigint | undefined) => {
+        if (!timestamp) return 'Loading...';
+        const date = new Date(Number(timestamp) * 1000);
+        return date.toLocaleString();
+    };
+
+    const getNextEpochTime = (activePeriod: bigint | undefined) => {
+        if (!activePeriod) return 'Loading...';
+        const nextEpoch = Number(activePeriod) + (7 * 24 * 60 * 60); // +1 week
+        const date = new Date(nextEpoch * 1000);
+        return date.toLocaleString();
+    };
+
+    const getTimeUntilNextEpoch = (activePeriod: bigint | undefined) => {
+        if (!activePeriod) return 'Loading...';
+        const nextEpoch = Number(activePeriod) + (7 * 24 * 60 * 60);
+        const now = Math.floor(Date.now() / 1000);
+        const diff = nextEpoch - now;
+        if (diff <= 0) return 'Epoch ended - ready for update!';
+        const days = Math.floor(diff / 86400);
+        const hours = Math.floor((diff % 86400) / 3600);
+        const minutes = Math.floor((diff % 3600) / 60);
+        return `${days}d ${hours}h ${minutes}m`;
+    };
+
+    // Handle updatePeriod call
+    const handleUpdatePeriod = async () => {
+        setError(null);
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.Minter as Address,
+                abi: MINTER_ABI,
+                functionName: 'updatePeriod',
+            });
+            setTxHash(hash);
+        } catch (err: any) {
+            setError(err.message || 'Transaction failed');
+        }
+    };
 
     // Handlers
     const handleWhitelistToken = async () => {
@@ -818,6 +961,93 @@ export default function AdminPage() {
                     {/* Config Tab */}
                     {activeTab === 'config' && (
                         <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                            {/* Epoch/Emissions Info */}
+                            <div className="glass-card p-6">
+                                <h3 className="text-lg font-semibold mb-4">📅 Weekly Epoch Info</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                    <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20">
+                                        <div className="text-xs text-gray-400 mb-1">Current Epoch</div>
+                                        <div className="text-2xl font-bold gradient-text">
+                                            {epochCount !== undefined ? epochCount.toString() : 'Loading...'}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                                        <div className="text-xs text-gray-400 mb-1">Weekly Emissions</div>
+                                        <div className="text-xl font-bold text-green-400">
+                                            {weeklyEmissions !== undefined
+                                                ? `${(Number(weeklyEmissions) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })} YAKA`
+                                                : 'Loading...'}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
+                                        <div className="text-xs text-gray-400 mb-1">Time Until Next Epoch</div>
+                                        <div className="text-xl font-bold text-blue-400">
+                                            {getTimeUntilNextEpoch(activePeriod)}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20">
+                                        <div className="text-xs text-gray-400 mb-1">Minter Status</div>
+                                        <div className={`text-xl font-bold ${minterInitialized ? 'text-green-400' : 'text-yellow-400'}`}>
+                                            {minterInitialized !== undefined
+                                                ? (minterInitialized ? '✓ Initialized' : '⚠ Not Initialized')
+                                                : 'Loading...'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Epoch Times */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Epoch Start (activePeriod)</div>
+                                        <div className="font-medium">{formatEpochTime(activePeriod)}</div>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Epoch End / Next Epoch</div>
+                                        <div className="font-medium">{getNextEpochTime(activePeriod)}</div>
+                                    </div>
+                                </div>
+
+                                {/* Rates */}
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Team Rate</div>
+                                        <div className="font-medium text-primary">
+                                            {teamRate !== undefined ? `${(Number(teamRate) / 100).toFixed(2)}%` : 'Loading...'}
+                                        </div>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Tail Emission Rate</div>
+                                        <div className="font-medium text-secondary">
+                                            {tailEmissionRate !== undefined ? `${(Number(tailEmissionRate) / 100).toFixed(2)}%` : 'Loading...'}
+                                        </div>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Minter Team</div>
+                                        <div className="font-mono text-xs truncate">
+                                            {minterTeam ? `${minterTeam.slice(0, 10)}...${minterTeam.slice(-6)}` : 'Loading...'}
+                                        </div>
+                                        {address?.toLowerCase() === minterTeam?.toLowerCase() && (
+                                            <span className="text-xs text-green-400">✓ You are team</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Update Period Button */}
+                                <div className="border-t border-white/10 pt-4">
+                                    <p className="text-sm text-gray-400 mb-3">
+                                        Call <code className="bg-white/10 px-1 rounded">updatePeriod()</code> to mint emissions for the new week.
+                                        Anyone can call this once the epoch ends.
+                                    </p>
+                                    <button
+                                        onClick={handleUpdatePeriod}
+                                        className="w-full py-3 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-medium hover:opacity-90 transition"
+                                    >
+                                        🔄 Update Period (Mint Emissions)
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Contract Addresses */}
                             <div className="glass-card p-6">
                                 <h3 className="text-lg font-semibold mb-4">Contract Addresses</h3>
                                 <div className="space-y-3 text-sm">
