@@ -89,13 +89,9 @@ const TOKEN_SYMBOLS: Record<string, string> = {
     '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': 'USDC',
     '0x3894085ef7ff0f0aedf52e2a2704928d1ec074f1': 'USDC',
     '0x5f0e07dfee5832faa00c63f2d33a0d79150e8598': 'YAKA',
+    '0xd7b207b7c2c8fc32f7ab448d73cfb6be212f0dcf': 'YAKA',
+    '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': 'USDT',
 };
-
-// Known pools with gauges
-const KNOWN_POOLS = [
-    '0x98daf006cb4c338d9c527ec54e0cee3308ccff47', // USDC/WSEI 0.05%
-    '0x6957f330590654856BBaE2762b0c2F0E7A124eD8', // USDC/WSEI 0.30%
-];
 
 export default function StakePage() {
     const { isConnected, address } = useAccount();
@@ -118,9 +114,53 @@ export default function StakePage() {
             const positions: StakedPosition[] = [];
 
             try {
-                // Check each known pool for a gauge
-                for (const poolAddress of KNOWN_POOLS) {
-                    // Get gauge address for pool
+                // Step 1: Get all CL pools from CLFactory
+                const poolCountResult = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: CL_CONTRACTS.CLFactory,
+                            data: '0xefde4e64' // allPoolsLength()
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                const poolCount = poolCountResult.result ? parseInt(poolCountResult.result, 16) : 0;
+                console.log('Total CL pools:', poolCount);
+
+                // Step 2: Get all pool addresses
+                const clPools: string[] = [];
+                for (let i = 0; i < Math.min(poolCount, 50); i++) { // Check up to 50 pools
+                    const poolResult = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: 1,
+                            method: 'eth_call',
+                            params: [{
+                                to: CL_CONTRACTS.CLFactory,
+                                data: `0x1e3dd18b${i.toString(16).padStart(64, '0')}` // allPools(uint256)
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    if (poolResult.result) {
+                        const poolAddr = '0x' + poolResult.result.slice(26);
+                        if (poolAddr !== '0x0000000000000000000000000000000000000000') {
+                            clPools.push(poolAddr);
+                        }
+                    }
+                }
+                console.log('CL pools found:', clPools);
+
+                // Step 3: Check each pool for a gauge and staked positions
+                for (const poolAddress of clPools) {
+                    // Get gauge address for pool from Voter
                     const gaugeResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -130,13 +170,17 @@ export default function StakePage() {
                             method: 'eth_call',
                             params: [{
                                 to: V2_CONTRACTS.Voter,
-                                data: `0xb9a09fd5${poolAddress.slice(2).toLowerCase().padStart(64, '0')}`
+                                data: `0xb9a09fd5${poolAddress.slice(2).toLowerCase().padStart(64, '0')}` // gauges(address)
                             }, 'latest']
                         })
                     }).then(r => r.json());
 
                     const gaugeAddress = '0x' + gaugeResult.result?.slice(26);
-                    if (!gaugeAddress || gaugeAddress === '0x0000000000000000000000000000000000000000') continue;
+                    if (!gaugeAddress || gaugeAddress === '0x0000000000000000000000000000000000000000') {
+                        continue;
+                    }
+
+                    console.log('Found gauge for pool:', poolAddress, '->', gaugeAddress);
 
                     // Get staked token IDs for this user
                     const stakedResult = await fetch('https://evm-rpc.sei-apis.com', {
@@ -153,12 +197,16 @@ export default function StakePage() {
                         })
                     }).then(r => r.json());
 
-                    if (!stakedResult.result || stakedResult.result === '0x') continue;
+                    if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) {
+                        continue;
+                    }
 
                     // Parse the array of token IDs
                     const data = stakedResult.result.slice(2);
                     const offset = parseInt(data.slice(0, 64), 16);
                     const length = parseInt(data.slice(64, 128), 16);
+
+                    console.log('User has', length, 'staked positions in gauge', gaugeAddress);
 
                     for (let i = 0; i < length; i++) {
                         const tokenIdHex = data.slice(128 + i * 64, 128 + (i + 1) * 64);
@@ -241,6 +289,7 @@ export default function StakePage() {
                 console.error('Error fetching staked positions:', err);
             }
 
+            console.log('Total staked positions found:', positions.length);
             setStakedPositions(positions);
             setLoading(false);
         };
