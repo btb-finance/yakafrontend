@@ -1409,26 +1409,44 @@ function LiquidityPageContent() {
                                     <h3 className="text-lg font-semibold mb-4 mt-6">Concentrated Positions</h3>
                                     <div className="space-y-3">
                                         {clPositions.map((pos, i) => {
-                                            // Get token symbols
-                                            const getSymbol = (addr: string) => {
+                                            // Get token symbols and decimals
+                                            const getTokenInfo = (addr: string) => {
                                                 const tokens = DEFAULT_TOKEN_LIST;
                                                 const token = tokens.find(t => t.address.toLowerCase() === addr.toLowerCase());
-                                                return token?.symbol || addr.slice(0, 6);
+                                                return { symbol: token?.symbol || addr.slice(0, 6), decimals: token?.decimals || 18 };
                                             };
-                                            const symbol0 = getSymbol(pos.token0);
-                                            const symbol1 = getSymbol(pos.token1);
+                                            const token0Info = getTokenInfo(pos.token0);
+                                            const token1Info = getTokenInfo(pos.token1);
+                                            const symbol0 = token0Info.symbol;
+                                            const symbol1 = token1Info.symbol;
 
-                                            // Convert ticks to prices
-                                            const tickToPrice = (tick: number) => Math.pow(1.0001, tick);
+                                            // Convert ticks to prices with decimal adjustment
+                                            // In Uniswap V3, price = 1.0001^tick represents token1/token0 in smallest units
+                                            // To get human-readable price, we need to adjust for decimals
+                                            const decimalAdjustment = Math.pow(10, token0Info.decimals - token1Info.decimals);
+                                            const tickToPrice = (tick: number) => {
+                                                const rawPrice = Math.pow(1.0001, tick);
+                                                return rawPrice * decimalAdjustment;
+                                            };
+
                                             const priceLower = tickToPrice(pos.tickLower);
                                             const priceUpper = tickToPrice(pos.tickUpper);
 
                                             // Check if in range (simplified - would need current tick from pool)
-                                            const isFullRange = pos.tickLower === -887200 || pos.tickUpper === 887200;
+                                            const isFullRange = pos.tickLower <= -887200 || pos.tickUpper >= 887200;
 
                                             // Fee tier from tickSpacing
                                             const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
                                             const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
+
+                                            // Format price for display
+                                            const formatPrice = (price: number) => {
+                                                if (price < 0.0001) return price.toExponential(2);
+                                                if (price < 1) return price.toFixed(6);
+                                                if (price < 1000) return price.toFixed(4);
+                                                if (price < 1000000) return price.toFixed(2);
+                                                return price.toExponential(2);
+                                            };
 
                                             return (
                                                 <div key={i} className="glass-card p-4">
@@ -1474,14 +1492,14 @@ function LiquidityPageContent() {
                                                             <div className="text-center">
                                                                 <div className="text-xs text-gray-500">Min</div>
                                                                 <div className="font-semibold text-sm">
-                                                                    {isFullRange ? '0' : priceLower.toFixed(6)}
+                                                                    {isFullRange ? '0' : formatPrice(priceLower)}
                                                                 </div>
                                                             </div>
                                                             <div className="text-gray-600">↔</div>
                                                             <div className="text-center">
                                                                 <div className="text-xs text-gray-500">Max</div>
                                                                 <div className="font-semibold text-sm">
-                                                                    {isFullRange ? '∞' : priceUpper.toFixed(6)}
+                                                                    {isFullRange ? '∞' : formatPrice(priceUpper)}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1492,9 +1510,9 @@ function LiquidityPageContent() {
                                                         <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
                                                             <div className="text-xs text-green-400 mb-1">Uncollected Fees</div>
                                                             <div className="text-sm">
-                                                                {pos.tokensOwed0 > BigInt(0) && <span>{formatUnits(pos.tokensOwed0, 18)} {symbol0}</span>}
+                                                                {pos.tokensOwed0 > BigInt(0) && <span>{parseFloat(formatUnits(pos.tokensOwed0, token0Info.decimals)).toFixed(6)} {symbol0}</span>}
                                                                 {pos.tokensOwed0 > BigInt(0) && pos.tokensOwed1 > BigInt(0) && ' + '}
-                                                                {pos.tokensOwed1 > BigInt(0) && <span>{formatUnits(pos.tokensOwed1, 18)} {symbol1}</span>}
+                                                                {pos.tokensOwed1 > BigInt(0) && <span>{parseFloat(formatUnits(pos.tokensOwed1, token1Info.decimals)).toFixed(6)} {symbol1}</span>}
                                                             </div>
                                                         </div>
                                                     )}
