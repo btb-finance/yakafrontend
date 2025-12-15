@@ -511,7 +511,7 @@ export default function PoolsPage() {
 
                             {/* Action */}
                             <div className="col-span-3 text-center">
-                                <Link href="/liquidity">
+                                <Link href={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}&type=${pool.poolType.toLowerCase()}${pool.poolType === 'CL' && pool.tickSpacing ? `&tickSpacing=${pool.tickSpacing}` : ''}${pool.poolType === 'V2' ? `&stable=${pool.stable}` : ''}`}>
                                     <motion.button
                                         className={`px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
                                             ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'

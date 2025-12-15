@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { parseUnits, Address, maxUint256, formatUnits } from 'viem';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS, COMMON } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
@@ -55,7 +56,16 @@ const CL_GAUGE_ABI = [
 type Tab = 'add' | 'positions';
 type PoolType = 'v2' | 'cl';
 
+// Wrapper component for Suspense boundary (required for useSearchParams)
 export default function LiquidityPage() {
+    return (
+        <Suspense fallback={<div className="container mx-auto px-6 text-center py-20"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" /></div>}>
+            <LiquidityPageContent />
+        </Suspense>
+    );
+}
+
+function LiquidityPageContent() {
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<Tab>('add');
     const [poolType, setPoolType] = useState<PoolType>('v2');
@@ -86,6 +96,50 @@ export default function LiquidityPage() {
     const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
 
     const { writeContractAsync } = useWriteContract();
+
+    // URL params for deep linking from pools page
+    const searchParams = useSearchParams();
+
+    // Read URL params and pre-fill form on mount
+    useEffect(() => {
+        const token0Addr = searchParams.get('token0');
+        const token1Addr = searchParams.get('token1');
+        const type = searchParams.get('type');
+        const tickSpacingParam = searchParams.get('tickSpacing');
+        const stableParam = searchParams.get('stable');
+
+        if (token0Addr && token1Addr) {
+            // Find tokens by address - check DEFAULT_TOKEN_LIST first, then WSEI for native
+            const findToken = (addr: string): Token | undefined => {
+                const lowerAddr = addr.toLowerCase();
+                // Check if it's WSEI (for native SEI)
+                if (lowerAddr === WSEI.address.toLowerCase()) {
+                    return SEI; // Use SEI for native token UI
+                }
+                return DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === lowerAddr);
+            };
+
+            const foundToken0 = findToken(token0Addr);
+            const foundToken1 = findToken(token1Addr);
+
+            if (foundToken0) setTokenA(foundToken0);
+            if (foundToken1) setTokenB(foundToken1);
+
+            console.log('Pre-filled from URL params:', { token0Addr, token1Addr, foundToken0, foundToken1 });
+        }
+
+        if (type === 'cl') {
+            setPoolType('cl');
+            if (tickSpacingParam) {
+                setTickSpacing(parseInt(tickSpacingParam));
+            }
+        } else if (type === 'v2') {
+            setPoolType('v2');
+            if (stableParam === 'true') {
+                setStable(true);
+            }
+        }
+    }, [searchParams]);
 
     // Fetch CL pool price when tokens or tickSpacing change
     useEffect(() => {
