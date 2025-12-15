@@ -710,15 +710,15 @@ export default function LiquidityPage() {
         <div className="container mx-auto px-6">
             {/* Page Header */}
             <motion.div
-                className="text-center mb-12"
+                className="text-center mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
                 <h1 className="text-4xl font-bold mb-4">
-                    <span className="gradient-text">Liquidity</span> Management
+                    <span className="gradient-text">Provide</span> Liquidity
                 </h1>
-                <p className="text-gray-400 max-w-lg mx-auto">
-                    Provide liquidity to earn trading fees and YAKA emissions.
+                <p className="text-gray-400 max-w-xl mx-auto">
+                    Deposit tokens into trading pools to earn a share of every trade. The more volume, the more you earn!
                 </p>
             </motion.div>
 
@@ -780,27 +780,35 @@ export default function LiquidityPage() {
 
                         {/* Pool Type Selection */}
                         <div className="mb-6">
-                            <label className="text-sm text-gray-400 mb-2 block">Pool Type</label>
-                            <div className="grid grid-cols-2 gap-3">
+                            <label className="text-sm text-gray-400 mb-3 block">Choose Pool Type</label>
+                            <div className="grid grid-cols-2 gap-4">
                                 <button
                                     onClick={() => setPoolType('v2')}
-                                    className={`p-3 rounded-xl text-center transition ${poolType === 'v2'
-                                        ? 'bg-primary/10 border border-primary/30 text-white'
-                                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                    className={`p-4 rounded-xl text-left transition-all ${poolType === 'v2'
+                                        ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/40 shadow-lg shadow-primary/10'
+                                        : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
                                         }`}
                                 >
-                                    <div className="font-semibold">V2 Pool</div>
-                                    <div className="text-xs text-gray-400">Classic AMM</div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-2xl">💧</span>
+                                        <span className="font-semibold">Classic</span>
+                                    </div>
+                                    <div className="text-xs text-gray-400">Simple 50/50 split. Set it and forget it!</div>
+                                    <div className="text-xs text-primary mt-2 font-medium">Best for beginners</div>
                                 </button>
                                 <button
                                     onClick={() => setPoolType('cl')}
-                                    className={`p-3 rounded-xl text-center transition ${poolType === 'cl'
-                                        ? 'bg-secondary/10 border border-secondary/30 text-white'
-                                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                    className={`p-4 rounded-xl text-left transition-all ${poolType === 'cl'
+                                        ? 'bg-gradient-to-br from-secondary/20 to-cyan-500/10 border-2 border-secondary/40 shadow-lg shadow-secondary/10'
+                                        : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
                                         }`}
                                 >
-                                    <div className="font-semibold">CL Pool</div>
-                                    <div className="text-xs text-gray-400">Concentrated</div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-2xl">⚡</span>
+                                        <span className="font-semibold">Concentrated</span>
+                                    </div>
+                                    <div className="text-xs text-gray-400">Focus liquidity in a price range for higher returns</div>
+                                    <div className="text-xs text-secondary mt-2 font-medium">Higher yields</div>
                                 </button>
                             </div>
                         </div>

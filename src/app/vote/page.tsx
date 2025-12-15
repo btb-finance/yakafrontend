@@ -4,10 +4,14 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { formatUnits, Address } from 'viem';
+import Link from 'next/link';
 import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { YAKA } from '@/config/tokens';
+import { Tooltip } from '@/components/common/Tooltip';
+import { InfoCard, EmptyState } from '@/components/common/InfoCard';
+import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 
 export default function VotePage() {
     const { isConnected, address } = useAccount();
@@ -71,6 +75,13 @@ export default function VotePage() {
     // Calculate total vote weight
     const totalVoteWeight = Object.values(voteWeights).reduce((acc, w) => acc + w, 0);
 
+    // Determine current step for step indicator
+    const getCurrentStep = () => {
+        if (positions.length === 0) return 0; // Lock step
+        if (gauges.length > 0) return 1; // Vote step
+        return 2; // Earn step
+    };
+
     const handleCreateLock = async () => {
         if (!lockAmount || parseFloat(lockAmount) <= 0) return;
         const result = await createLock(lockAmount, LOCK_DURATIONS[lockDuration]);
@@ -120,51 +131,95 @@ export default function VotePage() {
         }));
     };
 
+    const tabConfig = [
+        { key: 'lock' as const, label: 'Lock YAKA', icon: '🔐', description: 'Get voting power' },
+        { key: 'vote' as const, label: 'Vote', icon: '🗳️', description: 'Choose pools' },
+        { key: 'rewards' as const, label: 'Rewards', icon: '💰', description: 'Claim earnings' },
+    ];
+
     return (
         <div className="container mx-auto px-6">
             {/* Page Header */}
             <motion.div
-                className="text-center mb-8"
+                className="text-center mb-6"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
                 <h1 className="text-4xl font-bold mb-4">
                     <span className="gradient-text">Vote</span> & Earn
                 </h1>
-                <p className="text-gray-400 max-w-lg mx-auto">
-                    Lock YAKA to receive veNFTs, vote on gauge emissions, and earn bribes + fees.
+                <p className="text-gray-400 max-w-xl mx-auto">
+                    Lock your YAKA tokens to get voting power. Vote for pools to direct weekly rewards, and earn your share of fees and bonuses!
                 </p>
             </motion.div>
 
+            {/* Visual Step Flow */}
+            <motion.div
+                className="mb-8"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+            >
+                <div className="glass-card p-6">
+                    <LockVoteEarnSteps currentStep={getCurrentStep()} />
+                </div>
+            </motion.div>
+
             {/* Stats Row */}
-            <div className="grid grid-cols-3 gap-4 mb-8 max-w-2xl mx-auto">
-                <div className="glass-card p-4 text-center">
-                    <div className="text-xs text-gray-400 mb-1">Your YAKA</div>
-                    <div className="text-lg font-semibold">{formattedYakaBalance || '0'}</div>
-                </div>
-                <div className="glass-card p-4 text-center">
-                    <div className="text-xs text-gray-400 mb-1">Your veYAKA NFTs</div>
-                    <div className="text-lg font-semibold">{veNFTCount}</div>
-                </div>
-                <div className="glass-card p-4 text-center">
-                    <div className="text-xs text-gray-400 mb-1">Claimable Rebases</div>
-                    <div className="text-lg font-semibold text-green-400">
-                        {formatUnits(totalClaimable, 18).slice(0, 8)} YAKA
+            <div className="grid grid-cols-3 gap-4 mb-8 max-w-3xl mx-auto">
+                <motion.div
+                    className="glass-card p-5 text-center"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                >
+                    <div className="text-xs text-gray-400 mb-2">Your YAKA Balance</div>
+                    <div className="text-2xl font-bold">{formattedYakaBalance || '0'}</div>
+                </motion.div>
+                <motion.div
+                    className="glass-card p-5 text-center"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 }}
+                >
+                    <div className="text-xs text-gray-400 mb-2">
+                        <Tooltip content="Voting Power NFTs represent your locked YAKA and give you the right to vote on pool rewards">
+                            Your Voting NFTs
+                        </Tooltip>
                     </div>
-                </div>
+                    <div className="text-2xl font-bold">{veNFTCount}</div>
+                </motion.div>
+                <motion.div
+                    className="glass-card p-5 text-center bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                >
+                    <div className="text-xs text-gray-400 mb-2">
+                        <Tooltip content="Rebase rewards compensate you for token inflation, keeping your voting power strong">
+                            Claimable Rewards
+                        </Tooltip>
+                    </div>
+                    <div className="text-2xl font-bold text-green-400">
+                        {formatUnits(totalClaimable, 18).slice(0, 8)} <span className="text-sm">YAKA</span>
+                    </div>
+                </motion.div>
             </div>
 
             {/* Tabs */}
             <div className="flex justify-center mb-8">
-                <div className="glass p-1 rounded-xl inline-flex">
-                    {(['lock', 'vote', 'rewards'] as const).map((tab) => (
+                <div className="glass p-1.5 rounded-2xl inline-flex gap-1">
+                    {tabConfig.map((tab) => (
                         <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`px-6 py-2 rounded-lg font-medium transition capitalize ${activeTab === tab ? 'bg-primary text-white' : 'text-gray-400 hover:text-white'
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`px-5 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${activeTab === tab.key
+                                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                                : 'text-gray-400 hover:text-white hover:bg-white/5'
                                 }`}
                         >
-                            {tab === 'lock' ? '🔒 Lock YAKA' : tab === 'vote' ? '🗳️ Vote' : '💰 Rewards'}
+                            <span className="text-lg">{tab.icon}</span>
+                            <span className="hidden md:inline">{tab.label}</span>
                         </button>
                     ))}
                 </div>
@@ -172,36 +227,51 @@ export default function VotePage() {
 
             {/* Error Display */}
             {error && (
-                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm max-w-md mx-auto text-center">
+                <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm max-w-md mx-auto text-center flex items-center gap-2 justify-center">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                     {error}
                 </div>
             )}
 
             {/* Success Display */}
             {txHash && (
-                <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm max-w-md mx-auto text-center">
-                    Transaction submitted!{' '}
-                    <a href={`https://seiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline">
-                        View on SeiScan
+                <motion.div
+                    className="mb-4 p-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm max-w-md mx-auto text-center"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                >
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Transaction submitted!
+                    </div>
+                    <a href={`https://seitrace.com/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="underline text-sm">
+                        View on SeiTrace →
                     </a>
-                </div>
+                </motion.div>
             )}
 
             {/* Lock Tab */}
             {activeTab === 'lock' && (
-                <motion.div className="max-w-md mx-auto" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                <motion.div className="max-w-lg mx-auto" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <div className="glass-card p-6">
-                        <h2 className="text-xl font-semibold mb-6">Create veNFT Lock</h2>
+                        <h2 className="text-xl font-semibold mb-2">Lock YAKA to Get Voting Power</h2>
+                        <p className="text-sm text-gray-400 mb-6">
+                            The longer you lock, the more voting power you receive. Locked tokens earn rewards automatically!
+                        </p>
 
                         {/* YAKA Amount */}
-                        <div className="mb-4">
-                            <label className="text-sm text-gray-400 mb-2 block">YAKA Amount</label>
+                        <div className="mb-5">
+                            <label className="text-sm text-gray-400 mb-2 block">Amount to Lock</label>
                             <div className="token-input-row">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm text-gray-400">Balance: {formattedYakaBalance || '0'} YAKA</span>
+                                    <span className="text-sm text-gray-400">Available: {formattedYakaBalance || '0'} YAKA</span>
                                     <button
                                         onClick={() => setLockAmount(formattedYakaBalance || '0')}
-                                        className="text-sm text-primary hover:text-primary/80"
+                                        className="text-sm text-primary hover:text-primary/80 font-medium"
                                     >
                                         MAX
                                     </button>
@@ -218,14 +288,14 @@ export default function VotePage() {
 
                         {/* Lock Duration */}
                         <div className="mb-6">
-                            <label className="text-sm text-gray-400 mb-2 block">Lock Duration</label>
+                            <label className="text-sm text-gray-400 mb-3 block">Lock Duration</label>
                             <div className="grid grid-cols-7 gap-2">
                                 {(Object.keys(LOCK_DURATIONS) as Array<keyof typeof LOCK_DURATIONS>).map((duration) => (
                                     <button
                                         key={duration}
                                         onClick={() => setLockDuration(duration)}
-                                        className={`py-3 rounded-xl text-sm font-medium transition ${lockDuration === duration
-                                            ? 'bg-primary text-white'
+                                        className={`py-3 rounded-xl text-sm font-medium transition-all ${lockDuration === duration
+                                            ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
                                             : 'bg-white/5 hover:bg-white/10 text-gray-400'
                                             }`}
                                     >
@@ -233,66 +303,84 @@ export default function VotePage() {
                                     </button>
                                 ))}
                             </div>
-                            <p className="text-xs text-gray-400 mt-2">
-                                Longer locks = more voting power (up to 4x)
+                            <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                                <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Longer locks = more voting power (up to 4x multiplier)
                             </p>
                         </div>
 
-                        {/* Voting Power Preview */}
-                        <div className="p-4 rounded-xl bg-primary/10 border border-primary/30 mb-6">
-                            <div className="flex justify-between text-sm mb-2">
-                                <span className="text-gray-400">Voting Power</span>
-                                <span className="font-semibold">{estimatedVotingPower} veYAKA</span>
-                            </div>
-                            <div className="flex justify-between text-sm mb-2">
-                                <span className="text-gray-400">Lock Expires</span>
-                                <span>{unlockDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-400">Lock Multiplier</span>
-                                <span>{(LOCK_DURATIONS[lockDuration] / LOCK_DURATIONS['4Y'] * 100).toFixed(0)}%</span>
+                        {/* Preview Box */}
+                        <div className="p-5 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 mb-6">
+                            <h4 className="text-sm font-medium text-gray-300 mb-4">What You&apos;ll Get</h4>
+                            <div className="space-y-3">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-400">Voting Power</span>
+                                    <span className="font-semibold text-primary">{estimatedVotingPower} veYAKA</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-400">Unlock Date</span>
+                                    <span>{unlockDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-400">Power Multiplier</span>
+                                    <span className="text-green-400 font-medium">{(LOCK_DURATIONS[lockDuration] / LOCK_DURATIONS['4Y'] * 100).toFixed(0)}%</span>
+                                </div>
                             </div>
                         </div>
 
                         <motion.button
                             onClick={handleCreateLock}
                             disabled={!isConnected || isLoading || !lockAmount || parseFloat(lockAmount) <= 0}
-                            className="w-full btn-primary py-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full btn-gradient py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                             whileHover={{ scale: 1.01 }}
                             whileTap={{ scale: 0.99 }}
                         >
-                            {isLoading ? 'Creating Lock...' : !isConnected ? 'Connect Wallet' : 'Create Lock'}
+                            {isLoading ? 'Creating Lock...' : !isConnected ? 'Connect Wallet' : 'Lock YAKA & Get Voting Power'}
                         </motion.button>
                     </div>
 
                     {/* Existing Positions */}
                     {positions.length > 0 && (
                         <div className="glass-card p-6 mt-6">
-                            <h3 className="text-lg font-semibold mb-4">Your veYAKA Positions</h3>
+                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                <span className="icon-container icon-container-sm">🎫</span>
+                                Your Voting Power NFTs
+                            </h3>
                             <div className="space-y-3">
                                 {positions.map((position) => {
                                     const isExpired = position.end < BigInt(Math.floor(Date.now() / 1000)) && !position.isPermanent;
                                     const endDate = new Date(Number(position.end) * 1000);
 
                                     return (
-                                        <div key={position.tokenId.toString()} className="p-3 rounded-xl bg-white/5 flex justify-between items-center">
-                                            <div>
-                                                <div className="text-sm text-gray-400">veYAKA #{position.tokenId.toString()}</div>
-                                                <div className="font-semibold">{formatUnits(position.amount, 18).slice(0, 8)} YAKA</div>
-                                                <div className="text-xs text-gray-500">
-                                                    {position.isPermanent ? '∞ Permanent' : isExpired ? 'Expired' : `Unlocks ${endDate.toLocaleDateString()}`}
+                                        <div key={position.tokenId.toString()} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="text-sm text-gray-400 mb-1">veYAKA #{position.tokenId.toString()}</div>
+                                                    <div className="text-xl font-bold">{parseFloat(formatUnits(position.amount, 18)).toFixed(2)} YAKA</div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {position.isPermanent ? (
+                                                            <span className="text-primary">∞ Permanent Lock</span>
+                                                        ) : isExpired ? (
+                                                            <span className="text-yellow-400">🔓 Unlocked</span>
+                                                        ) : (
+                                                            <>Unlocks {endDate.toLocaleDateString()}</>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-primary font-medium">{formatUnits(position.votingPower, 18).slice(0, 6)} veYAKA</div>
-                                                {isExpired && (
-                                                    <button
-                                                        onClick={() => handleWithdraw(position.tokenId)}
-                                                        className="text-xs text-red-400 hover:text-red-300"
-                                                    >
-                                                        Withdraw
-                                                    </button>
-                                                )}
+                                                <div className="text-right">
+                                                    <div className="text-sm text-gray-400 mb-1">Voting Power</div>
+                                                    <div className="text-lg font-bold text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toFixed(2)}</div>
+                                                    {isExpired && (
+                                                        <button
+                                                            onClick={() => handleWithdraw(position.tokenId)}
+                                                            className="mt-2 text-xs px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+                                                        >
+                                                            Withdraw
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     );
@@ -307,108 +395,131 @@ export default function VotePage() {
             {activeTab === 'vote' && (
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     {!isConnected ? (
-                        <div className="glass-card p-12 text-center max-w-md mx-auto">
-                            <h3 className="text-xl font-semibold mb-2">Connect Wallet</h3>
-                            <p className="text-gray-400 mb-6">Connect your wallet to vote on gauges</p>
-                        </div>
+                        <EmptyState
+                            icon="🔗"
+                            title="Connect Your Wallet"
+                            description="Connect your wallet to vote on pool rewards"
+                        />
                     ) : positions.length === 0 ? (
-                        <div className="glass-card p-12 text-center max-w-md mx-auto">
-                            <div className="text-4xl mb-4">🔓</div>
-                            <h3 className="text-xl font-semibold mb-2">No veNFTs Found</h3>
-                            <p className="text-gray-400 mb-6">Lock YAKA to receive veNFTs and vote</p>
-                            <button onClick={() => setActiveTab('lock')} className="btn-primary">
-                                Lock YAKA
-                            </button>
-                        </div>
+                        <EmptyState
+                            icon="🔐"
+                            title="No Voting Power Yet"
+                            description="Lock YAKA tokens first to get voting power. Then you can vote to direct weekly rewards to your favorite pools."
+                            action={{
+                                label: 'Lock YAKA',
+                                onClick: () => setActiveTab('lock')
+                            }}
+                        />
                     ) : gauges.length === 0 ? (
-                        <div className="glass-card p-12 text-center max-w-md mx-auto">
-                            <div className="text-4xl mb-4">🗳️</div>
-                            <h3 className="text-xl font-semibold mb-2">No Gauges Available</h3>
-                            <p className="text-gray-400">No pools with gauges found yet</p>
-                        </div>
+                        <EmptyState
+                            icon="🗳️"
+                            title="No Pools Available"
+                            description="No pools with reward distribution found yet. Check back soon!"
+                        />
                     ) : (
                         <>
-                            {/* veNFT Selector */}
-                            <div className="glass-card p-4 mb-6 max-w-4xl mx-auto">
-                                <label className="text-sm text-gray-400 mb-2 block">Select veNFT to Vote With</label>
-                                <div className="flex gap-2 flex-wrap">
+                            {/* NFT Selector */}
+                            <div className="glass-card p-5 mb-6 max-w-4xl mx-auto">
+                                <label className="text-sm text-gray-400 mb-3 block">Select Voting NFT to Use</label>
+                                <div className="flex gap-3 flex-wrap">
                                     {positions.map((pos) => (
                                         <button
                                             key={pos.tokenId.toString()}
                                             onClick={() => setSelectedVeNFT(pos.tokenId)}
-                                            className={`px-4 py-2 rounded-lg text-sm transition ${selectedVeNFT === pos.tokenId
-                                                ? 'bg-primary text-white'
-                                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                            className={`px-4 py-3 rounded-xl text-sm transition-all ${selectedVeNFT === pos.tokenId
+                                                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                                                : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
                                                 }`}
                                         >
-                                            veYAKA #{pos.tokenId.toString()}
-                                            <span className="text-xs ml-1 opacity-70">
-                                                ({formatUnits(pos.votingPower, 18).slice(0, 6)} power)
-                                            </span>
+                                            <div className="font-semibold">NFT #{pos.tokenId.toString()}</div>
+                                            <div className="text-xs opacity-80">
+                                                {parseFloat(formatUnits(pos.votingPower, 18)).toFixed(2)} voting power
+                                            </div>
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Gauges List */}
+                            {/* Pools List */}
                             <div className="glass-card overflow-hidden max-w-4xl mx-auto">
-                                <div className="p-4 border-b border-white/5 flex justify-between items-center">
-                                    <h2 className="text-lg font-semibold">Gauges ({gauges.length})</h2>
-                                    <div className="text-sm text-gray-400">
-                                        Total Weight: {formatUnits(totalWeight, 18).slice(0, 10)} veYAKA
+                                <div className="p-5 border-b border-white/5 flex justify-between items-center">
+                                    <div>
+                                        <h2 className="text-lg font-semibold">Vote on Pool Rewards</h2>
+                                        <p className="text-sm text-gray-400">Allocate your voting power to pools. They&apos;ll receive weekly YAKA rewards!</p>
+                                    </div>
+                                    <div className="text-right text-sm">
+                                        <div className="text-gray-400">Total Votes</div>
+                                        <div className="font-semibold">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString()}</div>
                                     </div>
                                 </div>
 
                                 {/* Table Header */}
                                 <div className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 text-sm text-gray-400 font-medium">
                                     <div className="col-span-4">Pool</div>
-                                    <div className="col-span-2 text-right">Current %</div>
-                                    <div className="col-span-3 text-right">Weight</div>
-                                    <div className="col-span-3 text-center">Your Vote</div>
+                                    <div className="col-span-2 text-right">Current Share</div>
+                                    <div className="col-span-3 text-right">Total Votes</div>
+                                    <div className="col-span-3 text-center">Your Vote %</div>
                                 </div>
 
                                 {/* Loading State */}
                                 {isLoadingGauges && (
-                                    <div className="p-8 text-center text-gray-400">Loading gauges...</div>
+                                    <div className="p-8 text-center text-gray-400">
+                                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                                        Loading pools...
+                                    </div>
                                 )}
 
-                                {/* Gauges */}
+                                {/* Pools */}
                                 {gauges.map((gauge, index) => (
                                     <motion.div
                                         key={gauge.pool}
                                         className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 hover:bg-white/5 transition items-center"
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.05 }}
+                                        transition={{ delay: index * 0.03 }}
                                     >
-                                        <div className="col-span-4 flex items-center gap-2">
-                                            <span className="font-semibold">{gauge.symbol0}/{gauge.symbol1}</span>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full ${gauge.poolType === 'CL' ? 'bg-accent/20 text-accent' : 'bg-primary/20 text-primary'}`}>
-                                                {gauge.poolType}
-                                            </span>
-                                            {!gauge.isAlive && (
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
-                                                    Killed
-                                                </span>
-                                            )}
+                                        <div className="col-span-4 flex items-center gap-3">
+                                            <div className="relative">
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-sm font-bold">
+                                                    {gauge.symbol0[0]}
+                                                </div>
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-secondary to-accent flex items-center justify-center text-sm font-bold absolute left-5 top-0 border-2 border-[var(--bg-primary)]">
+                                                    {gauge.symbol1[0]}
+                                                </div>
+                                            </div>
+                                            <div className="ml-3">
+                                                <span className="font-semibold">{gauge.symbol0}/{gauge.symbol1}</span>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${gauge.poolType === 'CL' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-primary/20 text-primary'}`}>
+                                                        {gauge.poolType}
+                                                    </span>
+                                                    {!gauge.isAlive && (
+                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                                                            Inactive
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="col-span-2 text-right text-sm">
-                                            {gauge.weightPercent.toFixed(2)}%
+                                        <div className="col-span-2 text-right">
+                                            <span className={`apr-badge ${gauge.weightPercent > 10 ? 'apr-badge-high' : gauge.weightPercent > 2 ? 'apr-badge-medium' : 'apr-badge-low'}`}>
+                                                {gauge.weightPercent.toFixed(2)}%
+                                            </span>
                                         </div>
                                         <div className="col-span-3 text-right text-gray-400 text-sm">
-                                            {formatUnits(gauge.weight, 18).slice(0, 10)}
+                                            {parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </div>
-                                        <div className="col-span-3 flex items-center justify-center gap-1">
+                                        <div className="col-span-3 flex items-center justify-center gap-2">
                                             <div className="flex gap-1">
-                                                {[100, 50, 25, 10].map((pct) => (
+                                                {[100, 50, 25].map((pct) => (
                                                     <button
                                                         key={pct}
                                                         onClick={() => updateVoteWeight(gauge.pool, pct)}
                                                         disabled={!selectedVeNFT || !gauge.isAlive}
-                                                        className={`px-2 py-1 text-xs rounded transition ${voteWeights[gauge.pool] === pct
+                                                        className={`px-2 py-1.5 text-xs rounded-lg transition ${voteWeights[gauge.pool] === pct
                                                             ? 'bg-primary text-white'
                                                             : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                            } disabled:opacity-40 disabled:cursor-not-allowed`}
                                                     >
                                                         {pct}%
                                                     </button>
@@ -421,7 +532,7 @@ export default function VotePage() {
                                                 value={voteWeights[gauge.pool] || ''}
                                                 onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
                                                 disabled={!selectedVeNFT || !gauge.isAlive}
-                                                className="w-14 p-1 rounded-lg bg-white/5 text-center text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                                                className="w-14 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
                                             />
                                         </div>
                                     </motion.div>
@@ -430,12 +541,19 @@ export default function VotePage() {
 
                             {/* Vote Summary */}
                             {totalVoteWeight > 0 && (
-                                <div className="max-w-4xl mx-auto mt-4 p-4 rounded-xl bg-primary/10 border border-primary/30">
+                                <motion.div
+                                    className="max-w-4xl mx-auto mt-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                >
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-400">Total Vote Weight Allocated</span>
-                                        <span className="font-semibold">{totalVoteWeight}</span>
+                                        <span className="text-sm text-gray-300">Total Vote Weight Allocated</span>
+                                        <span className="font-bold text-lg">{totalVoteWeight}%</span>
                                     </div>
-                                </div>
+                                    {totalVoteWeight > 100 && (
+                                        <p className="text-xs text-yellow-400 mt-2">⚠️ Total exceeds 100%. Votes will be proportionally adjusted.</p>
+                                    )}
+                                </motion.div>
                             )}
 
                             {/* Submit Vote */}
@@ -444,18 +562,20 @@ export default function VotePage() {
                                     <button
                                         onClick={handleResetVotes}
                                         disabled={isVoting}
-                                        className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+                                        className="px-6 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition disabled:opacity-50 font-medium"
                                     >
-                                        Reset Votes
+                                        Reset My Votes
                                     </button>
                                 )}
-                                <button
+                                <motion.button
                                     onClick={handleVote}
                                     disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
-                                    className="btn-primary px-8 disabled:opacity-50"
+                                    className="btn-gradient px-8 disabled:opacity-50"
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
                                 >
-                                    {isVoting ? 'Voting...' : 'Cast Votes'}
-                                </button>
+                                    {isVoting ? 'Submitting...' : 'Cast Votes'}
+                                </motion.button>
                             </div>
                         </>
                     )}
@@ -464,37 +584,50 @@ export default function VotePage() {
 
             {/* Rewards Tab */}
             {activeTab === 'rewards' && (
-                <motion.div className="max-w-md mx-auto" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                <motion.div className="max-w-lg mx-auto" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     {!isConnected ? (
-                        <div className="glass-card p-12 text-center">
-                            <h3 className="text-xl font-semibold mb-2">Connect Wallet</h3>
-                            <p className="text-gray-400 mb-6">Connect your wallet to view and claim rewards</p>
-                        </div>
+                        <EmptyState
+                            icon="🔗"
+                            title="Connect Your Wallet"
+                            description="Connect your wallet to view and claim your rewards"
+                        />
                     ) : positions.length === 0 ? (
-                        <div className="glass-card p-12 text-center">
-                            <div className="text-4xl mb-4">💰</div>
-                            <h3 className="text-xl font-semibold mb-2">No Positions</h3>
-                            <p className="text-gray-400">Lock YAKA to start earning rewards</p>
-                        </div>
+                        <EmptyState
+                            icon="💰"
+                            title="No Rewards Yet"
+                            description="Lock YAKA and vote to start earning rewards. Voters receive a share of trading fees from the pools they vote for!"
+                            action={{
+                                label: 'Start Earning',
+                                onClick: () => setActiveTab('lock')
+                            }}
+                        />
                     ) : (
                         <div className="glass-card p-6">
-                            <h2 className="text-lg font-semibold mb-4">Claimable Rebases</h2>
-                            <div className="space-y-3">
+                            <h2 className="text-lg font-semibold mb-2">Your Claimable Rewards</h2>
+                            <p className="text-sm text-gray-400 mb-6">
+                                <Tooltip content="Rebase rewards protect your voting power from dilution as new tokens are minted">
+                                    Rebase rewards
+                                </Tooltip>
+                                {' '}accumulate over time. Claim them to add to your locked amount!
+                            </p>
+                            <div className="space-y-4">
                                 {positions.map((position) => (
-                                    <div key={position.tokenId.toString()} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                                    <div key={position.tokenId.toString()} className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
                                         <div>
                                             <div className="text-sm text-gray-400">veYAKA #{position.tokenId.toString()}</div>
-                                            <div className="font-semibold text-green-400">
-                                                {formatUnits(position.claimable, 18).slice(0, 10)} YAKA
+                                            <div className="text-xl font-bold text-green-400">
+                                                {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} YAKA
                                             </div>
                                         </div>
-                                        <button
+                                        <motion.button
                                             onClick={() => handleClaimRebases(position.tokenId)}
                                             disabled={isLoading || position.claimable === BigInt(0)}
-                                            className="px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="px-5 py-3 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 font-medium hover:from-green-500/30 hover:to-emerald-500/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
                                         >
                                             Claim
-                                        </button>
+                                        </motion.button>
                                     </div>
                                 ))}
                             </div>
@@ -503,28 +636,29 @@ export default function VotePage() {
                 </motion.div>
             )}
 
-            {/* Info Section */}
+            {/* Benefits Section */}
             <motion.div
-                className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"
+                className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
             >
-                <div className="glass-card p-6 text-center">
-                    <div className="text-3xl mb-3">🗳️</div>
-                    <h3 className="font-semibold mb-2">Vote Power</h3>
-                    <p className="text-sm text-gray-400">Lock YAKA for up to 4 years to maximize voting power</p>
-                </div>
-                <div className="glass-card p-6 text-center">
-                    <div className="text-3xl mb-3">💰</div>
-                    <h3 className="font-semibold mb-2">Earn Bribes</h3>
-                    <p className="text-sm text-gray-400">Receive bribes from protocols incentivizing their pools</p>
-                </div>
-                <div className="glass-card p-6 text-center">
-                    <div className="text-3xl mb-3">📊</div>
-                    <h3 className="font-semibold mb-2">Share Fees</h3>
-                    <p className="text-sm text-gray-400">Voters receive a share of trading fees from voted pools</p>
-                </div>
+                <InfoCard
+                    icon="🗳️"
+                    title="Direct Pool Rewards"
+                    description="Your votes decide which pools get weekly YAKA rewards. Vote for productive pools to grow the ecosystem!"
+                />
+                <InfoCard
+                    icon="💰"
+                    title="Earn Trading Fees"
+                    description="Voters receive a share of trading fees from the pools they vote for. More volume = more earnings!"
+                    variant="success"
+                />
+                <InfoCard
+                    icon="🎁"
+                    title="Get Bonus Rewards"
+                    description="Some projects offer bonus rewards to voters who support their pools. Check back regularly for new opportunities!"
+                />
             </motion.div>
         </div>
     );

@@ -4,7 +4,10 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
 import { Address, formatUnits } from 'viem';
+import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
+import { Tooltip } from '@/components/common/Tooltip';
+import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 
 // CLGauge ABI for staking operations
 const CL_GAUGE_ABI = [
@@ -61,48 +64,6 @@ const CL_GAUGE_ABI = [
         inputs: [],
         name: 'pool',
         outputs: [{ name: '', type: 'address' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
-
-// Voter ABI
-const VOTER_ABI = [
-    {
-        inputs: [{ name: 'pool', type: 'address' }],
-        name: 'gauges',
-        outputs: [{ name: '', type: 'address' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: 'gauge', type: 'address' }],
-        name: 'isAlive',
-        outputs: [{ name: '', type: 'bool' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
-
-// Position Manager ABI
-const NFT_POSITION_MANAGER_ABI = [
-    {
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        name: 'positions',
-        outputs: [
-            { name: 'nonce', type: 'uint96' },
-            { name: 'operator', type: 'address' },
-            { name: 'token0', type: 'address' },
-            { name: 'token1', type: 'address' },
-            { name: 'tickSpacing', type: 'int24' },
-            { name: 'tickLower', type: 'int24' },
-            { name: 'tickUpper', type: 'int24' },
-            { name: 'liquidity', type: 'uint128' },
-            { name: 'feeGrowthInside0LastX128', type: 'uint256' },
-            { name: 'feeGrowthInside1LastX128', type: 'uint256' },
-            { name: 'tokensOwed0', type: 'uint128' },
-            { name: 'tokensOwed1', type: 'uint128' },
-        ],
         stateMutability: 'view',
         type: 'function',
     },
@@ -324,13 +285,16 @@ export default function StakePage() {
         setActionLoading(null);
     };
 
-    // Format reward rate to APR (simplified)
-    const formatRewardRate = (rate: bigint) => {
+    // Format reward rate to daily rewards
+    const formatDailyRewards = (rate: bigint) => {
         if (rate === BigInt(0)) return '0';
-        // Rate is per second, calculate daily
         const daily = rate * BigInt(86400);
-        return formatUnits(daily, 18);
+        return parseFloat(formatUnits(daily, 18)).toFixed(2);
     };
+
+    // Calculate total rewards
+    const totalRewards = stakedPositions.reduce((sum, p) => sum + p.rewards, BigInt(0));
+    const formattedTotalRewards = parseFloat(formatUnits(totalRewards, 18)).toFixed(4);
 
     const feeMap: Record<number, string> = { 1: '0.01%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%' };
 
@@ -338,16 +302,53 @@ export default function StakePage() {
         <div className="container mx-auto px-6">
             {/* Page Header */}
             <motion.div
-                className="text-center mb-12"
+                className="text-center mb-8"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
                 <h1 className="text-4xl font-bold mb-4">
-                    <span className="gradient-text">Staking</span> Rewards
+                    <span className="gradient-text">Earn</span> Rewards
                 </h1>
-                <p className="text-gray-400 max-w-lg mx-auto">
-                    View your staked CL positions and claim YAKA rewards.
+                <p className="text-gray-400 max-w-xl mx-auto">
+                    Stake your liquidity positions to earn YAKA tokens. The more you stake, the more you earn!
                 </p>
+            </motion.div>
+
+            {/* How It Works - Visual Flow */}
+            <motion.div
+                className="mb-10"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
+                <div className="glass-card p-6">
+                    <h3 className="text-center text-sm font-medium text-gray-400 mb-6">How Staking Works</h3>
+                    <div className="flex items-center justify-center gap-4 flex-wrap">
+                        <div className="flex items-center gap-3">
+                            <div className="icon-container icon-container-sm">💧</div>
+                            <div>
+                                <div className="text-sm font-medium">Add Liquidity</div>
+                                <div className="text-xs text-gray-500">Get LP positions</div>
+                            </div>
+                        </div>
+                        <div className="w-12 h-0.5 bg-gradient-to-r from-primary to-secondary hidden md:block" />
+                        <div className="flex items-center gap-3">
+                            <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #10b981, #34d399)' }}>📥</div>
+                            <div>
+                                <div className="text-sm font-medium">Stake Positions</div>
+                                <div className="text-xs text-gray-500">In reward pools</div>
+                            </div>
+                        </div>
+                        <div className="w-12 h-0.5 bg-gradient-to-r from-primary to-secondary hidden md:block" />
+                        <div className="flex items-center gap-3">
+                            <div className="icon-container icon-container-sm" style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }}>💰</div>
+                            <div>
+                                <div className="text-sm font-medium">Earn YAKA</div>
+                                <div className="text-xs text-gray-500">Claim anytime</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </motion.div>
 
             {/* TX Hash Display */}
@@ -357,149 +358,207 @@ export default function StakePage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                 >
-                    <div className="text-green-400 text-sm">Transaction submitted!</div>
+                    <div className="flex items-center gap-2 text-green-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="font-medium">Transaction submitted!</span>
+                    </div>
                     <a
                         href={`https://seitrace.com/tx/${txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-green-500 text-xs break-all hover:underline"
+                        className="text-green-500 text-sm break-all hover:underline mt-1 block"
                     >
-                        {txHash}
+                        View on SeiTrace →
                     </a>
                 </motion.div>
             )}
 
             {!isConnected ? (
-                <div className="text-center py-20">
-                    <div className="text-gray-400 text-lg">Connect your wallet to view staked positions</div>
-                </div>
+                <EmptyState
+                    icon="🔗"
+                    title="Connect Your Wallet"
+                    description="Connect your wallet to view and manage your staked positions"
+                />
             ) : loading ? (
                 <div className="text-center py-20">
-                    <div className="text-gray-400 text-lg">Loading staked positions...</div>
+                    <div className="inline-flex items-center gap-3 text-gray-400">
+                        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        Loading your positions...
+                    </div>
                 </div>
             ) : stakedPositions.length === 0 ? (
-                <div className="text-center py-20">
-                    <div className="text-gray-400 text-lg mb-4">No staked positions found</div>
-                    <p className="text-gray-500 text-sm">
-                        Go to the Liquidity page to add liquidity and stake your CL NFTs.
-                    </p>
-                </div>
+                <EmptyState
+                    icon="📊"
+                    title="No Staked Positions"
+                    description="Add liquidity to a pool first, then stake your position here to start earning YAKA rewards"
+                    action={{
+                        label: 'Add Liquidity',
+                        onClick: () => window.location.href = '/liquidity'
+                    }}
+                />
             ) : (
-                <div className="space-y-4">
-                    {/* Summary Card */}
+                <div className="space-y-6">
+                    {/* Rewards Summary */}
                     <motion.div
                         className="glass-card p-6"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                     >
-                        <h2 className="text-xl font-semibold mb-4">Staking Summary</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-4 rounded-lg bg-white/5">
-                                <div className="text-gray-400 text-xs mb-1">Staked Positions</div>
-                                <div className="text-2xl font-bold text-primary">{stakedPositions.length}</div>
+                            <div className="text-center p-4 rounded-xl bg-white/5">
+                                <div className="text-xs text-gray-400 mb-2">Staked Positions</div>
+                                <div className="text-3xl font-bold text-white">{stakedPositions.length}</div>
                             </div>
-                            <div className="p-4 rounded-lg bg-white/5">
-                                <div className="text-gray-400 text-xs mb-1">Total YAKA Earned</div>
-                                <div className="text-2xl font-bold text-secondary">
-                                    {formatUnits(stakedPositions.reduce((sum, p) => sum + p.rewards, BigInt(0)), 18)}
+                            <div className="text-center p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                                <div className="text-xs text-gray-400 mb-2">Total Rewards Earned</div>
+                                <div className="text-3xl font-bold text-green-400">{formattedTotalRewards}</div>
+                                <div className="text-xs text-green-500">YAKA</div>
+                            </div>
+                            <div className="text-center p-4 rounded-xl bg-white/5">
+                                <div className="text-xs text-gray-400 mb-2">
+                                    <Tooltip content="Reward pools distribute YAKA tokens to stakers based on voting power">
+                                        Active Reward Pools
+                                    </Tooltip>
                                 </div>
-                            </div>
-                            <div className="p-4 rounded-lg bg-white/5">
-                                <div className="text-gray-400 text-xs mb-1">Active Gauges</div>
-                                <div className="text-2xl font-bold">
+                                <div className="text-3xl font-bold text-white">
                                     {new Set(stakedPositions.map(p => p.gaugeAddress)).size}
                                 </div>
                             </div>
-                            <div className="p-4 rounded-lg bg-white/5">
-                                <div className="text-gray-400 text-xs mb-1">Daily YAKA Rate</div>
-                                <div className="text-2xl font-bold text-green-400">
-                                    {formatRewardRate(stakedPositions[0]?.rewardRate || BigInt(0))}
+                            <div className="text-center p-4 rounded-xl bg-white/5">
+                                <div className="text-xs text-gray-400 mb-2">Daily YAKA Rate</div>
+                                <div className="text-3xl font-bold text-primary">
+                                    {formatDailyRewards(stakedPositions[0]?.rewardRate || BigInt(0))}
                                 </div>
                             </div>
                         </div>
                     </motion.div>
 
-                    {/* Staked Positions */}
+                    {/* Staked Positions List */}
                     <motion.div
                         className="glass-card p-6"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
                     >
-                        <h2 className="text-xl font-semibold mb-4">Staked Positions</h2>
+                        <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                            <span className="icon-container icon-container-sm">📊</span>
+                            Your Staked Positions
+                        </h2>
                         <div className="space-y-4">
                             {stakedPositions.map((pos, i) => (
-                                <div key={i} className="p-4 rounded-lg bg-white/5 border border-glass-border">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center font-bold">
-                                                #{pos.tokenId.toString()}
+                                <motion.div
+                                    key={i}
+                                    className="p-5 rounded-xl bg-white/5 border border-white/10 hover:border-primary/30 transition-all"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: i * 0.05 }}
+                                >
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                                        <div className="flex items-center gap-4">
+                                            {/* Token Pair Icons */}
+                                            <div className="relative">
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center font-bold text-white">
+                                                    {pos.token0Symbol[0]}
+                                                </div>
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-secondary to-accent flex items-center justify-center font-bold text-white absolute left-6 top-0 border-2 border-[var(--bg-primary)]">
+                                                    {pos.token1Symbol[0]}
+                                                </div>
                                             </div>
-                                            <div>
-                                                <div className="font-semibold">
+                                            <div className="ml-4">
+                                                <div className="font-semibold text-lg">
                                                     {pos.token0Symbol}/{pos.token1Symbol}
                                                 </div>
-                                                <div className="text-xs text-gray-400">
-                                                    {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`} Fee Tier
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-xs">
+                                                        {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`} Fee
+                                                    </span>
+                                                    <span className="text-gray-500">Position #{pos.tokenId.toString()}</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-green-400 font-semibold">
-                                                {formatUnits(pos.rewards, 18)} YAKA
-                                            </div>
-                                            <div className="text-xs text-gray-400">
-                                                Pending Rewards
+
+                                        {/* Rewards Display */}
+                                        <div className="flex items-center gap-6">
+                                            <div className="text-right">
+                                                <div className="text-xs text-gray-400 mb-1">Pending Rewards</div>
+                                                <div className="reward-badge">
+                                                    <span className="text-lg font-bold">{parseFloat(formatUnits(pos.rewards, 18)).toFixed(4)}</span>
+                                                    <span>YAKA</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                                        <div>
-                                            <span className="text-gray-400">Liquidity:</span>{' '}
-                                            <span className="font-mono">{pos.liquidity.toString()}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-400">Gauge:</span>{' '}
-                                            <span className="font-mono text-xs">{pos.gaugeAddress.slice(0, 10)}...</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2">
-                                        <button
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3 pt-4 border-t border-white/5">
+                                        <motion.button
                                             onClick={() => handleClaimRewards(pos.gaugeAddress)}
                                             disabled={pos.rewards === BigInt(0) || !!actionLoading}
-                                            className="flex-1 py-2 rounded-lg bg-primary/20 text-primary font-medium disabled:opacity-50 hover:bg-primary/30 transition"
+                                            className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 font-medium disabled:opacity-50 hover:from-green-500/30 hover:to-emerald-500/30 transition-all flex items-center justify-center gap-2"
+                                            whileHover={{ scale: 1.01 }}
+                                            whileTap={{ scale: 0.99 }}
                                         >
-                                            {actionLoading === 'claim-' + pos.gaugeAddress ? 'Claiming...' : 'Claim Rewards'}
-                                        </button>
-                                        <button
+                                            {actionLoading === 'claim-' + pos.gaugeAddress ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                                                    Claiming...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    💰 Claim Rewards
+                                                </>
+                                            )}
+                                        </motion.button>
+                                        <motion.button
                                             onClick={() => handleWithdraw(pos.gaugeAddress, pos.tokenId)}
                                             disabled={!!actionLoading}
-                                            className="flex-1 py-2 rounded-lg bg-red-500/20 text-red-400 font-medium disabled:opacity-50 hover:bg-red-500/30 transition"
+                                            className="flex-1 py-3 rounded-xl bg-white/5 text-gray-300 font-medium disabled:opacity-50 hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                                            whileHover={{ scale: 1.01 }}
+                                            whileTap={{ scale: 0.99 }}
                                         >
-                                            {actionLoading === 'withdraw-' + pos.tokenId.toString() ? 'Withdrawing...' : 'Unstake'}
-                                        </button>
+                                            {actionLoading === 'withdraw-' + pos.tokenId.toString() ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                                                    Unstaking...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    📤 Unstake Position
+                                                </>
+                                            )}
+                                        </motion.button>
                                     </div>
-                                </div>
+                                </motion.div>
                             ))}
                         </div>
                     </motion.div>
 
-                    {/* Info Card */}
+                    {/* Helpful Info */}
                     <motion.div
-                        className="glass-card p-6"
+                        className="grid grid-cols-1 md:grid-cols-3 gap-4"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
                     >
-                        <h2 className="text-lg font-semibold mb-3">How Staking Works</h2>
-                        <div className="text-gray-400 text-sm space-y-2">
-                            <p>• Stake your CL NFT positions in gauges to earn YAKA emissions</p>
-                            <p>• Emissions are distributed based on votes from veYAKA holders</p>
-                            <p>• Claim rewards anytime - they accumulate automatically</p>
-                            <p>• Unstaking returns your NFT position to your wallet</p>
-                        </div>
+                        <InfoCard
+                            icon="💡"
+                            title="Rewards Accumulate"
+                            description="Your YAKA rewards grow every block. Claim whenever you want - there's no deadline!"
+                        />
+                        <InfoCard
+                            icon="🗳️"
+                            title="Powered by Votes"
+                            description="Reward rates depend on how veYAKA holders vote. Popular pools get more rewards."
+                            variant="default"
+                        />
+                        <InfoCard
+                            icon="📈"
+                            title="Keep Earning Fees"
+                            description="Staked positions still earn trading fees! You get rewards on top of fee earnings."
+                            variant="success"
+                        />
                     </motion.div>
                 </div>
             )}
