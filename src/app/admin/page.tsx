@@ -1086,6 +1086,54 @@ export default function AdminPage() {
                                 </div>
                             </div>
 
+                            {/* Distribute Rewards Section */}
+                            <div className="glass-card p-6">
+                                <h3 className="text-lg font-semibold mb-4">💰 Distribute Rewards</h3>
+                                <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 mb-4">
+                                    <div className="text-sm text-gray-300 mb-2 font-medium">What this does:</div>
+                                    <ul className="text-sm text-gray-400 space-y-1.5 list-disc list-inside">
+                                        <li>Sends weekly YAKA emissions to all gauge contracts</li>
+                                        <li>Claims LP trading fees from pools and sends them to voters</li>
+                                        <li>Must be called weekly after each epoch ends</li>
+                                    </ul>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Active Gauges</div>
+                                        <div className="text-xl font-bold text-primary">
+                                            {voterPoolsLength !== undefined ? voterPoolsLength.toString() : 'Loading...'}
+                                        </div>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-white/5">
+                                        <div className="text-xs text-gray-400 mb-1">Weekly YAKA</div>
+                                        <div className="text-xl font-bold text-green-400">
+                                            {weeklyEmissions !== undefined
+                                                ? `${(Number(weeklyEmissions) / 1e18 / 1000).toFixed(0)}K`
+                                                : '...'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm text-blue-400 mb-4">
+                                    <div className="font-medium mb-1">📋 How LP Fees Flow to Voters:</div>
+                                    <div className="text-xs text-gray-400 space-y-1">
+                                        <div>1. Pool collects trading fees (0.01-0.30%)</div>
+                                        <div>2. <code className="bg-white/10 px-1 rounded">distribute()</code> calls each gauge</div>
+                                        <div>3. Gauges claim fees from pools → send to FeesVotingReward</div>
+                                        <div>4. Voters can claim fee rewards proportional to their votes</div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleDistribute}
+                                    disabled={!voterPoolsLength}
+                                    className="w-full py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50"
+                                >
+                                    💰 Distribute Rewards to All Gauges ({voterPoolsLength?.toString() || '0'} pools)
+                                </button>
+                            </div>
+
                             {/* Contract Addresses */}
                             <div className="glass-card p-6">
                                 <h3 className="text-lg font-semibold mb-4">Contract Addresses</h3>
