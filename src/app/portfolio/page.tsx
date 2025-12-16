@@ -117,6 +117,8 @@ export default function PortfolioPage() {
     const [selectedPosition, setSelectedPosition] = useState<typeof clPositions[0] | null>(null);
     const [amount0ToAdd, setAmount0ToAdd] = useState('');
     const [amount1ToAdd, setAmount1ToAdd] = useState('');
+    const [balance0, setBalance0] = useState<string>('0');
+    const [balance1, setBalance1] = useState<string>('0');
 
     // Contract write hook
     const { writeContractAsync } = useWriteContract();
@@ -124,6 +126,62 @@ export default function PortfolioPage() {
     // Get CL and V2 positions
     const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
     const { positions: v2Positions } = useV2Positions();
+
+    // Fetch balances when modal opens
+    useEffect(() => {
+        const fetchBalances = async () => {
+            if (!address || !selectedPosition || !showIncreaseLiquidityModal) {
+                setBalance0('0');
+                setBalance1('0');
+                return;
+            }
+
+            // Fetch balance of token0
+            try {
+                const balanceSelector = '0x70a08231';
+                const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
+
+                const [bal0Response, bal1Response] = await Promise.all([
+                    fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_call',
+                            params: [{ to: selectedPosition.token0, data: `${balanceSelector}${addressPadded}` }, 'latest'],
+                            id: 1,
+                        }),
+                    }).then(r => r.json()),
+                    fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_call',
+                            params: [{ to: selectedPosition.token1, data: `${balanceSelector}${addressPadded}` }, 'latest'],
+                            id: 2,
+                        }),
+                    }).then(r => r.json()),
+                ]);
+
+                const t0 = getTokenInfo(selectedPosition.token0);
+                const t1 = getTokenInfo(selectedPosition.token1);
+
+                if (bal0Response.result) {
+                    const bal0Wei = BigInt(bal0Response.result);
+                    setBalance0((Number(bal0Wei) / (10 ** t0.decimals)).toFixed(6));
+                }
+                if (bal1Response.result) {
+                    const bal1Wei = BigInt(bal1Response.result);
+                    setBalance1((Number(bal1Wei) / (10 ** t1.decimals)).toFixed(6));
+                }
+            } catch (err) {
+                console.error('Error fetching balances:', err);
+            }
+        };
+
+        fetchBalances();
+    }, [address, selectedPosition, showIncreaseLiquidityModal]);
 
     // Fetch veNFT data
     useEffect(() => {
@@ -1349,9 +1407,18 @@ export default function PortfolioPage() {
                         </div>
 
                         <div className="mb-4">
-                            <label className="block text-sm text-gray-400 mb-2">
-                                {getTokenInfo(selectedPosition.token0).symbol} Amount
-                            </label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="text-sm text-gray-400">
+                                    {getTokenInfo(selectedPosition.token0).symbol} Amount
+                                </label>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-gray-500">Balance: {balance0}</span>
+                                    <button
+                                        onClick={() => setAmount0ToAdd(balance0)}
+                                        className="text-primary hover:text-primary/80 font-medium"
+                                    >MAX</button>
+                                </div>
+                            </div>
                             <input
                                 type="number"
                                 value={amount0ToAdd}
@@ -1362,9 +1429,18 @@ export default function PortfolioPage() {
                         </div>
 
                         <div className="mb-6">
-                            <label className="block text-sm text-gray-400 mb-2">
-                                {getTokenInfo(selectedPosition.token1).symbol} Amount
-                            </label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="text-sm text-gray-400">
+                                    {getTokenInfo(selectedPosition.token1).symbol} Amount
+                                </label>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-gray-500">Balance: {balance1}</span>
+                                    <button
+                                        onClick={() => setAmount1ToAdd(balance1)}
+                                        className="text-primary hover:text-primary/80 font-medium"
+                                    >MAX</button>
+                                </div>
+                            </div>
                             <input
                                 type="number"
                                 value={amount1ToAdd}
