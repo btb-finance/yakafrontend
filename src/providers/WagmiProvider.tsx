@@ -6,7 +6,6 @@ import {
     RainbowKitProvider,
     darkTheme,
     getDefaultConfig,
-    connectorsForWallets
 } from '@rainbow-me/rainbowkit';
 import {
     injectedWallet,
@@ -24,35 +23,6 @@ import '@rainbow-me/rainbowkit/styles.css';
 
 const projectId = 'ecd20f8c23408a4397afc0f5466eb6b6';
 
-// Configure wallet connectors with explicit in-app browser support
-const connectors = connectorsForWallets(
-    [
-        {
-            groupName: 'Popular',
-            wallets: [
-                injectedWallet,      // Auto-detects any injected wallet (in-app browsers)
-                metaMaskWallet,
-                trustWallet,
-                safepalWallet,
-                okxWallet,
-                coinbaseWallet,
-            ],
-        },
-        {
-            groupName: 'More',
-            wallets: [
-                walletConnectWallet,
-                rainbowWallet,
-                bitgetWallet,
-            ],
-        },
-    ],
-    {
-        appName: 'YAKA Finance',
-        projectId,
-    }
-);
-
 const config = getDefaultConfig({
     appName: 'YAKA Finance',
     projectId,
@@ -61,11 +31,13 @@ const config = getDefaultConfig({
         [sei.id]: http('https://evm-rpc.sei-apis.com'),
     },
     ssr: true,
+    // EIP-6963: Enable multi-injected provider discovery for better wallet detection
+    multiInjectedProviderDiscovery: true,
     wallets: [
         {
             groupName: 'Popular',
             wallets: [
-                injectedWallet,
+                injectedWallet,      // Auto-detects any injected wallet (in-app browsers)
                 metaMaskWallet,
                 trustWallet,
                 safepalWallet,
@@ -106,3 +78,4 @@ export function Providers({ children }: { children: React.ReactNode }) {
         </WagmiProvider>
     );
 }
+
