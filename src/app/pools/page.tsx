@@ -494,8 +494,8 @@ export default function PoolsPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
             >
-                {/* Table Header */}
-                <div className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
+                {/* Table Header - Desktop only */}
+                <div className="hidden md:grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
                     <div className="col-span-4">Pool</div>
                     <div className="col-span-2 text-center">Type</div>
                     <div className="col-span-2 text-center">Rewards</div>
@@ -523,46 +523,55 @@ export default function PoolsPage() {
                     sortedPools.map((pool, index) => (
                         <motion.div
                             key={pool.address}
-                            className="grid grid-cols-12 gap-4 p-5 border-b border-white/5 hover:bg-white/5 transition items-center"
+                            className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 p-4 md:p-5 border-b border-white/5 hover:bg-white/5 transition"
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 + index * 0.02 }}
                         >
-                            {/* Pool */}
-                            <div className="col-span-4 flex items-center gap-3">
+                            {/* Pool Info - Row 1 on mobile */}
+                            <div className="md:col-span-4 flex items-center gap-3">
                                 <div className="relative">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
+                                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
                                         ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
                                         : 'bg-gradient-to-br from-primary to-secondary'
                                         }`}>
                                         {pool.token0.symbol[0]}
                                     </div>
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold absolute left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm font-bold absolute left-5 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
                                         ? 'bg-gradient-to-br from-blue-500 to-purple-500'
                                         : 'bg-gradient-to-br from-secondary to-accent'
                                         }`}>
                                         {pool.token1.symbol[0]}
                                     </div>
                                 </div>
-                                <div className="ml-4">
-                                    <div className="font-semibold text-lg">
+                                <div className="ml-3 md:ml-4 flex-1">
+                                    <div className="font-semibold text-base md:text-lg">
                                         {pool.token0.symbol}/{pool.token1.symbol}
                                     </div>
-                                    {pool.poolType === 'CL' && pool.tickSpacing && (
-                                        <div className="text-xs text-cyan-400">
-                                            {getFeeTier(pool.tickSpacing)} fee
-                                        </div>
-                                    )}
-                                    {pool.poolType === 'V2' && (
-                                        <div className="text-xs text-gray-500">
-                                            {pool.stable ? 'Stable' : 'Volatile'}
-                                        </div>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        {pool.poolType === 'CL' && pool.tickSpacing && (
+                                            <span className="text-xs text-cyan-400">
+                                                {getFeeTier(pool.tickSpacing)} fee
+                                            </span>
+                                        )}
+                                        {pool.poolType === 'V2' && (
+                                            <span className="text-xs text-gray-500">
+                                                {pool.stable ? 'Stable' : 'Volatile'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
+                                {/* Mobile: Type badge inline */}
+                                <span className={`md:hidden text-xs px-2 py-1 rounded-full font-medium ${pool.poolType === 'CL'
+                                    ? 'bg-cyan-500/20 text-cyan-400'
+                                    : 'bg-primary/20 text-primary'
+                                    }`}>
+                                    {pool.poolType === 'CL' ? 'V3' : 'V2'}
+                                </span>
                             </div>
 
-                            {/* Type */}
-                            <div className="col-span-2 text-center">
+                            {/* Desktop: Type */}
+                            <div className="hidden md:flex md:col-span-2 items-center justify-center">
                                 <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${pool.poolType === 'CL'
                                     ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30'
                                     : 'bg-primary/20 text-primary border border-primary/30'
@@ -571,8 +580,8 @@ export default function PoolsPage() {
                                 </span>
                             </div>
 
-                            {/* Rewards - Staking Available */}
-                            <div className="col-span-2 text-center">
+                            {/* Desktop: Rewards */}
+                            <div className="hidden md:flex md:col-span-2 items-center justify-center">
                                 {pool.poolType === 'CL' ? (
                                     <Tooltip content="Stake LP to earn YAKA emissions">
                                         <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 cursor-help">
@@ -584,13 +593,34 @@ export default function PoolsPage() {
                                 )}
                             </div>
 
-                            {/* TVL */}
-                            <div className="col-span-2 text-right">
+                            {/* Desktop: TVL */}
+                            <div className="hidden md:flex md:col-span-2 items-center justify-end">
                                 <div className="font-semibold">{formatTVL(pool.tvl, pool)}</div>
                             </div>
 
-                            {/* Action */}
-                            <div className="col-span-2 text-center">
+                            {/* Mobile: TVL + Action Row */}
+                            <div className="flex md:hidden items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs text-gray-500">TVL:</span>
+                                    <span className="font-medium text-sm">{formatTVL(pool.tvl, pool)}</span>
+                                    {pool.poolType === 'CL' && (
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
+                                            🔥 YAKA
+                                        </span>
+                                    )}
+                                </div>
+                                <Link href={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}&type=${pool.poolType.toLowerCase()}${pool.poolType === 'CL' && pool.tickSpacing ? `&tickSpacing=${pool.tickSpacing}` : ''}${pool.poolType === 'V2' ? `&stable=${pool.stable}` : ''}`}>
+                                    <button className={`px-3 py-2 rounded-lg font-medium text-sm ${pool.poolType === 'CL'
+                                        ? 'bg-cyan-500/20 text-cyan-400'
+                                        : 'bg-primary/20 text-primary'
+                                        }`}>
+                                        + Add LP
+                                    </button>
+                                </Link>
+                            </div>
+
+                            {/* Desktop: Action */}
+                            <div className="hidden md:flex md:col-span-2 items-center justify-center">
                                 <Link href={`/liquidity?token0=${pool.token0.address}&token1=${pool.token1.address}&type=${pool.poolType.toLowerCase()}${pool.poolType === 'CL' && pool.tickSpacing ? `&tickSpacing=${pool.tickSpacing}` : ''}${pool.poolType === 'V2' ? `&stable=${pool.stable}` : ''}`}>
                                     <motion.button
                                         className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'

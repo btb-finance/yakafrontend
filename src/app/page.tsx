@@ -8,6 +8,8 @@ import { V2_CONTRACTS } from '@/config/contracts';
 import { POOL_FACTORY_ABI } from '@/config/abis';
 import { FeatureCard } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
+import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
+import { useVeYAKA } from '@/hooks/useVeYAKA';
 
 // Voter ABI for getting gauge count
 const VOTER_ABI = [
@@ -53,10 +55,19 @@ export default function Home() {
     functionName: 'supply',
   });
 
+  // Portfolio data hooks (only useful when connected)
+  const { positions: clPositions, positionCount: clCount } = useCLPositions();
+  const { positions: v2Positions } = useV2Positions();
+  const { positions: vePositions, veNFTCount } = useVeYAKA();
+
   // Format veSupply
   const formattedVeSupply = veSupply
     ? parseFloat(formatUnits(veSupply, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })
     : '--';
+
+  // Portfolio counts
+  const totalLPPositions = (clCount || 0) + (v2Positions?.length || 0);
+  const totalVeNFTs = veNFTCount || 0;
 
   const features = [
     {
@@ -405,35 +416,35 @@ export default function Home() {
                     <span className="text-primary">💧</span>
                     <span className="text-xs text-gray-400">LP Positions</span>
                   </div>
-                  <div className="text-2xl font-bold">--</div>
-                  <div className="text-xs text-gray-500">View in Portfolio</div>
+                  <div className="text-2xl font-bold">{totalLPPositions || 0}</div>
+                  <div className="text-xs text-gray-500">CL + V2</div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-500/5 border border-yellow-500/20">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-yellow-400">⚡</span>
-                    <span className="text-xs text-gray-400">Staked</span>
+                    <span className="text-xs text-gray-400">CL Positions</span>
                   </div>
-                  <div className="text-2xl font-bold">--</div>
-                  <div className="text-xs text-gray-500">Earning YAKA</div>
+                  <div className="text-2xl font-bold">{clCount || 0}</div>
+                  <div className="text-xs text-gray-500">Concentrated</div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/5 border border-green-500/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-green-400">🎁</span>
-                    <span className="text-xs text-gray-400">Pending Rewards</span>
+                    <span className="text-green-400">💧</span>
+                    <span className="text-xs text-gray-400">V2 Positions</span>
                   </div>
-                  <div className="text-2xl font-bold text-green-400">--</div>
-                  <div className="text-xs text-gray-500">YAKA to claim</div>
+                  <div className="text-2xl font-bold">{v2Positions?.length || 0}</div>
+                  <div className="text-xs text-gray-500">Classic AMM</div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-secondary">🔐</span>
-                    <span className="text-xs text-gray-400">Locked YAKA</span>
+                    <span className="text-xs text-gray-400">veNFTs</span>
                   </div>
-                  <div className="text-2xl font-bold">--</div>
-                  <div className="text-xs text-gray-500">veNFTs</div>
+                  <div className="text-2xl font-bold">{totalVeNFTs}</div>
+                  <div className="text-xs text-gray-500">Vote Power</div>
                 </div>
               </div>
 

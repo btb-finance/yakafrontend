@@ -454,7 +454,7 @@ export default function VotePage() {
                                 </div>
 
                                 {/* Table Header */}
-                                <div className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 text-sm text-gray-400 font-medium">
+                                <div className="hidden md:grid grid-cols-12 gap-4 p-4 border-b border-white/5 text-sm text-gray-400 font-medium">
                                     <div className="col-span-4">Pool</div>
                                     <div className="col-span-2 text-right">Current Share</div>
                                     <div className="col-span-3 text-right">Total Votes</div>
@@ -473,12 +473,13 @@ export default function VotePage() {
                                 {gauges.map((gauge, index) => (
                                     <motion.div
                                         key={gauge.pool}
-                                        className="grid grid-cols-12 gap-4 p-4 border-b border-white/5 hover:bg-white/5 transition items-center"
+                                        className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 p-4 border-b border-white/5 hover:bg-white/5 transition"
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.03 }}
                                     >
-                                        <div className="col-span-4 flex items-center gap-3">
+                                        {/* Pool Info - Full width on mobile */}
+                                        <div className="md:col-span-4 flex items-center gap-3">
                                             <div className="relative">
                                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-sm font-bold">
                                                     {gauge.symbol0[0]}
@@ -487,7 +488,7 @@ export default function VotePage() {
                                                     {gauge.symbol1[0]}
                                                 </div>
                                             </div>
-                                            <div className="ml-3">
+                                            <div className="ml-3 flex-1">
                                                 <span className="font-semibold">{gauge.symbol0}/{gauge.symbol1}</span>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <span className={`text-xs px-2 py-0.5 rounded-full ${gauge.poolType === 'CL' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-primary/20 text-primary'}`}>
@@ -500,23 +501,33 @@ export default function VotePage() {
                                                     )}
                                                 </div>
                                             </div>
+                                            {/* Mobile: Show share inline */}
+                                            <span className={`md:hidden apr-badge ${gauge.weightPercent > 10 ? 'apr-badge-high' : gauge.weightPercent > 2 ? 'apr-badge-medium' : 'apr-badge-low'}`}>
+                                                {gauge.weightPercent.toFixed(1)}%
+                                            </span>
                                         </div>
-                                        <div className="col-span-2 text-right">
+
+                                        {/* Desktop only: Current Share */}
+                                        <div className="hidden md:flex md:col-span-2 items-center justify-end text-right">
                                             <span className={`apr-badge ${gauge.weightPercent > 10 ? 'apr-badge-high' : gauge.weightPercent > 2 ? 'apr-badge-medium' : 'apr-badge-low'}`}>
                                                 {gauge.weightPercent.toFixed(2)}%
                                             </span>
                                         </div>
-                                        <div className="col-span-3 text-right text-gray-400 text-sm">
+
+                                        {/* Desktop only: Total Votes */}
+                                        <div className="hidden md:flex md:col-span-3 items-center justify-end text-right text-gray-400 text-sm">
                                             {parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </div>
-                                        <div className="col-span-3 flex items-center justify-center gap-2">
+
+                                        {/* Vote Input - Full width on mobile */}
+                                        <div className="md:col-span-3 flex items-center justify-between md:justify-center gap-2">
                                             <div className="flex gap-1">
                                                 {[100, 50, 25].map((pct) => (
                                                     <button
                                                         key={pct}
                                                         onClick={() => updateVoteWeight(gauge.pool, pct)}
                                                         disabled={!selectedVeNFT || !gauge.isAlive}
-                                                        className={`px-2 py-1.5 text-xs rounded-lg transition ${voteWeights[gauge.pool] === pct
+                                                        className={`px-2.5 py-1.5 text-xs rounded-lg transition ${voteWeights[gauge.pool] === pct
                                                             ? 'bg-primary text-white'
                                                             : 'bg-white/5 hover:bg-white/10 text-gray-400'
                                                             } disabled:opacity-40 disabled:cursor-not-allowed`}
@@ -532,7 +543,7 @@ export default function VotePage() {
                                                 value={voteWeights[gauge.pool] || ''}
                                                 onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
                                                 disabled={!selectedVeNFT || !gauge.isAlive}
-                                                className="w-14 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
+                                                className="w-16 p-2 rounded-lg bg-white/5 text-center text-sm outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
                                             />
                                         </div>
                                     </motion.div>

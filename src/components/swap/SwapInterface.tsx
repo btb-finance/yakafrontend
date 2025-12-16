@@ -245,16 +245,16 @@ export function SwapInterface() {
     return (
         <div className="swap-card max-w-md mx-auto">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">Swap</h2>
-                <div className="flex items-center gap-2">
-                    {/* Best Route Badge */}
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+                <h2 className="text-lg md:text-xl font-semibold">Swap</h2>
+                <div className="flex items-center gap-1.5 md:gap-2">
+                    {/* Best Route Badge - hide "Best:" text on mobile */}
                     {bestRoute && (
                         <span className={`px-2 py-1 text-xs rounded-lg ${bestRoute.type === 'v3'
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-primary/20 text-primary'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-primary/20 text-primary'
                             }`}>
-                            Best: {bestRoute.feeLabel}
+                            <span className="hidden md:inline">Best: </span>{bestRoute.feeLabel}
                         </span>
                     )}
                     {noRouteFound && (
@@ -264,7 +264,8 @@ export function SwapInterface() {
                     )}
                     {isQuoting && (
                         <span className="px-2 py-1 text-xs rounded-lg bg-white/10 text-gray-400">
-                            Finding best...
+                            <span className="hidden md:inline">Finding best...</span>
+                            <span className="md:hidden">...</span>
                         </span>
                     )}
                     <SwapSettings

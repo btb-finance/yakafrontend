@@ -1093,7 +1093,7 @@ function LiquidityPageContent() {
                         {/* Pool Type Selection */}
                         <div className="mb-6">
                             <label className="text-sm text-gray-400 mb-3 block">Choose Pool Type</label>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                                 <button
                                     onClick={() => setPoolType('v2')}
                                     className={`p-4 rounded-xl text-left transition-all ${poolType === 'v2'
@@ -1156,7 +1156,7 @@ function LiquidityPageContent() {
                         {poolType === 'cl' && (
                             <div className="mb-6">
                                 <label className="text-sm text-gray-400 mb-2 block">Fee Tier</label>
-                                <div className="grid grid-cols-4 gap-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     {[
                                         { spacing: 1, fee: '0.01%' },
                                         { spacing: 50, fee: '0.05%' },
@@ -1240,7 +1240,7 @@ function LiquidityPageContent() {
                                     {/* Preset Range Buttons */}
                                     <div className="mb-6">
                                         <div className="text-xs text-gray-400 mb-2">Quick Range Presets</div>
-                                        <div className="grid grid-cols-5 gap-2">
+                                        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                                             <button
                                                 onClick={() => { setPriceLower(''); setPriceUpper(''); }}
                                                 className={`py-3 text-sm rounded-xl transition font-medium ${!priceLower && !priceUpper
@@ -1421,13 +1421,13 @@ function LiquidityPageContent() {
                                 </span>
                             </div>
                             <div className="token-input-row">
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
                                     <input
                                         type="text"
                                         value={amountA}
                                         onChange={(e) => setAmountA(e.target.value)}
                                         placeholder="0.0"
-                                        className="flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600"
+                                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
                                     />
                                     <button onClick={() => setSelectorOpen('A')} className="token-select">
                                         {tokenA ? <span className="font-semibold">{tokenA.symbol}</span> : <span className="text-primary">Select</span>}
@@ -1462,14 +1462,14 @@ function LiquidityPageContent() {
                                 </span>
                             </div>
                             <div className="token-input-row">
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
                                     <input
                                         type="text"
                                         value={amountB}
                                         onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
                                         readOnly={poolType === 'cl'}
                                         placeholder={poolType === 'cl' ? 'Enter Token A first' : '0.0'}
-                                        className={`flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600 ${poolType === 'cl' ? 'cursor-not-allowed text-gray-400' : ''}`}
+                                        className={`flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600 ${poolType === 'cl' ? 'cursor-not-allowed text-gray-400' : ''}`}
                                     />
                                     <button onClick={() => setSelectorOpen('B')} className="token-select">
                                         {tokenB ? <span className="font-semibold">{tokenB.symbol}</span> : <span className="text-primary">Select</span>}

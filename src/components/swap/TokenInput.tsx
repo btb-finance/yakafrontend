@@ -64,7 +64,7 @@ export function TokenInput({
                     </span>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     <input
                         type="text"
                         inputMode="decimal"
@@ -72,7 +72,7 @@ export function TokenInput({
                         onChange={handleAmountChange}
                         placeholder="0.0"
                         disabled={disabled}
-                        className="flex-1 bg-transparent text-2xl font-medium outline-none placeholder-gray-600"
+                        className="flex-1 min-w-0 bg-transparent text-xl md:text-2xl font-medium outline-none placeholder-gray-600"
                     />
 
                     <motion.button
