@@ -89,6 +89,11 @@ function LiquidityPageContent() {
     const [clPoolAddress, setClPoolAddress] = useState<string | null>(null);
     const [initialPrice, setInitialPrice] = useState(''); // For new pool creation
 
+    // Transaction progress state
+    type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'done' | 'error';
+    const [txProgress, setTxProgress] = useState<TxStep>('idle');
+    const [txError, setTxError] = useState<string | null>(null);
+
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
     const { balance: balanceA } = useTokenBalance(tokenA);
@@ -700,6 +705,9 @@ function LiquidityPageContent() {
             initialPrice
         });
 
+        setTxProgress('idle');
+        setTxError(null);
+
         try {
             // For CL pools, we need to use WSEI instead of native SEI
             const actualTokenA = tokenA.isNative ? WSEI : tokenA;
@@ -873,6 +881,7 @@ function LiquidityPageContent() {
                     (tokenB.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase());
                 if (!token0IsNative) {
                     console.log('Approving token0:', token0.symbol, 'amount:', amount0Wei.toString());
+                    setTxProgress('approving0');
                     await writeContractAsync({
                         address: token0.address as Address,
                         abi: ERC20_ABI,
@@ -887,6 +896,7 @@ function LiquidityPageContent() {
                 (tokenB.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase());
             if (!token1IsNative) {
                 console.log('Approving token1:', token1.symbol, 'amount:', amount1Wei.toString());
+                setTxProgress('approving1');
                 await writeContractAsync({
                     address: token1.address as Address,
                     abi: ERC20_ABI,
@@ -959,6 +969,7 @@ function LiquidityPageContent() {
             };
             console.log('FULL TX REQUEST:', JSON.stringify(txRequest, null, 2));
 
+            setTxProgress('minting');
             const hash = await writeContractAsync({
                 address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                 abi: NFT_POSITION_MANAGER_ABI,
@@ -986,6 +997,7 @@ function LiquidityPageContent() {
 
             // Show stake prompt after successful mint
             setShowStakePrompt(true);
+            setTxProgress('done');
 
             // Refetch positions to get the new one
             setTimeout(() => {
@@ -993,6 +1005,8 @@ function LiquidityPageContent() {
             }, 2000); // Wait for tx to confirm
         } catch (err: any) {
             console.error('CL mint error:', err);
+            setTxProgress('error');
+            setTxError(err?.message || 'Transaction failed');
         }
     };
 
@@ -1478,6 +1492,38 @@ function LiquidityPageContent() {
                                     <span className="text-gray-400">Type</span>
                                     <span>{poolType === 'cl' ? 'Concentrated' : stable ? 'Stable' : 'Volatile'}</span>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Transaction Progress */}
+                        {txProgress !== 'idle' && (
+                            <div className={`mb-6 p-4 rounded-xl ${txProgress === 'error' ? 'bg-red-500/10 border border-red-500/30' : txProgress === 'done' ? 'bg-green-500/10 border border-green-500/30' : 'bg-primary/10 border border-primary/30'}`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    {txProgress === 'done' ? (
+                                        <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs">✓</div>
+                                    ) : txProgress === 'error' ? (
+                                        <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white text-xs">✕</div>
+                                    ) : (
+                                        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    )}
+                                    <span className="font-medium">
+                                        {txProgress === 'approving0' && 'Approving Token 1...'}
+                                        {txProgress === 'approving1' && 'Approving Token 2...'}
+                                        {txProgress === 'minting' && 'Creating Position...'}
+                                        {txProgress === 'done' && 'Position Created Successfully!'}
+                                        {txProgress === 'error' && 'Transaction Failed'}
+                                    </span>
+                                </div>
+                                {txProgress !== 'done' && txProgress !== 'error' && (
+                                    <div className="flex gap-2 mt-3">
+                                        <div className={`flex-1 h-1.5 rounded-full ${txProgress === 'approving0' || txProgress === 'approving1' || txProgress === 'minting' ? 'bg-primary' : 'bg-white/10'}`} />
+                                        <div className={`flex-1 h-1.5 rounded-full ${txProgress === 'approving1' || txProgress === 'minting' ? 'bg-primary' : 'bg-white/10'}`} />
+                                        <div className={`flex-1 h-1.5 rounded-full ${txProgress === 'minting' ? 'bg-primary' : 'bg-white/10'}`} />
+                                    </div>
+                                )}
+                                {txError && (
+                                    <p className="text-sm text-red-400 mt-2">{txError}</p>
+                                )}
                             </div>
                         )}
 
