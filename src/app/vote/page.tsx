@@ -472,9 +472,10 @@ export default function VotePage() {
 
                                 {/* Table Header */}
                                 <div className="hidden md:grid grid-cols-12 gap-4 p-4 border-b border-white/5 text-sm text-gray-400 font-medium">
-                                    <div className="col-span-4">Pool</div>
+                                    <div className="col-span-3">Pool</div>
+                                    <div className="col-span-2 text-center">Incentives</div>
                                     <div className="col-span-2 text-right">Current Share</div>
-                                    <div className="col-span-3 text-right">Total Votes</div>
+                                    <div className="col-span-2 text-right">Total Votes</div>
                                     <div className="col-span-3 text-center">{positions.length > 0 ? 'Your Vote %' : 'Status'}</div>
                                 </div>
 
@@ -495,8 +496,8 @@ export default function VotePage() {
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.03 }}
                                     >
-                                        {/* Pool Info - Full width on mobile */}
-                                        <div className="md:col-span-4 flex items-center gap-3">
+                                        {/* Pool Info */}
+                                        <div className="md:col-span-3 flex items-center gap-3">
                                             <div className="relative">
                                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-sm font-bold">
                                                     {gauge.symbol0[0]}
@@ -518,21 +519,36 @@ export default function VotePage() {
                                                     )}
                                                 </div>
                                             </div>
-                                            {/* Mobile: Show share inline */}
-                                            <span className={`md:hidden apr-badge ${gauge.weightPercent > 10 ? 'apr-badge-high' : gauge.weightPercent > 2 ? 'apr-badge-medium' : 'apr-badge-low'}`}>
-                                                {gauge.weightPercent.toFixed(1)}%
-                                            </span>
                                         </div>
 
-                                        {/* Desktop only: Current Share */}
+                                        {/* Incentives / Rewards Column */}
+                                        <div className="md:col-span-2 flex items-center justify-center">
+                                            {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1 justify-center">
+                                                    {gauge.rewardTokens.map((reward, idx) => (
+                                                        <span
+                                                            key={idx}
+                                                            className="text-xs px-2 py-1 rounded-lg bg-green-500/20 text-green-400 font-medium"
+                                                            title={`${formatUnits(reward.amount, reward.decimals)} ${reward.symbol}`}
+                                                        >
+                                                            {parseFloat(formatUnits(reward.amount, reward.decimals)).toFixed(reward.decimals > 6 ? 2 : 4)} {reward.symbol}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-500">-</span>
+                                            )}
+                                        </div>
+
+                                        {/* Current Share */}
                                         <div className="hidden md:flex md:col-span-2 items-center justify-end text-right">
                                             <span className={`apr-badge ${gauge.weightPercent > 10 ? 'apr-badge-high' : gauge.weightPercent > 2 ? 'apr-badge-medium' : 'apr-badge-low'}`}>
                                                 {gauge.weightPercent.toFixed(2)}%
                                             </span>
                                         </div>
 
-                                        {/* Desktop only: Total Votes */}
-                                        <div className="hidden md:flex md:col-span-3 items-center justify-end text-right text-gray-400 text-sm">
+                                        {/* Total Votes */}
+                                        <div className="hidden md:flex md:col-span-2 items-center justify-end text-right text-gray-400 text-sm">
                                             {parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                         </div>
 

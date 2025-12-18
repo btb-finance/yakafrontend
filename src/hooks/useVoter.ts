@@ -142,13 +142,26 @@ const ERC20_ABI = [
     },
 ] as const;
 
-// Known token symbols
-const KNOWN_TOKENS: Record<string, string> = {
-    '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7': 'WSEI',
-    '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': 'USDC',
-    '0xd7b207b7c2c8fc32f7ab448d73cfb6be212f0dcf': 'YAKA',
-    '0x0000000000000000000000000000000000000000': 'SEI',
+// Known token symbols and decimals
+const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
+    '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7': { symbol: 'WSEI', decimals: 18 },
+    '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': { symbol: 'USDC', decimals: 6 },
+    '0xd7b207b7c2c8fc32f7ab448d73cfb6be212f0dcf': { symbol: 'YAKA', decimals: 18 },
+    '0x0000000000000000000000000000000000000000': { symbol: 'SEI', decimals: 18 },
+    '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': { symbol: 'USDT', decimals: 6 },
 };
+
+// Helper to get token symbol (backwards compatible)
+const getTokenSymbol = (address: string): string => {
+    return KNOWN_TOKENS[address.toLowerCase()]?.symbol || address.slice(0, 6);
+};
+
+export interface RewardToken {
+    address: Address;
+    symbol: string;
+    amount: bigint;
+    decimals: number;
+}
 
 export interface GaugeInfo {
     pool: Address;
@@ -164,6 +177,7 @@ export interface GaugeInfo {
     isAlive: boolean;
     feeReward: Address;
     bribeReward: Address;
+    rewardTokens: RewardToken[];
 }
 
 export function useVoter() {
@@ -324,9 +338,9 @@ export function useVoter() {
                         }
                     }
 
-                    // Get symbols
-                    const symbol0 = KNOWN_TOKENS[token0.toLowerCase()] || token0.slice(0, 6);
-                    const symbol1 = KNOWN_TOKENS[token1.toLowerCase()] || token1.slice(0, 6);
+                    // Get symbols using helper
+                    const symbol0 = getTokenSymbol(token0);
+                    const symbol1 = getTokenSymbol(token1);
 
                     // Check if alive - isAlive(address) selector 0x1703e5f9
                     const aliveRes = await fetch('https://evm-rpc.sei-apis.com', {
@@ -393,6 +407,74 @@ export function useVoter() {
                         // Ignore bribe reward fetch errors
                     }
 
+                    // Fetch reward tokens from bribe contract
+                    const rewardTokens: RewardToken[] = [];
+                    if (bribeReward !== '0x0000000000000000000000000000000000000000') {
+                        try {
+                            // Get rewards list length - rewardsListLength() selector 0xe5748213
+                            const lengthRes = await fetch('https://evm-rpc.sei-apis.com', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    jsonrpc: '2.0', id: 11,
+                                    method: 'eth_call',
+                                    params: [{ to: bribeReward, data: '0xe5748213' }, 'latest'],
+                                }),
+                            }).then(r => r.json());
+
+                            const rewardsLength = lengthRes.result ? parseInt(lengthRes.result, 16) : 0;
+
+                            // Current epoch start (Thursday 00:00 UTC)
+                            const WEEK = 604800;
+                            const currentEpoch = Math.floor(Date.now() / 1000 / WEEK) * WEEK;
+
+                            // Fetch each reward token and its amount
+                            for (let r = 0; r < Math.min(rewardsLength, 5); r++) {
+                                // rewards(uint256) selector 0xf301af42
+                                const tokenRes = await fetch('https://evm-rpc.sei-apis.com', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        jsonrpc: '2.0', id: 12,
+                                        method: 'eth_call',
+                                        params: [{ to: bribeReward, data: `0xf301af42${r.toString(16).padStart(64, '0')}` }, 'latest'],
+                                    }),
+                                }).then(res => res.json());
+
+                                if (!tokenRes.result) continue;
+                                const rewardTokenAddr = ('0x' + tokenRes.result.slice(-40)) as Address;
+                                if (rewardTokenAddr === '0x0000000000000000000000000000000000000000') continue;
+
+                                // Get token balance in bribe contract - balanceOf(address) on the token
+                                const balRes = await fetch('https://evm-rpc.sei-apis.com', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        jsonrpc: '2.0', id: 13,
+                                        method: 'eth_call',
+                                        params: [{
+                                            to: rewardTokenAddr,
+                                            data: `0x70a08231${bribeReward.slice(2).padStart(64, '0')}`
+                                        }, 'latest'],
+                                    }),
+                                }).then(res => res.json());
+
+                                const balance = balRes.result ? BigInt(balRes.result) : BigInt(0);
+                                if (balance > BigInt(0)) {
+                                    const tokenInfo = KNOWN_TOKENS[rewardTokenAddr.toLowerCase()] || { symbol: rewardTokenAddr.slice(0, 6), decimals: 18 };
+                                    rewardTokens.push({
+                                        address: rewardTokenAddr,
+                                        symbol: tokenInfo.symbol,
+                                        amount: balance,
+                                        decimals: tokenInfo.decimals,
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error fetching bribe rewards:', e);
+                        }
+                    }
+
                     const weightPercent = totalW > BigInt(0)
                         ? Number((weight * BigInt(10000)) / totalW) / 100
                         : 0;
@@ -411,6 +493,7 @@ export function useVoter() {
                         isAlive,
                         feeReward,
                         bribeReward,
+                        rewardTokens,
                     });
                 } catch (err) {
                     console.error(`Error fetching pool ${i}:`, err);
