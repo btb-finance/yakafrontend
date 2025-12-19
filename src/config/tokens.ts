@@ -145,6 +145,20 @@ export const BAT: Token = {
     decimals: 18,
 };
 
+export const YKP: Token = {
+    address: '0x888888B7aE1b196E4DfD25c992c9ad13358F0e24',
+    symbol: 'YKP',
+    name: 'YAKAPIE',
+    decimals: 18,
+};
+
+export const LARRY: Token = {
+    address: '0x888d81e3ea5E8362B5f69188CBCF34Fa8da4b888',
+    symbol: 'LARRY',
+    name: 'LARRY',
+    decimals: 18,
+};
+
 // Default token list
 export const DEFAULT_TOKEN_LIST: Token[] = [
     SEI,
@@ -164,6 +178,8 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     S8N,
     SUPERSEIZ,
     BAT,
+    YKP,
+    LARRY,
 ];
 
 // Token addresses for quick lookup
@@ -186,5 +202,7 @@ export const TOKEN_ADDRESSES = {
     S8N: S8N.address,
     SUPERSEIZ: SUPERSEIZ.address,
     BAT: BAT.address,
+    YKP: YKP.address,
+    LARRY: LARRY.address,
 } as const;
 
