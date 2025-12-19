@@ -952,8 +952,9 @@ function LiquidityPageContent() {
 
             // Mint position with slippage protection
             // For CL positions, actual amounts depend on current tick & price range
-            // Using 5% slippage as amounts can vary significantly based on range
-            const slippageBps = BigInt(500); // 5% = 500 basis points (increased from 0.5% which was too tight)
+            // Tick discretization can cause ~1% variance from calculated amounts
+            // Using 1% slippage as a safe balance between MEV protection and allowing natural variance
+            const slippageBps = BigInt(100); // 1% = 100 basis points
             const amount0Min = amount0Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
             const amount1Min = amount1Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
 
