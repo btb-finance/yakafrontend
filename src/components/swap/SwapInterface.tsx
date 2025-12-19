@@ -2,11 +2,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract } from 'wagmi';
-import { parseUnits, formatUnits, Address } from 'viem';
+import { useAccount, useReadContract, useWriteContract } from 'wagmi';
+import { parseUnits, formatUnits, Address, maxUint256 } from 'viem';
 import { Token, SEI, USDC, WSEI } from '@/config/tokens';
-import { V2_CONTRACTS } from '@/config/contracts';
-import { ROUTER_ABI } from '@/config/abis';
+import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
+import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
 import { SwapSettings } from './SwapSettings';
 import { useSwap } from '@/hooks/useSwap';
@@ -51,6 +51,7 @@ export function SwapInterface() {
 
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
+    const [isApproving, setIsApproving] = useState(false);
 
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
@@ -58,6 +59,7 @@ export function SwapInterface() {
     const { findBestRoute: findMultiHopRoute, getIntermediateToken } = useMixedRouteQuoter();
     const { formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
+    const { writeContractAsync } = useWriteContract();
 
     const isLoading = isLoadingV2 || isLoadingV3;
     const error = errorV2 || errorV3;
@@ -65,6 +67,51 @@ export function SwapInterface() {
     // Get actual token addresses (use WSEI for native SEI)
     const actualTokenIn = tokenIn?.isNative ? WSEI : tokenIn;
     const actualTokenOut = tokenOut?.isNative ? WSEI : tokenOut;
+
+    // Calculate amountInWei for allowance check
+    const amountInWei = actualTokenIn && amountIn && parseFloat(amountIn) > 0
+        ? parseUnits(amountIn, actualTokenIn.decimals)
+        : BigInt(0);
+
+    // Determine which router to check based on route type
+    const routerToApprove = bestRoute?.type === 'v2'
+        ? V2_CONTRACTS.Router
+        : CL_CONTRACTS.SwapRouter;
+
+    // ===== Pre-check allowance for the correct router =====
+    const { data: allowance, refetch: refetchAllowance } = useReadContract({
+        address: actualTokenIn?.address as Address,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: address && actualTokenIn ? [address, routerToApprove as Address] : undefined,
+        query: {
+            enabled: !!address && !!actualTokenIn && !tokenIn?.isNative,
+        },
+    });
+
+    // Check if approval is needed
+    const needsApproval = !tokenIn?.isNative &&
+        amountInWei > BigInt(0) &&
+        (allowance === undefined || (allowance as bigint) < amountInWei);
+
+    // Handle approve
+    const handleApprove = async () => {
+        if (!actualTokenIn || !address) return;
+
+        setIsApproving(true);
+        try {
+            await writeContractAsync({
+                address: actualTokenIn.address as Address,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [routerToApprove as Address, maxUint256],
+            });
+            await refetchAllowance();
+        } catch (err) {
+            console.error('Approve error:', err);
+        }
+        setIsApproving(false);
+    };
 
     // ===== V2 Volatile Quote (using wagmi hook) =====
     const v2VolatileRoute: Route[] = actualTokenIn && actualTokenOut ? [{
@@ -385,24 +432,36 @@ export function SwapInterface() {
                 </div>
             )}
 
-            {/* Swap Button */}
-            <motion.button
-                onClick={handleSwap}
-                disabled={!canSwap || isLoading}
-                className="w-full btn-primary py-4 mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                whileHover={canSwap ? { scale: 1.01 } : {}}
-                whileTap={canSwap ? { scale: 0.99 } : {}}
-            >
-                {isLoading
-                    ? 'Swapping...'
-                    : !isConnected
-                        ? 'Connect Wallet'
-                        : noRouteFound
-                            ? 'No Route Found'
-                            : !amountIn
-                                ? 'Enter Amount'
-                                : 'Swap'}
-            </motion.button>
+            {/* Approve/Swap Button */}
+            {needsApproval && canSwap ? (
+                <motion.button
+                    onClick={handleApprove}
+                    disabled={isApproving}
+                    className="w-full btn-primary py-4 mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                >
+                    {isApproving ? 'Approving...' : `Approve ${tokenIn?.symbol}`}
+                </motion.button>
+            ) : (
+                <motion.button
+                    onClick={handleSwap}
+                    disabled={!canSwap || isLoading}
+                    className="w-full btn-primary py-4 mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    whileHover={canSwap ? { scale: 1.01 } : {}}
+                    whileTap={canSwap ? { scale: 0.99 } : {}}
+                >
+                    {isLoading
+                        ? 'Swapping...'
+                        : !isConnected
+                            ? 'Connect Wallet'
+                            : noRouteFound
+                                ? 'No Route Found'
+                                : !amountIn
+                                    ? 'Enter Amount'
+                                    : 'Swap'}
+                </motion.button>
+            )}
 
             <div className="mt-4 text-center text-xs text-gray-500">
                 Powered by Wind Swap Smart Router (V2 + V3)
