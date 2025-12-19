@@ -864,20 +864,43 @@ function LiquidityPageContent() {
 
             // Approve tokens for CL mint
             // For CL, we always use WSEI (actualTokenA/B), so approve based on sorted token order
+            // Helper to check allowance
+            const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
+                const result = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: tokenAddr,
+                            data: `0xdd62ed3e${address!.slice(2).toLowerCase().padStart(64, '0')}${CL_CONTRACTS.NonfungiblePositionManager.slice(2).toLowerCase().padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+                const allowance = result.result ? BigInt(result.result) : BigInt(0);
+                return allowance >= amount;
+            };
+
             // If token0 is not WSEI (being sent as native), approve it
             if (token0.address.toLowerCase() !== WSEI.address.toLowerCase() || !tokenA.isNative && !tokenB.isNative) {
                 // Check if token0 is an ERC20 that needs approval (not native SEI being wrapped)
                 const token0IsNative = (tokenA.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase()) ||
                     (tokenB.isNative && token0.address.toLowerCase() === WSEI.address.toLowerCase());
                 if (!token0IsNative) {
-                    console.log('Approving token0:', token0.symbol, 'amount:', amount0Wei.toString());
-                    setTxProgress('approving0');
-                    await writeContractAsync({
-                        address: token0.address as Address,
-                        abi: ERC20_ABI,
-                        functionName: 'approve',
-                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Wei],
-                    });
+                    const hasAllowance = await checkAllowance(token0.address, amount0Wei);
+                    if (!hasAllowance) {
+                        console.log('Approving token0:', token0.symbol, 'amount:', amount0Wei.toString());
+                        setTxProgress('approving0');
+                        await writeContractAsync({
+                            address: token0.address as Address,
+                            abi: ERC20_ABI,
+                            functionName: 'approve',
+                            args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Wei],
+                        });
+                    } else {
+                        console.log('Token0 already approved:', token0.symbol);
+                    }
                 }
             }
 
@@ -885,14 +908,19 @@ function LiquidityPageContent() {
             const token1IsNative = (tokenA.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase()) ||
                 (tokenB.isNative && token1.address.toLowerCase() === WSEI.address.toLowerCase());
             if (!token1IsNative) {
-                console.log('Approving token1:', token1.symbol, 'amount:', amount1Wei.toString());
-                setTxProgress('approving1');
-                await writeContractAsync({
-                    address: token1.address as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Wei],
-                });
+                const hasAllowance = await checkAllowance(token1.address, amount1Wei);
+                if (!hasAllowance) {
+                    console.log('Approving token1:', token1.symbol, 'amount:', amount1Wei.toString());
+                    setTxProgress('approving1');
+                    await writeContractAsync({
+                        address: token1.address as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Wei],
+                    });
+                } else {
+                    console.log('Token1 already approved:', token1.symbol);
+                }
             }
 
             // Calculate native SEI value to send (if any token is native)
