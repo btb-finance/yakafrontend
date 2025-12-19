@@ -28,38 +28,6 @@ export default function SwapPage() {
             >
                 <SwapInterface />
             </motion.div>
-
-            {/* Info Section */}
-            <motion.div
-                className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-            >
-                <div className="glass-card p-6 text-center">
-                    <div className="text-3xl mb-3">⚡</div>
-                    <h3 className="font-semibold mb-2">Fastest Execution</h3>
-                    <p className="text-sm text-gray-400">
-                        Sub-second finality on Sei Network
-                    </p>
-                </div>
-
-                <div className="glass-card p-6 text-center">
-                    <div className="text-3xl mb-3">💎</div>
-                    <h3 className="font-semibold mb-2">Best Rates</h3>
-                    <p className="text-sm text-gray-400">
-                        Deep liquidity from V2 and CL pools
-                    </p>
-                </div>
-
-                <div className="glass-card p-6 text-center">
-                    <div className="text-3xl mb-3">🔒</div>
-                    <h3 className="font-semibold mb-2">Secure & Audited</h3>
-                    <p className="text-sm text-gray-400">
-                        Battle-tested contracts on Sei
-                    </p>
-                </div>
-            </motion.div>
         </div>
     );
 }
