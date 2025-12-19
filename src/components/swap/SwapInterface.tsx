@@ -124,7 +124,7 @@ export function SwapInterface() {
                 // === Get V3 Quote (auto-detects best pool) ===
                 const v3Quote = await getQuoteV3(tokenIn, tokenOut, amountIn);
                 if (v3Quote && v3Quote.poolExists && parseFloat(v3Quote.amountOut) > 0) {
-                    const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%', 2000: '1.00%' };
+                    const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
                     routes.push({
                         type: 'v3',
                         amountOut: v3Quote.amountOut,

@@ -982,7 +982,7 @@ export default function AdminPage() {
                                             {newFee ? `Fee: ${(parseInt(newFee) / 10000).toFixed(4)}%` : 'Enter fee amount'}
                                         </div>
                                         <div className="text-gray-400 text-xs mt-1">
-                                            Formula: bps ÷ 10000 = fee % | 9=0.009%, 45=0.045%, 250=0.25%, 500=0.05%, 3000=0.30%
+                                            Formula: bps ÷ 10000 = fee % | 90=0.009%, 450=0.045%, 2500=0.25%, 10000=1%
                                         </div>
                                     </div>
                                     <button
@@ -1118,7 +1118,7 @@ export default function AdminPage() {
                                 <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm text-blue-400 mb-4">
                                     <div className="font-medium mb-1">📋 How LP Fees Flow to Voters:</div>
                                     <div className="text-xs text-gray-400 space-y-1">
-                                        <div>1. Pool collects trading fees (0.01-0.30%)</div>
+                                        <div>1. Pool collects trading fees (0.009-1.00%)</div>
                                         <div>2. <code className="bg-white/10 px-1 rounded">distribute()</code> calls each gauge</div>
                                         <div>3. Gauges claim fees from pools → send to FeesVotingReward</div>
                                         <div>4. Voters can claim fee rewards proportional to their votes</div>
@@ -1177,17 +1177,10 @@ export default function AdminPage() {
                                             </tr>
                                             <tr className="border-b border-white/5 bg-green-500/5">
                                                 <td className="py-2 px-2 text-green-400 font-medium">Standard Pairs</td>
-                                                <td className="text-center py-2 px-2 font-mono">50</td>
+                                                <td className="text-center py-2 px-2 font-mono">80</td>
                                                 <td className="text-center py-2 px-2 font-mono text-green-400">2500</td>
                                                 <td className="text-center py-2 px-2 text-green-400 font-bold">0.25%</td>
                                                 <td className="text-center py-2 px-2 text-gray-500">vs 0.30%</td>
-                                            </tr>
-                                            <tr className="border-b border-white/5">
-                                                <td className="py-2 px-2">Volatile Pairs</td>
-                                                <td className="text-center py-2 px-2 font-mono">200</td>
-                                                <td className="text-center py-2 px-2 font-mono">3000</td>
-                                                <td className="text-center py-2 px-2">0.30%</td>
-                                                <td className="text-center py-2 px-2 text-gray-500">standard</td>
                                             </tr>
                                             <tr className="border-b border-white/5">
                                                 <td className="py-2 px-2">High Volatility / Exotic</td>
@@ -1226,16 +1219,10 @@ export default function AdminPage() {
                                             0.045% (ts=10)
                                         </button>
                                         <button
-                                            onClick={() => { setNewTickSpacing('50'); setNewFee('2500'); }}
+                                            onClick={() => { setNewTickSpacing('80'); setNewFee('2500'); }}
                                             className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
                                         >
-                                            0.25% (ts=50)
-                                        </button>
-                                        <button
-                                            onClick={() => { setNewTickSpacing('100'); setNewFee('500'); }}
-                                            className="px-3 py-1 text-xs rounded-lg bg-white/5 hover:bg-white/10 transition"
-                                        >
-                                            0.05% (ts=100)
+                                            0.25% (ts=80)
                                         </button>
                                     </div>
                                     <p className="text-xs text-gray-500 mt-2">

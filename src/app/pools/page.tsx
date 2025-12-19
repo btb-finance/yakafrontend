@@ -82,10 +82,7 @@ interface PoolData {
 const FEE_TIERS: Record<number, string> = {
     1: '0.009%',
     10: '0.045%',
-    50: '0.05%',
     80: '0.25%',
-    100: '0.05%',
-    200: '0.30%',
     2000: '1%',
 };
 

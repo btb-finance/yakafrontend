@@ -1690,7 +1690,7 @@ function LiquidityPageContent() {
                                             const isFullRange = pos.tickLower <= -887200 || pos.tickUpper >= 887200;
 
                                             // Fee tier from tickSpacing
-                                            const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%', 2000: '1%' };
+                                            const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
                                             const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
 
                                             // Format price for display
@@ -1848,7 +1848,7 @@ function LiquidityPageContent() {
                                             const priceUpper = tickToPrice(pos.tickUpper);
                                             const isFullRange = pos.tickLower <= -887200 || pos.tickUpper >= 887200;
 
-                                            const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.30%', 2000: '1%' };
+                                            const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
                                             const feeTier = feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`;
 
                                             const formatPrice = (price: number) => {
