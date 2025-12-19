@@ -146,7 +146,7 @@ const ERC20_ABI = [
 const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
     '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7': { symbol: 'WSEI', decimals: 18 },
     '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': { symbol: 'USDC', decimals: 6 },
-    '0xd7b207b7c2c8fc32f7ab448d73cfb6be212f0dcf': { symbol: 'YAKA', decimals: 18 },
+    '0x188e342cdedd8fdf84d765eb59b7433d30f5484d': { symbol: 'YAKA', decimals: 18 },
     '0x0000000000000000000000000000000000000000': { symbol: 'SEI', decimals: 18 },
     '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': { symbol: 'USDT', decimals: 6 },
 };

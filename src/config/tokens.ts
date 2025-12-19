@@ -30,7 +30,7 @@ export const WSEI: Token = {
 
 // YAKA Protocol Token
 export const YAKA: Token = {
-    address: '0xD7b207B7C2c8Fc32F7aB448d73cfb6BE212F0DCf',
+    address: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
     symbol: 'YAKA',
     name: 'YAKA',
     decimals: 18,

@@ -5,46 +5,46 @@
 // ============================================
 export const V2_CONTRACTS = {
     // Protocol Token
-    YAKA: '0xD7b207B7C2c8Fc32F7aB448d73cfb6BE212F0DCf',
+    YAKA: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
 
     // Core Voting Escrow
-    VotingEscrow: '0xa879B9A74F2B619472b631a4C36D50C2BFA6a291',
+    VotingEscrow: '0xE0d5DCB4D4Afc0f9Ab930616F4f18990ee17519b',
 
     // Router for V2 swaps and liquidity
-    Router: '0xB575eC90EDB32c20282841717346FA39b7293dD4',
+    Router: '0x7D208C039e4dD152B4bb2570908E10D5193737f7',
 
     // Voter for gauge voting
-    Voter: '0x0F63AA750F5B51dFdf45D0A23c40eC72a73DFD6a',
+    Voter: '0xe0Ec2B044fCFABF673df4c21C15Ac90fEa2A1d99',
 
     // Token minter
-    Minter: '0x4ec07F2f5C28D03478753bF085B939D57d024Ef2',
+    Minter: '0xD761233979b7523172656007b7718C8c4BB8329e',
 
     // V2 Pool Factory
-    PoolFactory: '0xf88005Ed92DD929e5aaf1A09A583903A2E5CC0de',
+    PoolFactory: '0x16D9D5a7E268bD079e67221fda6C5A6719669F8f',
 
     // Rewards distributor for veNFT rebases
-    RewardsDistributor: '0x86e00b50D6a999f6a57FDe751AEc99187022DCab',
+    RewardsDistributor: '0x74114c7F375F76CfB9Cff2a8B2EF6A9af23Be380',
 
     // Factory registry
-    FactoryRegistry: '0x8089C2a89d8B4D93A513aA8F3bc7D1E43cB67014',
+    FactoryRegistry: '0xa403CA20e2D69Be9B160f134294563BCe03acDA9',
 
     // Gauge Factory
-    GaugeFactory: '0x4e852Fbb78DAB7980c6c15Aa5EA4f232A94E916a',
+    GaugeFactory: '0xe831eF0378229258691dcD271288B7c18EEFc009',
 
     // Voting Rewards Factory
-    VotingRewardsFactory: '0xF76e4eD537617140845F25d871Ca9591D6c4ba5b',
+    VotingRewardsFactory: '0x3e7039B47a0b80370442324311eD9f13013eb928',
 
     // Managed Rewards Factory
-    ManagedRewardsFactory: '0x1D53555E5C3612C07703518C0A2cF6f5B258ad42',
+    ManagedRewardsFactory: '0xdb75aa8Fa45D6443E9431e3161C7D028733E1341',
 
     // VeArt Proxy for NFT art
-    VeArtProxy: '0x1bD04640e68CB3f9E88845f873fb5CBC7b81549b',
+    VeArtProxy: '0x273dFfA4321575D443f988CEd423e275564D3627',
 
     // Airdrop Distributor
-    AirdropDistributor: '0xB24B9c467C68636e56Ff53B36531ba4De0F9C86A',
+    AirdropDistributor: '0x4783060c04121a2953e5A04245F1D377ED744066',
 
     // Forwarder
-    Forwarder: '0xf232cF63c21f05Ee147fDdec111dD11157c53738',
+    Forwarder: '0x9658272eea9E243Fa5b072fEAaA1CaDe29fa80dF',
 } as const;
 
 // ============================================
@@ -52,46 +52,46 @@ export const V2_CONTRACTS = {
 // ============================================
 export const CL_CONTRACTS = {
     // CL Factory for creating pools
-    CLFactory: '0xe73FbDD41e26EE04B0F3eB7F3d3caDDb5F93632c',
+    CLFactory: '0x0aeEAf8d3bb4a9466e6AC8985F5173ddB42Ec081',
 
     // CL Pool implementation
-    CLPool: '0x54D6Ca62259d9c1976ddA9F0d8B33B1e40e34800',
+    CLPool: '0x1f595d057f11ae1a3637b1f36883FB04038b50e6',
 
     // CL Gauge Factory
-    CLGaugeFactory: '0xa2ecaFd003C2dC915272D63d7e56dA58b88d98f2',
+    CLGaugeFactory: '0xEaAB66dC4DAcd6925033930753A850D6f50a7204',
 
     // CL Gauge implementation
-    CLGauge: '0x72525073ed9A9DD4806Fc897cB4cF28B2677bbb9',
+    CLGauge: '0xBE796C4176d24ba9645C199D081dB6AB0f1002A4',
 
     // Swap Router for CL swaps
-    SwapRouter: '0x06bd58BAd2DAF24E4E628AFF2cCA0e0056C009F0',
+    SwapRouter: '0xDc77ecB025C7478469dAc8E6facB8cf5806B9277',
 
     // NFT Position Manager for CL positions
-    NonfungiblePositionManager: '0x2C50fc9906F124A2B781c7BF57278a801091684E',
+    NonfungiblePositionManager: '0x7850B615a1F0E26734c13EF936022241B28C7AAA',
 
     // Token Position Descriptor (NFT metadata)
-    NonfungibleTokenPositionDescriptor: '0xC3f6fB1CCC49fE2f2f2dd9DD72606796Bd8c7270',
+    NonfungibleTokenPositionDescriptor: '0x9e4DF2287C14C4D621AEB37A12B0CA98883E8ECa',
 
     // Quoter for getting swap quotes
-    QuoterV2: '0x78382467583275A23118172e8270a20C49F53A1e',
+    QuoterV2: '0xEC98E8bFaA9375E2D588042F045aD028BaDC43CB',
 
     // Mixed Route Quoter (supports V2 + CL routes)
-    MixedRouteQuoterV1: '0x82e13460786B5679862ab34Fc3260d52B8bfce0a',
+    MixedRouteQuoterV1: '0x476faE73abA86E6e300234235BD56Bd94913ce07',
 
     // Sugar Helper for data aggregation
-    SugarHelper: '0xE796C74DF4fe997A17870B1E70dB72D45Fcd4e1A',
+    SugarHelper: '0x0447C16fFB1DC5826840A8A8EA830B5ac284f59f',
 
     // Custom Swap Fee Module
-    CustomSwapFeeModule: '0x1149621D55DB2AC6E641D109b0E4D0fe375e68De',
+    CustomSwapFeeModule: '0x918D30a7F7E0A20708c2887f263f25cB6bAEdD03',
 
     // Custom Unstaked Fee Module
-    CustomUnstakedFeeModule: '0xFEbC54e53c951a73C7E927bf7023B4F48F9D4Dd1',
+    CustomUnstakedFeeModule: '0x1a783c295Dd59383BcF657f2c57Ef85895bec117',
 
     // NFT Descriptor Library
-    NFTDescriptor: '0xD5A742b6437fDEA0E24DF9088323d0cd08925B61',
+    NFTDescriptor: '0x435A9BE1a4E1492Ad9055A3e580747E72219386D',
 
     // NFT SVG Library
-    NFTSVG: '0xaFeE59b092DA3A8B778637B3573Fcc0ab71fDf36',
+    NFTSVG: '0x97C0a6ba35146E58D3d9d05b5e5B046a62531632',
 } as const;
 
 // ============================================
