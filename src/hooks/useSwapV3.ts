@@ -7,8 +7,8 @@ import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
 import { SWAP_ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 
-// All available tick spacings in CLFactory
-const TICK_SPACINGS = [1, 10, 50, 80, 100, 200, 2000] as const;
+// Tick spacings actually used in our pools (1, 10, 80 are most common)
+const TICK_SPACINGS = [1, 10, 80] as const;
 
 interface SwapQuoteV3 {
     amountOut: string;

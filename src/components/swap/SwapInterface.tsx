@@ -122,10 +122,14 @@ export function SwapInterface() {
             try {
                 const routes: BestRoute[] = [];
 
-                // === Get V3 Quote (auto-detects best pool) ===
-                const v3Quote = await getQuoteV3(tokenIn, tokenOut, amountIn);
+                // === Get V3 and Multi-hop quotes IN PARALLEL for speed ===
+                const [v3Quote, multiHopQuote] = await Promise.all([
+                    getQuoteV3(tokenIn, tokenOut, amountIn),
+                    findMultiHopRoute(tokenIn, tokenOut, amountIn)
+                ]);
+
                 if (v3Quote && v3Quote.poolExists && parseFloat(v3Quote.amountOut) > 0) {
-                    const feeMap: Record<number, string> = { 1: '0.01%', 10: '0.045%', 50: '0.05%', 80: '0.25%', 100: '0.05%', 200: '0.3%', 2000: '1%' };
+                    const feeMap: Record<number, string> = { 1: '0.01%', 10: '0.05%', 80: '0.30%' };
                     routes.push({
                         type: 'v3',
                         amountOut: v3Quote.amountOut,
@@ -160,8 +164,7 @@ export function SwapInterface() {
                     }
                 }
 
-                // === Multi-hop Quote (via WSEI/USDC) ===
-                const multiHopQuote = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
+                // === Multi-hop Quote (already fetched above) ===
                 // Only add if it's actually a multi-hop route (not a direct route) and has intermediate
                 if (multiHopQuote &&
                     multiHopQuote.routeType === 'multi-hop' &&

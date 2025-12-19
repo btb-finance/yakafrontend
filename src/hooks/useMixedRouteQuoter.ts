@@ -12,8 +12,8 @@ const INTERMEDIATE_TOKENS = [
     USDCN,
 ];
 
-// Tick spacings to try for CL pools
-const TICK_SPACINGS = [1, 10, 50, 80, 100, 200, 2000] as const;
+// Tick spacings actually used (1, 10, 80 are most common)
+const TICK_SPACINGS = [1, 10, 80] as const;
 
 interface RouteQuote {
     amountOut: string;
@@ -147,21 +147,19 @@ export function useMixedRouteQuoter() {
         setError(null);
 
         try {
+            // Run ALL routes in parallel for maximum speed
+            const [directQuote, ...multiHopQuotes] = await Promise.all([
+                // Direct route
+                quoteDirectV3(tokenIn, tokenOut, amountIn),
+                // Multi-hop routes through intermediates (all in parallel)
+                ...INTERMEDIATE_TOKENS.map(intermediate =>
+                    quoteMultiHopV3(tokenIn, tokenOut, amountIn, intermediate)
+                )
+            ]);
+
             const quotes: RouteQuote[] = [];
-
-            // Try direct route
-            const directQuote = await quoteDirectV3(tokenIn, tokenOut, amountIn);
-            if (directQuote) {
-                quotes.push(directQuote);
-            }
-
-            // Try multi-hop routes through intermediates
-            for (const intermediate of INTERMEDIATE_TOKENS) {
-                const multiHopQuote = await quoteMultiHopV3(tokenIn, tokenOut, amountIn, intermediate);
-                if (multiHopQuote) {
-                    quotes.push(multiHopQuote);
-                }
-            }
+            if (directQuote) quotes.push(directQuote);
+            multiHopQuotes.forEach(q => { if (q) quotes.push(q); });
 
             if (quotes.length === 0) {
                 setIsLoading(false);
