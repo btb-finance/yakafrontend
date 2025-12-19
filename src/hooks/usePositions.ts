@@ -204,12 +204,15 @@ function decodePositionResult(data: string): Omit<CLPosition, 'tokenId'> {
 }
 
 function parseSignedInt24(hex64: string): number {
-    const val = BigInt('0x' + hex64);
-    // Check if negative (signed int24)
-    if (val > BigInt(0x7fffff)) {
-        return Number(val - BigInt(0x1000000));
+    // int24 is only 3 bytes (6 hex chars), but ABI encoding pads to 32 bytes
+    // For negative numbers, the value is sign-extended, so we only need the last 6 hex chars
+    const lastSix = hex64.slice(-6);
+    const val = parseInt(lastSix, 16);
+    // Check if negative (high bit set in 24-bit value)
+    if (val > 0x7fffff) {
+        return val - 0x1000000;
     }
-    return Number(val);
+    return val;
 }
 
 // Hook to fetch V2 LP token balances

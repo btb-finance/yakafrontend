@@ -139,6 +139,8 @@ export default function PortfolioPage() {
                 return;
             }
 
+
+
             try {
                 const balanceSelector = '0x70a08231';
                 const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
@@ -212,22 +214,20 @@ export default function PortfolioPage() {
                 const t0 = getTokenInfo(selectedPosition.token0);
                 const t1 = getTokenInfo(selectedPosition.token1);
 
-                if (bal0Response.result) {
+                if (bal0Response.result && bal0Response.result !== '0x') {
                     const bal0Wei = BigInt(bal0Response.result);
                     setBalance0((Number(bal0Wei) / (10 ** t0.decimals)).toFixed(6));
                 }
-                if (bal1Response.result) {
+                if (bal1Response.result && bal1Response.result !== '0x') {
                     const bal1Wei = BigInt(bal1Response.result);
                     setBalance1((Number(bal1Wei) / (10 ** t1.decimals)).toFixed(6));
                 }
 
                 // Parse slot0 to get current tick
                 if (slot0Response?.result && slot0Response.result.length >= 130) {
-                    // slot0 returns: sqrtPriceX96 (uint160), tick (int24), ...
-                    // tick is at bytes 20-22 (from position 64 to 70)
-                    const tickHex = slot0Response.result.slice(66, 130);
+                    const tickSlot = slot0Response.result.slice(66, 130);
+                    const tickHex = tickSlot.slice(-6);
                     const tickBigInt = BigInt('0x' + tickHex);
-                    // Convert to signed int24
                     const tick = tickBigInt > BigInt(0x7FFFFF) ? Number(tickBigInt) - 0x1000000 : Number(tickBigInt);
                     setCurrentTick(tick);
                 }
@@ -241,7 +241,8 @@ export default function PortfolioPage() {
 
     // Calculate required amount1 based on amount0 input and position tick range
     const calculateAmount1FromAmount0 = (amount0: string): string => {
-        if (!selectedPosition || !currentTick || !amount0 || parseFloat(amount0) === 0) return '';
+        // Note: currentTick can be 0 which is valid, so use explicit null check
+        if (!selectedPosition || currentTick === null || !amount0 || parseFloat(amount0) === 0) return '';
 
         const tickLower = selectedPosition.tickLower;
         const tickUpper = selectedPosition.tickUpper;
@@ -277,7 +278,8 @@ export default function PortfolioPage() {
 
     // Calculate required amount0 based on amount1 input
     const calculateAmount0FromAmount1 = (amount1: string): string => {
-        if (!selectedPosition || !currentTick || !amount1 || parseFloat(amount1) === 0) return '';
+        // Note: currentTick can be 0 which is valid, so use explicit null check
+        if (!selectedPosition || currentTick === null || !amount1 || parseFloat(amount1) === 0) return '';
 
         const tickLower = selectedPosition.tickLower;
         const tickUpper = selectedPosition.tickUpper;
@@ -874,24 +876,48 @@ export default function PortfolioPage() {
             const amount1Desired = amount1ToAdd ? BigInt(Math.floor(parseFloat(amount1ToAdd) * (10 ** t1.decimals))) : BigInt(0);
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
-            // Approve token0 if needed
+            // Helper to check allowance
+            const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
+                const result = await fetch('https://evm-rpc.sei-apis.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: tokenAddr,
+                            data: `0xdd62ed3e${address!.slice(2).toLowerCase().padStart(64, '0')}${CL_CONTRACTS.NonfungiblePositionManager.slice(2).toLowerCase().padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+                const allowance = result.result ? BigInt(result.result) : BigInt(0);
+                return allowance >= amount;
+            };
+
+            // Approve token0 if needed (only if allowance insufficient)
             if (amount0Desired > BigInt(0)) {
-                await writeContractAsync({
-                    address: selectedPosition.token0 as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
-                });
+                const hasAllowance = await checkAllowance(selectedPosition.token0, amount0Desired);
+                if (!hasAllowance) {
+                    await writeContractAsync({
+                        address: selectedPosition.token0 as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
+                    });
+                }
             }
 
-            // Approve token1 if needed
+            // Approve token1 if needed (only if allowance insufficient)
             if (amount1Desired > BigInt(0)) {
-                await writeContractAsync({
-                    address: selectedPosition.token1 as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
-                });
+                const hasAllowance = await checkAllowance(selectedPosition.token1, amount1Desired);
+                if (!hasAllowance) {
+                    await writeContractAsync({
+                        address: selectedPosition.token1 as Address,
+                        abi: ERC20_ABI,
+                        functionName: 'approve',
+                        args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
+                    });
+                }
             }
 
             // Call increaseLiquidity
@@ -1363,6 +1389,14 @@ export default function PortfolioPage() {
                                             </div>
                                             {/* Action Buttons */}
                                             <div className="flex gap-3 mt-4 pt-4 border-t border-white/10">
+                                                <button
+                                                    onClick={() => {
+                                                        alert('To increase liquidity on a staked position:\n\n1. Click "Unstake" to return the NFT to your wallet\n2. Go to "Positions" tab\n3. Click "+ Increase" on the position\n4. Re-stake the position in the gauge');
+                                                    }}
+                                                    className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition font-medium"
+                                                >
+                                                    + Increase
+                                                </button>
                                                 <button
                                                     onClick={() => handleClaimRewards(pos)}
                                                     disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
