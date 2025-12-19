@@ -162,13 +162,17 @@ export function SwapInterface() {
 
                 // === Multi-hop Quote (via WSEI/USDC) ===
                 const multiHopQuote = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
-                if (multiHopQuote && parseFloat(multiHopQuote.amountOut) > 0) {
+                // Only add if it's actually a multi-hop route (not a direct route) and has intermediate
+                if (multiHopQuote &&
+                    multiHopQuote.routeType === 'multi-hop' &&
+                    multiHopQuote.intermediate &&
+                    parseFloat(multiHopQuote.amountOut) > 0) {
                     routes.push({
                         type: 'multi-hop',
                         amountOut: multiHopQuote.amountOut,
                         feeLabel: multiHopQuote.via ? `via ${multiHopQuote.via}` : 'Multi-hop',
                         via: multiHopQuote.via,
-                        intermediate: multiHopQuote.intermediate, // Store intermediate for execution
+                        intermediate: multiHopQuote.intermediate,
                     });
                 }
 
