@@ -86,6 +86,7 @@ const FEE_TIERS: Record<number, string> = {
     80: '0.25%',
     100: '0.05%',
     200: '0.30%',
+    2000: '1%',
 };
 
 export default function PoolsPage() {
