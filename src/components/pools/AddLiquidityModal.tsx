@@ -163,6 +163,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     : 1 / priceRaw;
 
                 setClPoolPrice(price);
+
+                // Auto-set default range to ±10% when pool price loads
+                if (!priceLower && !priceUpper) {
+                    setPriceLower((price * 0.9).toFixed(6));
+                    setPriceUpper((price * 1.1).toFixed(6));
+                }
             } catch (err) {
                 console.error('Error fetching CL pool price:', err);
                 setClPoolPrice(null);
@@ -720,43 +726,62 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                         {/* Range Strategy Selection - Compact */}
                                         <div>
                                             <div className="text-xs text-gray-400 mb-2 font-medium">Range</div>
-                                            <div className="grid grid-cols-4 gap-1.5">
-                                                <button
-                                                    onClick={() => { setPriceLower(''); setPriceUpper(''); }}
-                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${!priceLower && !priceUpper
-                                                        ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
-                                                        : 'bg-white/5 hover:bg-white/10 border border-white/10'}`}
-                                                >
-                                                    <div className="text-xs font-bold">Full</div>
-                                                </button>
-                                                <button
-                                                    onClick={() => setPresetRange(2)}
-                                                    disabled={!currentPrice}
-                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${currentPrice
-                                                        ? 'bg-white/5 hover:bg-white/10 border border-white/10'
-                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
-                                                >
-                                                    <div className="text-xs font-bold">±2%</div>
-                                                </button>
-                                                <button
-                                                    onClick={() => setPresetRange(10)}
-                                                    disabled={!currentPrice}
-                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${currentPrice
-                                                        ? 'bg-white/5 hover:bg-white/10 border border-white/10'
-                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
-                                                >
-                                                    <div className="text-xs font-bold">±10%</div>
-                                                </button>
-                                                <button
-                                                    onClick={() => setPresetRange(50)}
-                                                    disabled={!currentPrice}
-                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${currentPrice
-                                                        ? 'bg-white/5 hover:bg-white/10 border border-white/10'
-                                                        : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
-                                                >
-                                                    <div className="text-xs font-bold">±50%</div>
-                                                </button>
-                                            </div>
+                                            {(() => {
+                                                // Calculate current range percentage
+                                                const rangePercent = currentPrice && priceLower && priceUpper
+                                                    ? Math.round(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100)
+                                                    : null;
+                                                const isFullRange = !priceLower && !priceUpper;
+                                                const is2Percent = rangePercent === 2;
+                                                const is10Percent = rangePercent === 10;
+                                                const is50Percent = rangePercent === 50;
+
+                                                return (
+                                                    <div className="grid grid-cols-4 gap-1.5">
+                                                        <button
+                                                            onClick={() => { setPriceLower(''); setPriceUpper(''); }}
+                                                            className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${isFullRange
+                                                                ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
+                                                                : 'bg-white/5 hover:bg-white/10 border border-white/10'}`}
+                                                        >
+                                                            <div className="text-xs font-bold">Full</div>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setPresetRange(2)}
+                                                            disabled={!currentPrice}
+                                                            className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${is2Percent
+                                                                ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
+                                                                : currentPrice
+                                                                    ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                        >
+                                                            <div className="text-xs font-bold">±2%</div>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setPresetRange(10)}
+                                                            disabled={!currentPrice}
+                                                            className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${is10Percent
+                                                                ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
+                                                                : currentPrice
+                                                                    ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                        >
+                                                            <div className="text-xs font-bold">±10%</div>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setPresetRange(50)}
+                                                            disabled={!currentPrice}
+                                                            className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${is50Percent
+                                                                ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
+                                                                : currentPrice
+                                                                    ? 'bg-white/5 hover:bg-white/10 border border-white/10'
+                                                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
+                                                        >
+                                                            <div className="text-xs font-bold">±50%</div>
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
 
                                         {/* Visual Price Range Display with +/- controls */}
