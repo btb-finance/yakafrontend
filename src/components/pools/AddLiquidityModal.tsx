@@ -477,9 +477,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         tokenA &&
         tokenB &&
         amountA &&
-        amountB &&
-        parseFloat(amountA) > 0 &&
-        parseFloat(amountB) > 0 &&
+        (poolType === 'cl'
+            ? (parseFloat(amountA) > 0 || parseFloat(amountB || '0') > 0) // CL allows single-sided
+            : (parseFloat(amountA) > 0 && parseFloat(amountB || '0') > 0)) && // V2 needs both
         !isCLInProgress;
 
     const poolExists = clPoolPrice !== null;
@@ -942,7 +942,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                 <motion.button
                                     onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
                                     disabled={!canAdd || isLoading || isCLInProgress}
-                                    className="w-full py-4 sm:py-5 rounded-xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
+                                    className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${canAdd && !isLoading && !isCLInProgress
+                                            ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
+                                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                        }`}
                                     whileTap={canAdd ? { scale: 0.98 } : {}}
                                 >
                                     {isLoading || isCLInProgress ? (
@@ -954,13 +957,13 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             Adding Liquidity...
                                         </span>
                                     ) : !isConnected ? (
-                                        'Connect Wallet'
+                                        '🔗 Connect Wallet'
                                     ) : !tokenA || !tokenB ? (
                                         'Select Tokens'
-                                    ) : !amountA || !amountB ? (
-                                        'Enter Amounts'
+                                    ) : !amountA || (parseFloat(amountA) <= 0 && parseFloat(amountB || '0') <= 0) ? (
+                                        'Enter Amount'
                                     ) : (
-                                        <>Add {poolType === 'cl' ? 'Concentrated' : 'V2'} Liquidity</>
+                                        <>✨ Add Liquidity</>
                                     )}
                                 </motion.button>
                             </div>
