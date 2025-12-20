@@ -1221,8 +1221,8 @@ export default function PortfolioPage() {
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4 text-sm">
                                                     <div>
-                                                        <div className="text-xs text-gray-400">Liquidity</div>
-                                                        <div className="font-medium">{Number(pos.liquidity).toLocaleString()}</div>
+                                                        <div className="text-xs text-gray-400">Status</div>
+                                                        <div className="font-medium text-green-400">✓ Active</div>
                                                     </div>
                                                     <div>
                                                         <div className="text-xs text-gray-400">Uncollected Fees</div>
@@ -1385,8 +1385,8 @@ export default function PortfolioPage() {
 
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                                 <div className="p-3 rounded-lg bg-white/5">
-                                                    <div className="text-xs text-gray-400 mb-1">Liquidity</div>
-                                                    <div className="font-semibold">{Number(pos.liquidity).toLocaleString()}</div>
+                                                    <div className="text-xs text-gray-400 mb-1">Status</div>
+                                                    <div className="font-semibold text-green-400">✓ Active</div>
                                                 </div>
                                                 <div className="p-3 rounded-lg bg-white/5">
                                                     <div className="text-xs text-gray-400 mb-1">Pending Rewards</div>
@@ -1594,7 +1594,7 @@ export default function PortfolioPage() {
                                 </div>
                             </div>
                             <div className="text-sm text-gray-400">
-                                Current Liquidity: {Number(selectedPosition.liquidity).toLocaleString()}
+                                Position #{selectedPosition.tokenId.toString()}
                             </div>
                         </div>
 
