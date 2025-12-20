@@ -19,6 +19,24 @@ export const metadata: Metadata = {
   title: "Wind Swap | DEX on Sei",
   description: "The premier AMM and ve-tokenomics DEX on Sei Network. Swap, provide liquidity, and earn rewards with WIND.",
   keywords: ["DEX", "Sei", "AMM", "DeFi", "Wind Swap", "WIND", "ve-tokenomics", "concentrated liquidity"],
+  icons: {
+    icon: [
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    apple: '/logo.png',
+  },
+  openGraph: {
+    title: 'Wind Swap | DEX on Sei',
+    description: 'The premier AMM and ve-tokenomics DEX on Sei Network. Swap, provide liquidity, and earn rewards.',
+    type: 'website',
+    images: ['/logo.png'],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Wind Swap | DEX on Sei',
+    description: 'The premier AMM and ve-tokenomics DEX on Sei Network.',
+    images: ['/logo.png'],
+  },
 };
 
 export default function RootLayout({
