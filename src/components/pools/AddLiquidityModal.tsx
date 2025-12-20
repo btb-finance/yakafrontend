@@ -234,8 +234,11 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
         const amtA = parseFloat(amountA);
         const amtB = parseFloat(amountB);
-        if (isNaN(amtA) || isNaN(amtB) || amtA <= 0 || amtB <= 0) {
-            alert('Please enter valid amounts for both tokens');
+
+        // For CL, single-sided liquidity is allowed when price range is outside current price
+        // At least one amount must be positive
+        if (isNaN(amtA) || isNaN(amtB) || (amtA <= 0 && amtB <= 0)) {
+            alert('Please enter a valid amount for at least one token');
             return;
         }
 
@@ -256,8 +259,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             const token1 = isAFirst ? actualTokenB : actualTokenA;
             const amount0 = isAFirst ? amountA : amountB;
             const amount1 = isAFirst ? amountB : amountA;
-            const amount0Wei = parseUnits(amount0, token0.decimals);
-            const amount1Wei = parseUnits(amount1, token1.decimals);
+            // Handle 0 amounts gracefully
+            const amount0Wei = amount0 && parseFloat(amount0) > 0 ? parseUnits(amount0, token0.decimals) : BigInt(0);
+            const amount1Wei = amount1 && parseFloat(amount1) > 0 ? parseUnits(amount1, token1.decimals) : BigInt(0);
 
             const priceToTick = (userPrice: number, spacing: number): number => {
                 if (userPrice <= 0) return 0;
@@ -317,6 +321,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
             let sqrtPriceX96 = BigInt(0);
             if (!poolExists) {
+                // New pool - calculate sqrtPriceX96 from initial price
                 let rawPrice: number;
 
                 if (initialPrice && parseFloat(initialPrice) > 0) {
@@ -335,6 +340,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const sqrtPriceScaled = sqrtPriceFloat * Number(Q96);
                 sqrtPriceX96 = BigInt(Math.floor(sqrtPriceScaled));
             }
+            // For existing pools, sqrtPriceX96 stays as 0 - the contract ignores it
 
             // Approve tokens
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
@@ -386,7 +392,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
             }
 
-            // Calculate native value
+            // Calculate native value - simple check for native tokens
             let nativeValue = BigInt(0);
             if (tokenA.isNative || tokenB.isNative) {
                 if (token0.address.toLowerCase() === WSEI.address.toLowerCase()) {
@@ -396,10 +402,25 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
             }
 
-            // Mint with slippage
-            const slippageBps = BigInt(100);
-            const amount0Min = amount0Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
-            const amount1Min = amount1Wei * (BigInt(10000) - slippageBps) / BigInt(10000);
+            // For CL, use 0 for min amounts since the ratio is already calculated from price range
+            // This prevents reverts from rounding issues in the contract
+            const amount0Min = BigInt(0);
+            const amount1Min = BigInt(0);
+
+            console.log('CL Mint params:', {
+                token0: token0.address,
+                token1: token1.address,
+                tickSpacing,
+                tickLower,
+                tickUpper,
+                amount0Desired: amount0Wei.toString(),
+                amount1Desired: amount1Wei.toString(),
+                amount0Min: amount0Min.toString(),
+                amount1Min: amount1Min.toString(),
+                sqrtPriceX96: sqrtPriceX96.toString(),
+                poolExists,
+                nativeValue: nativeValue.toString(),
+            });
 
             setTxProgress('minting');
             const hash = await writeContractAsync({
