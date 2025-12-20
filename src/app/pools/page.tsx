@@ -1,82 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useReadContract, useReadContracts } from 'wagmi';
 import { formatUnits, Address } from 'viem';
 import Link from 'next/link';
-import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
-import { POOL_FACTORY_ABI, POOL_ABI, ERC20_ABI } from '@/config/abis';
+import { usePoolData } from '@/providers/PoolDataProvider';
 import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
 
-// CL Factory ABI
-const CL_FACTORY_ABI = [
-    {
-        inputs: [],
-        name: 'allPoolsLength',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [{ name: '', type: 'uint256' }],
-        name: 'allPools',
-        outputs: [{ name: '', type: 'address' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
-
-// CL Pool ABI
-const CL_POOL_ABI = [
-    {
-        inputs: [],
-        name: 'token0',
-        outputs: [{ name: '', type: 'address' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'token1',
-        outputs: [{ name: '', type: 'address' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'tickSpacing',
-        outputs: [{ name: '', type: 'int24' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'liquidity',
-        outputs: [{ name: '', type: 'uint128' }],
-        stateMutability: 'view',
-        type: 'function',
-    },
-] as const;
-
 type PoolType = 'all' | 'v2' | 'cl';
 type SortBy = 'tvl' | 'apr';
-
-interface PoolData {
-    address: Address;
-    token0: { address: Address; symbol: string; decimals: number };
-    token1: { address: Address; symbol: string; decimals: number };
-    poolType: 'V2' | 'CL';
-    stable?: boolean;
-    tickSpacing?: number;
-    reserve0: string;
-    reserve1: string;
-    tvl: string;
-    estimatedApr?: number;
-    hasGauge?: boolean;
-    rewardRate?: bigint;
-}
 
 // Fee tier mapping for CL pools
 const FEE_TIERS: Record<number, string> = {
@@ -90,316 +23,9 @@ export default function PoolsPage() {
     const [poolType, setPoolType] = useState<PoolType>('all');
     const [sortBy, setSortBy] = useState<SortBy>('tvl');
     const [search, setSearch] = useState('');
-    const [v2Pools, setV2Pools] = useState<PoolData[]>([]);
-    const [clPools, setClPools] = useState<PoolData[]>([]);
-    const [poolRewards, setPoolRewards] = useState<Map<string, bigint>>(new Map());
 
-    // ============================================
-    // V2 POOLS
-    // ============================================
-    const { data: v2PoolCount } = useReadContract({
-        address: V2_CONTRACTS.PoolFactory as Address,
-        abi: POOL_FACTORY_ABI,
-        functionName: 'allPoolsLength',
-    });
-
-    const v2PoolIndexes = v2PoolCount ? Array.from({ length: Math.min(Number(v2PoolCount), 20) }, (_, i) => i) : [];
-
-    const { data: v2PoolAddresses } = useReadContracts({
-        contracts: v2PoolIndexes.map((index) => ({
-            address: V2_CONTRACTS.PoolFactory as Address,
-            abi: POOL_FACTORY_ABI,
-            functionName: 'allPools',
-            args: [BigInt(index)],
-        })),
-        query: { enabled: v2PoolIndexes.length > 0 },
-    });
-
-    const validV2PoolAddresses = (v2PoolAddresses?.filter(p => p.status === 'success').map(p => p.result as unknown as Address) || []);
-
-    const { data: v2PoolDetails } = useReadContracts({
-        contracts: validV2PoolAddresses.flatMap((addr) => [
-            { address: addr, abi: POOL_ABI, functionName: 'token0' },
-            { address: addr, abi: POOL_ABI, functionName: 'token1' },
-            { address: addr, abi: POOL_ABI, functionName: 'stable' },
-            { address: addr, abi: POOL_ABI, functionName: 'getReserves' },
-        ]),
-        query: { enabled: validV2PoolAddresses.length > 0 },
-    });
-
-    // ============================================
-    // CL POOLS
-    // ============================================
-    const { data: clPoolCount } = useReadContract({
-        address: CL_CONTRACTS.CLFactory as Address,
-        abi: CL_FACTORY_ABI,
-        functionName: 'allPoolsLength',
-    });
-
-    const clPoolIndexes = clPoolCount ? Array.from({ length: Math.min(Number(clPoolCount), 20) }, (_, i) => i) : [];
-
-    const { data: clPoolAddresses } = useReadContracts({
-        contracts: clPoolIndexes.map((index) => ({
-            address: CL_CONTRACTS.CLFactory as Address,
-            abi: CL_FACTORY_ABI,
-            functionName: 'allPools',
-            args: [BigInt(index)],
-        })),
-        query: { enabled: clPoolIndexes.length > 0 },
-    });
-
-    const validClPoolAddresses = (clPoolAddresses?.filter(p => p.status === 'success').map(p => p.result as unknown as Address) || []);
-
-    // Get CL pool details
-    const { data: clPoolDetails } = useReadContracts({
-        contracts: validClPoolAddresses.flatMap((addr) => [
-            { address: addr, abi: CL_POOL_ABI, functionName: 'token0' },
-            { address: addr, abi: CL_POOL_ABI, functionName: 'token1' },
-            { address: addr, abi: CL_POOL_ABI, functionName: 'tickSpacing' },
-            { address: addr, abi: CL_POOL_ABI, functionName: 'liquidity' },
-        ]),
-        query: { enabled: validClPoolAddresses.length > 0 },
-    });
-
-    // Extract CL pool token addresses to fetch balances for TVL
-    const clPoolTokenPairs: { poolAddr: Address; token0?: Address; token1?: Address }[] = [];
-    if (clPoolDetails) {
-        for (let i = 0; i < validClPoolAddresses.length; i++) {
-            const token0Result = clPoolDetails[i * 4];
-            const token1Result = clPoolDetails[i * 4 + 1];
-            clPoolTokenPairs.push({
-                poolAddr: validClPoolAddresses[i],
-                token0: token0Result?.status === 'success' ? token0Result.result as Address : undefined,
-                token1: token1Result?.status === 'success' ? token1Result.result as Address : undefined,
-            });
-        }
-    }
-
-    // Fetch token balances in CL pools for real TVL
-    const { data: clPoolBalances } = useReadContracts({
-        contracts: clPoolTokenPairs.flatMap((pair) => [
-            pair.token0 ? { address: pair.token0, abi: ERC20_ABI, functionName: 'balanceOf', args: [pair.poolAddr] } : null,
-            pair.token1 ? { address: pair.token1, abi: ERC20_ABI, functionName: 'balanceOf', args: [pair.poolAddr] } : null,
-        ]).filter(Boolean) as { address: Address; abi: typeof ERC20_ABI; functionName: 'balanceOf'; args: [Address] }[],
-        query: { enabled: clPoolTokenPairs.length > 0 && clPoolTokenPairs.some(p => p.token0 && p.token1) },
-    });
-
-    // ============================================
-    // TOKEN INFO
-    // ============================================
-    const allTokenAddresses = [
-        ...(v2PoolDetails?.filter((_, i) => i % 4 === 0 || i % 4 === 1).filter(d => d.status === 'success').map(d => d.result as Address) || []),
-        ...(clPoolDetails?.filter((_, i) => i % 4 === 0 || i % 4 === 1).filter(d => d.status === 'success').map(d => d.result as Address) || []),
-    ];
-
-    const uniqueTokens = [...new Set(allTokenAddresses)];
-
-    const { data: tokenSymbols } = useReadContracts({
-        contracts: uniqueTokens.flatMap((addr) => [
-            { address: addr, abi: ERC20_ABI, functionName: 'symbol' },
-            { address: addr, abi: ERC20_ABI, functionName: 'decimals' },
-        ]),
-        query: { enabled: uniqueTokens.length > 0 },
-    });
-
-    // Build token info map
-    const tokenInfoMap = new Map<string, { symbol: string; decimals: number }>();
-    if (tokenSymbols) {
-        uniqueTokens.forEach((addr, i) => {
-            const symbolResult = tokenSymbols[i * 2];
-            const decimalsResult = tokenSymbols[i * 2 + 1];
-            if (symbolResult?.status === 'success' && decimalsResult?.status === 'success') {
-                tokenInfoMap.set(addr.toLowerCase(), {
-                    symbol: symbolResult.result as string,
-                    decimals: Number(decimalsResult.result),
-                });
-            }
-        });
-    }
-
-    // Build V2 pools data
-    useEffect(() => {
-        if (!v2PoolDetails || !validV2PoolAddresses.length || tokenInfoMap.size === 0) return;
-
-        const newPools: PoolData[] = [];
-
-        for (let i = 0; i < validV2PoolAddresses.length; i++) {
-            const token0Result = v2PoolDetails[i * 4];
-            const token1Result = v2PoolDetails[i * 4 + 1];
-            const stableResult = v2PoolDetails[i * 4 + 2];
-            const reservesResult = v2PoolDetails[i * 4 + 3];
-
-            if (
-                token0Result?.status !== 'success' ||
-                token1Result?.status !== 'success' ||
-                stableResult?.status !== 'success' ||
-                reservesResult?.status !== 'success'
-            ) continue;
-
-            const token0Addr = (token0Result.result as Address).toLowerCase();
-            const token1Addr = (token1Result.result as Address).toLowerCase();
-            const token0Info = tokenInfoMap.get(token0Addr);
-            const token1Info = tokenInfoMap.get(token1Addr);
-
-            if (!token0Info || !token1Info) continue;
-
-            const reserves = reservesResult.result as [bigint, bigint, bigint];
-            const reserve0 = formatUnits(reserves[0], token0Info.decimals);
-            const reserve1 = formatUnits(reserves[1], token1Info.decimals);
-            const tvl = (parseFloat(reserve0) + parseFloat(reserve1)).toFixed(2);
-
-            newPools.push({
-                address: validV2PoolAddresses[i],
-                token0: { address: token0Result.result as Address, ...token0Info },
-                token1: { address: token1Result.result as Address, ...token1Info },
-                poolType: 'V2',
-                stable: stableResult.result as boolean,
-                reserve0,
-                reserve1,
-                tvl,
-            });
-        }
-
-        setV2Pools(newPools);
-    }, [v2PoolDetails, validV2PoolAddresses.length, tokenInfoMap.size]);
-
-    // Build CL pools data
-    useEffect(() => {
-        if (!clPoolDetails || !validClPoolAddresses.length || tokenInfoMap.size === 0) return;
-
-        const newPools: PoolData[] = [];
-
-        for (let i = 0; i < validClPoolAddresses.length; i++) {
-            const token0Result = clPoolDetails[i * 4];
-            const token1Result = clPoolDetails[i * 4 + 1];
-            const tickSpacingResult = clPoolDetails[i * 4 + 2];
-            const liquidityResult = clPoolDetails[i * 4 + 3];
-
-            if (
-                token0Result?.status !== 'success' ||
-                token1Result?.status !== 'success' ||
-                tickSpacingResult?.status !== 'success'
-            ) continue;
-
-            const token0Addr = (token0Result.result as Address).toLowerCase();
-            const token1Addr = (token1Result.result as Address).toLowerCase();
-            const token0Info = tokenInfoMap.get(token0Addr);
-            const token1Info = tokenInfoMap.get(token1Addr);
-
-            if (!token0Info || !token1Info) continue;
-
-            const tickSpacing = Number(tickSpacingResult.result);
-
-            // Get real TVL from token balances
-            let reserve0 = '0';
-            let reserve1 = '0';
-            let tvl = '0';
-
-            if (clPoolBalances && clPoolBalances.length >= (i + 1) * 2) {
-                const balance0Result = clPoolBalances[i * 2];
-                const balance1Result = clPoolBalances[i * 2 + 1];
-
-                if (balance0Result?.status === 'success') {
-                    reserve0 = formatUnits(balance0Result.result as bigint, token0Info.decimals);
-                }
-                if (balance1Result?.status === 'success') {
-                    reserve1 = formatUnits(balance1Result.result as bigint, token1Info.decimals);
-                }
-
-                // Sum of both reserves as simplified TVL (for real USD TVL, would need price feeds)
-                const r0 = parseFloat(reserve0) || 0;
-                const r1 = parseFloat(reserve1) || 0;
-                tvl = (r0 + r1).toFixed(2);
-            }
-
-            // Fallback to raw liquidity if balances not available
-            if (parseFloat(tvl) === 0) {
-                const liquidity = liquidityResult?.status === 'success' ? BigInt(liquidityResult.result as bigint) : BigInt(0);
-                if (liquidity > BigInt(0)) {
-                    const liqNum = Number(liquidity);
-                    if (liqNum > 1e18) {
-                        tvl = (liqNum / 1e18).toFixed(2);
-                    } else if (liqNum > 1e12) {
-                        tvl = (liqNum / 1e12).toFixed(2);
-                    } else if (liqNum > 1e6) {
-                        tvl = (liqNum / 1e6).toFixed(2);
-                    } else {
-                        tvl = liqNum.toFixed(2);
-                    }
-                }
-            }
-
-            newPools.push({
-                address: validClPoolAddresses[i],
-                token0: { address: token0Result.result as Address, ...token0Info },
-                token1: { address: token1Result.result as Address, ...token1Info },
-                poolType: 'CL',
-                tickSpacing,
-                reserve0,
-                reserve1,
-                tvl,
-            });
-        }
-
-        setClPools(newPools);
-    }, [clPoolDetails, clPoolBalances, validClPoolAddresses.length, tokenInfoMap.size]);
-
-    // Fetch reward rates for all pools from gauges
-    useEffect(() => {
-        const fetchRewardRates = async () => {
-            const allPoolAddresses = [...validV2PoolAddresses, ...validClPoolAddresses];
-            if (allPoolAddresses.length === 0) return;
-
-            const rewards = new Map<string, bigint>();
-            const rpcUrl = 'https://evm-rpc.sei-apis.com';
-
-            for (const poolAddr of allPoolAddresses) {
-                try {
-                    // Get gauge address from Voter - gauges(address) selector 0xb9a09fd5
-                    const gaugeRes = await fetch(rpcUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: V2_CONTRACTS.Voter,
-                                data: `0xb9a09fd5${poolAddr.slice(2).padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    const gaugeAddr = gaugeRes.result ? ('0x' + gaugeRes.result.slice(-40)) : null;
-                    if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') continue;
-
-                    // Get rewardRate from gauge - rewardRate() selector 0x7b0a47ee
-                    const rateRes = await fetch(rpcUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 2,
-                            method: 'eth_call',
-                            params: [{
-                                to: gaugeAddr,
-                                data: '0x7b0a47ee'
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    const rewardRate = rateRes.result ? BigInt(rateRes.result) : BigInt(0);
-                    if (rewardRate > BigInt(0)) {
-                        rewards.set(poolAddr.toLowerCase(), rewardRate);
-                    }
-                } catch (err) {
-                    // Ignore individual pool errors
-                }
-            }
-
-            setPoolRewards(rewards);
-        };
-
-        fetchRewardRates();
-    }, [validV2PoolAddresses.length, validClPoolAddresses.length]);
+    // Use globally prefetched pool data - instant load!
+    const { v2Pools, clPools, allPools, poolRewards, isLoading } = usePoolData();
 
     // Format weekly WIND rewards
     const formatWeeklyRewards = (poolAddress: string) => {
@@ -416,15 +42,11 @@ export default function PoolsPage() {
         return weeklyFloat.toFixed(2);
     };
 
-    // Combine and filter pools
-    const allPools = [...v2Pools, ...clPools];
-
+    // Filter pools
     const filteredPools = allPools.filter((pool) => {
-        // Filter by pool type
         if (poolType === 'v2' && pool.poolType !== 'V2') return false;
         if (poolType === 'cl' && pool.poolType !== 'CL') return false;
 
-        // Filter by search
         if (search) {
             const searchLower = search.toLowerCase();
             return (
@@ -448,20 +70,17 @@ export default function PoolsPage() {
     };
 
     // Format TVL nicely
-    const formatTVL = (tvl: string, pool?: PoolData) => {
+    const formatTVL = (tvl: string, poolType?: string) => {
         const num = parseFloat(tvl);
         if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
         if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
         if (num >= 1) return `$${num.toFixed(2)}`;
         if (num > 0) return `$${num.toFixed(4)}`;
-        // For pools with 0 TVL, show liquidity indicator
-        if (pool?.poolType === 'CL') {
-            return 'New Pool';
-        }
+        if (poolType === 'CL') return 'New Pool';
         return 'Low';
     };
 
-    const totalPoolCount = (v2PoolCount ? Number(v2PoolCount) : 0) + (clPoolCount ? Number(clPoolCount) : 0);
+    const totalPoolCount = v2Pools.length + clPools.length;
 
     return (
         <div className="container mx-auto px-6">
@@ -493,11 +112,11 @@ export default function PoolsPage() {
                 </div>
                 <div className="stat-card text-center">
                     <p className="text-sm text-gray-400 mb-1">V2 (Classic)</p>
-                    <p className="text-2xl font-bold">{v2PoolCount ? Number(v2PoolCount) : '--'}</p>
+                    <p className="text-2xl font-bold">{v2Pools.length || '--'}</p>
                 </div>
                 <div className="stat-card text-center bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/20">
                     <p className="text-sm text-gray-400 mb-1">V3 (Concentrated)</p>
-                    <p className="text-2xl font-bold text-cyan-400">{clPoolCount ? Number(clPoolCount) : '--'}</p>
+                    <p className="text-2xl font-bold text-cyan-400">{clPools.length || '--'}</p>
                 </div>
                 <div className="stat-card text-center">
                     <p className="text-sm text-gray-400 mb-1">Network</p>
@@ -579,7 +198,7 @@ export default function PoolsPage() {
                 {/* Table Body */}
                 {sortedPools.length === 0 ? (
                     <div className="p-12">
-                        {allPools.length === 0 ? (
+                        {isLoading ? (
                             <div className="text-center">
                                 <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                                 <p className="text-gray-400">Loading pools...</p>
@@ -601,7 +220,7 @@ export default function PoolsPage() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 + index * 0.02 }}
                         >
-                            {/* Pool Info - Row 1 on mobile */}
+                            {/* Pool Info */}
                             <div className="md:col-span-4 flex items-center gap-3">
                                 <div className="relative">
                                     <div className={`w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm font-bold ${pool.poolType === 'CL'
@@ -672,14 +291,14 @@ export default function PoolsPage() {
 
                             {/* Desktop: TVL */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-end">
-                                <div className="font-semibold">{formatTVL(pool.tvl, pool)}</div>
+                                <div className="font-semibold">{formatTVL(pool.tvl, pool.poolType)}</div>
                             </div>
 
                             {/* Mobile: TVL + Action Row */}
                             <div className="flex md:hidden items-center justify-between gap-3">
                                 <div className="flex items-center gap-3">
                                     <span className="text-xs text-gray-500">TVL:</span>
-                                    <span className="font-medium text-sm">{formatTVL(pool.tvl, pool)}</span>
+                                    <span className="font-medium text-sm">{formatTVL(pool.tvl, pool.poolType)}</span>
                                     {formatWeeklyRewards(pool.address) && (
                                         <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400">
                                             🔥 {formatWeeklyRewards(pool.address)}
