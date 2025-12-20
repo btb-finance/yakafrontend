@@ -216,7 +216,6 @@ export function TokenSelector({
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="Search by name or paste address"
                                 className="input-field text-base"
-                                autoFocus
                             />
                         </div>
 

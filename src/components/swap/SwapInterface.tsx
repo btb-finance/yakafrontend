@@ -383,6 +383,7 @@ export function SwapInterface() {
                 balance={formattedBalanceIn}
                 onAmountChange={setAmountIn}
                 onTokenSelect={setTokenIn}
+                showMaxButton
             />
 
             {/* Swap Direction Button */}
