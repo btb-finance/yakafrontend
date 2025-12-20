@@ -575,33 +575,29 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 )}
 
-                                {/* Pre-configured Pool Info Badge - shown when clicking Add LP on existing pool */}
+                                {/* Pool Info + Price - combined single row */}
                                 {isPoolPreConfigured && (
-                                    <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex -space-x-2">
+                                    <div className="p-2 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className="flex -space-x-1 flex-shrink-0">
                                                     {tokenA?.logoURI && (
-                                                        <img src={tokenA.logoURI} alt="" className="w-8 h-8 rounded-full border-2 border-[#0d0d14]" />
+                                                        <img src={tokenA.logoURI} alt="" className="w-5 h-5 rounded-full border border-[#0d0d14]" />
                                                     )}
                                                     {tokenB?.logoURI && (
-                                                        <img src={tokenB.logoURI} alt="" className="w-8 h-8 rounded-full border-2 border-[#0d0d14]" />
+                                                        <img src={tokenB.logoURI} alt="" className="w-5 h-5 rounded-full border border-[#0d0d14]" />
                                                     )}
                                                 </div>
-                                                <div>
-                                                    <div className="font-semibold">{tokenA?.symbol}/{tokenB?.symbol}</div>
-                                                    <div className="text-xs text-gray-400">
-                                                        {poolType === 'cl' ? (
-                                                            <>Concentrated • {tickSpacing === 1 ? '0.01%' : tickSpacing === 10 ? '0.045%' : tickSpacing === 80 ? '0.25%' : '1%'} fee</>
-                                                        ) : (
-                                                            <>{stable ? 'Stable' : 'Volatile'} V2 Pool</>
-                                                        )}
-                                                    </div>
+                                                <span className="font-semibold text-xs truncate">{tokenA?.symbol}/{tokenB?.symbol}</span>
+                                                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                                                    {poolType === 'cl' ? (tickSpacing === 1 ? '0.01%' : tickSpacing === 10 ? '0.045%' : tickSpacing === 80 ? '0.25%' : '1%') : (stable ? 'S' : 'V')}
+                                                </span>
+                                            </div>
+                                            {poolType === 'cl' && clPoolPrice && (
+                                                <div className="text-[10px] text-gray-400 flex-shrink-0">
+                                                    <span className="text-green-400">●</span> 1={clPoolPrice.toFixed(4)}
                                                 </div>
-                                            </div>
-                                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${poolType === 'cl' ? 'bg-secondary/20 text-secondary' : 'bg-primary/20 text-primary'}`}>
-                                                {poolType === 'cl' ? '⚡ CL' : '💧 V2'}
-                                            </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -699,92 +695,66 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                                 {/* CL Price Range */}
                                 {poolType === 'cl' && (
-                                    <div className="space-y-4">
-                                        {/* Current Price Display or Initial Price Input */}
-                                        <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                            {poolExists ? (
-                                                <div className="text-center">
-                                                    <div className="text-xs text-gray-400 mb-2 flex items-center justify-center gap-2">
-                                                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                                                        Current Pool Price
-                                                    </div>
-                                                    <div className="text-xl sm:text-2xl font-bold">
-                                                        {tokenA && tokenB && currentPrice ? (
-                                                            <>
-                                                                <span className="text-gray-400 text-base font-normal">1 {tokenA.symbol} = </span>
-                                                                <span className="text-primary">{currentPrice.toFixed(4)}</span>
-                                                                <span className="text-gray-400 text-base font-normal"> {tokenB.symbol}</span>
-                                                            </>
-                                                        ) : 'Select tokens'}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <span className="text-yellow-400 text-lg">⚠️</span>
-                                                        <span className="text-sm text-yellow-400 font-medium">New Pool - Set Initial Price</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3">
-                                                        <span className="text-gray-400 text-sm whitespace-nowrap">1 {tokenA?.symbol || '?'} =</span>
+                                    <div className="space-y-3">
+                                        {/* New Pool - Initial Price Input (only if no pool exists) */}
+                                        {!poolExists && (
+                                            <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-yellow-400 text-xs">⚠️ New Pool</span>
+                                                    <div className="flex-1 flex items-center gap-1 bg-white/5 rounded-lg px-2 py-1">
+                                                        <span className="text-gray-400 text-xs">1 {tokenA?.symbol} =</span>
                                                         <input
                                                             type="number"
                                                             inputMode="decimal"
                                                             value={initialPrice}
                                                             onChange={(e) => setInitialPrice(e.target.value)}
                                                             placeholder="0.0"
-                                                            className="flex-1 min-w-0 bg-transparent text-xl font-bold text-center outline-none placeholder-gray-600"
+                                                            className="flex-1 min-w-0 bg-transparent text-sm font-bold text-center outline-none placeholder-gray-600"
                                                         />
-                                                        <span className="text-gray-400 text-sm whitespace-nowrap">{tokenB?.symbol || '?'}</span>
+                                                        <span className="text-gray-400 text-xs">{tokenB?.symbol}</span>
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
 
-                                        {/* Range Strategy Selection - One Click! */}
+                                        {/* Range Strategy Selection - Compact */}
                                         <div>
-                                            <div className="text-xs text-gray-400 mb-3 font-medium">Select Range Strategy</div>
-                                            <div className="grid grid-cols-4 gap-2">
+                                            <div className="text-xs text-gray-400 mb-2 font-medium">Range</div>
+                                            <div className="grid grid-cols-4 gap-1.5">
                                                 <button
                                                     onClick={() => { setPriceLower(''); setPriceUpper(''); }}
-                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${!priceLower && !priceUpper
-                                                        ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border-2 border-primary/50 shadow-lg'
+                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${!priceLower && !priceUpper
+                                                        ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
                                                         : 'bg-white/5 hover:bg-white/10 border border-white/10'}`}
                                                 >
-                                                    <div className="text-lg mb-1">∞</div>
-                                                    <div className="text-xs font-medium">Full</div>
+                                                    <div className="text-xs font-bold">Full</div>
                                                 </button>
                                                 <button
                                                     onClick={() => setPresetRange(2)}
                                                     disabled={!currentPrice}
-                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${currentPrice
+                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${currentPrice
                                                         ? 'bg-white/5 hover:bg-white/10 border border-white/10'
                                                         : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
                                                 >
-                                                    <div className="text-lg mb-1">🎯</div>
-                                                    <div className="text-xs font-medium">Tight</div>
-                                                    <div className="text-[10px] text-gray-500">±2%</div>
+                                                    <div className="text-xs font-bold">±2%</div>
                                                 </button>
                                                 <button
                                                     onClick={() => setPresetRange(10)}
                                                     disabled={!currentPrice}
-                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${currentPrice
+                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${currentPrice
                                                         ? 'bg-white/5 hover:bg-white/10 border border-white/10'
                                                         : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
                                                 >
-                                                    <div className="text-lg mb-1">⚖️</div>
-                                                    <div className="text-xs font-medium">Standard</div>
-                                                    <div className="text-[10px] text-gray-500">±10%</div>
+                                                    <div className="text-xs font-bold">±10%</div>
                                                 </button>
                                                 <button
                                                     onClick={() => setPresetRange(50)}
                                                     disabled={!currentPrice}
-                                                    className={`p-3 rounded-xl text-center transition-all active:scale-[0.98] ${currentPrice
+                                                    className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${currentPrice
                                                         ? 'bg-white/5 hover:bg-white/10 border border-white/10'
                                                         : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'}`}
                                                 >
-                                                    <div className="text-lg mb-1">🌊</div>
-                                                    <div className="text-xs font-medium">Wide</div>
-                                                    <div className="text-[10px] text-gray-500">±50%</div>
+                                                    <div className="text-xs font-bold">±50%</div>
                                                 </button>
                                             </div>
                                         </div>
