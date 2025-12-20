@@ -75,6 +75,21 @@ const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
     '0x188e342cdedd8fdf84d765eb59b7433d30f5484d': { symbol: 'WIND', decimals: 18 },
     '0x0000000000000000000000000000000000000000': { symbol: 'SEI', decimals: 18 },
     '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': { symbol: 'USDT', decimals: 6 },
+    '0x0555e30da8f98308edb960aa94c0db47230d2b9c': { symbol: 'WBTC', decimals: 8 },
+    '0x9151434b16b9763660705744891fa906f660ecc5': { symbol: 'USDT', decimals: 6 },
+    '0x3894085ef7ff0f0aedf52e2a2704928d1ec074f1': { symbol: 'USDC.n', decimals: 6 },
+    '0x0a526e425809aea71eb279d24ae22dee6c92a4fe': { symbol: 'DRG', decimals: 18 },
+    '0x95597eb8d227a7c4b4f5e807a815c5178ee6dbe1': { symbol: 'MILLI', decimals: 6 },
+    '0x58e11d8ed38a2061361e90916540c5c32281a380': { symbol: 'GGC', decimals: 18 },
+    '0xc18b6a15fb0ceaf5eb18696eefcb5bc7b9107149': { symbol: 'POPO', decimals: 18 },
+    '0xf9bdbf259ece5ae17e29bf92eb7abd7b8b465db9': { symbol: 'Frog', decimals: 18 },
+    '0x5f0e07dfee5832faa00c63f2d33a0d79150e8598': { symbol: 'SEIYAN', decimals: 6 },
+    '0xdf3d7dd2848f491645974215474c566e79f2e538': { symbol: 'S8N', decimals: 18 },
+    '0xf63980e3818607c0797e994cfd34c1c592968469': { symbol: 'SUPERSEIZ', decimals: 18 },
+    '0x443ac9f358226f5f48f2cd10bc0121e7a6176323': { symbol: 'BAT', decimals: 18 },
+    '0x888888b7ae1b196e4dfd25c992c9ad13358f0e24': { symbol: 'YKP', decimals: 18 },
+    '0x888d81e3ea5e8362b5f69188cbcf34fa8da4b888': { symbol: 'LARRY', decimals: 18 },
+    '0x160345fc359604fc6e70e3c5facbde5f7a9342d8': { symbol: 'WETH', decimals: 18 },
 };
 
 // ============================================
@@ -88,7 +103,7 @@ async function batchRpcCall(calls: { to: string; data: string }[]): Promise<stri
         id: i + 1
     }));
 
-    const response = await fetch('https://evm-rpc.sei-apis.com', {
+    const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch)
@@ -317,134 +332,51 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Fetch gauge data using batch RPC
-    const fetchGaugeData = useCallback(async (tokenMap: Map<string, TokenInfo>) => {
+    // Fetch gauge data using static GAUGE_LIST + live weights
+    const fetchGaugeData = useCallback(async (_tokenMap: Map<string, TokenInfo>) => {
         try {
-            // Get pool count and total weight from Voter
-            const voterCalls = [
-                { to: V2_CONTRACTS.Voter, data: '0x1f7b6d32' }, // length()
+            // Import static gauge config
+            const { GAUGE_LIST } = await import('@/config/gauges');
+
+            // Get total weight and individual weights from Voter
+            const weightCalls: { to: string; data: string }[] = [
                 { to: V2_CONTRACTS.Voter, data: '0x96c82e57' }, // totalWeight()
             ];
-            const [poolCountHex, totalWeightHex] = await batchRpcCall(voterCalls);
-            const poolCount = Math.min(parseInt(poolCountHex, 16) || 0, 50);
-            const totalWeight = totalWeightHex !== '0x' ? BigInt(totalWeightHex) : BigInt(0);
+
+            // Add weight call for each gauge's pool
+            for (const g of GAUGE_LIST) {
+                const poolPadded = g.pool.slice(2).padStart(64, '0');
+                weightCalls.push({ to: V2_CONTRACTS.Voter, data: `0xa7cac846${poolPadded}` }); // weights(pool)
+            }
+
+            const weightResults = await batchRpcCall(weightCalls);
+            const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
             setTotalVoteWeight(totalWeight);
 
-            if (poolCount === 0) {
-                setGauges([]);
-                setGaugesLoading(false);
-                return;
-            }
-
-            // Get all pool addresses from Voter.pools(uint256)
-            const poolAddrCalls = [];
-            for (let i = 0; i < poolCount; i++) {
-                poolAddrCalls.push({
-                    to: V2_CONTRACTS.Voter,
-                    data: `0xac4afa38${i.toString(16).padStart(64, '0')}` // pools(uint256)
-                });
-            }
-            const poolAddrResults = await batchRpcCall(poolAddrCalls);
-            const poolAddrs = poolAddrResults.map(r => `0x${r.slice(-40)}` as Address);
-
-            // Batch fetch: gauge, weight, token0, token1 for each pool
-            const infoCalls: { to: string; data: string }[] = [];
-            for (const pool of poolAddrs) {
-                const poolPadded = pool.slice(2).padStart(64, '0');
-                infoCalls.push({ to: V2_CONTRACTS.Voter, data: `0xb9a09fd5${poolPadded}` }); // gauges(pool)
-                infoCalls.push({ to: V2_CONTRACTS.Voter, data: `0xa7cac846${poolPadded}` }); // weights(pool)
-                infoCalls.push({ to: pool, data: '0x0dfe1681' }); // token0()
-                infoCalls.push({ to: pool, data: '0xd21220a7' }); // token1()
-                infoCalls.push({ to: pool, data: '0xd0c93a7c' }); // tickSpacing() - for CL detection
-                infoCalls.push({ to: pool, data: '0x22be3de1' }); // stable() - for V2 detection
-            }
-            const infoResults = await batchRpcCall(infoCalls);
-
-            // Parse pool info
-            const poolInfos: {
-                pool: Address;
-                gauge: Address;
-                weight: bigint;
-                token0: Address;
-                token1: Address;
-                poolType: 'V2' | 'CL';
-                isStable: boolean;
-            }[] = [];
-
-            for (let i = 0; i < poolAddrs.length; i++) {
-                const base = i * 6;
-                const gauge = `0x${infoResults[base].slice(-40)}` as Address;
-                const weight = infoResults[base + 1] !== '0x' ? BigInt(infoResults[base + 1]) : BigInt(0);
-                const token0 = `0x${infoResults[base + 2].slice(-40)}` as Address;
-                const token1 = `0x${infoResults[base + 3].slice(-40)}` as Address;
-                const tickSpacing = infoResults[base + 4];
-                const stableResult = infoResults[base + 5];
-
-                // Detect pool type
-                const isCL = tickSpacing && tickSpacing !== '0x' && !tickSpacing.includes('error');
-                const isStable = stableResult === '0x0000000000000000000000000000000000000000000000000000000000000001';
-
-                poolInfos.push({
-                    pool: poolAddrs[i],
-                    gauge,
-                    weight,
-                    token0,
-                    token1,
-                    poolType: isCL ? 'CL' : 'V2',
-                    isStable,
-                });
-            }
-
-            // Filter to valid gauges only
-            const validPools = poolInfos.filter(p => p.gauge !== '0x0000000000000000000000000000000000000000');
-
-            // Batch fetch: isAlive, gaugeToFees, gaugeToBribe for each gauge
-            const gaugeCalls: { to: string; data: string }[] = [];
-            for (const p of validPools) {
-                const gaugePadded = p.gauge.slice(2).padStart(64, '0');
-                gaugeCalls.push({ to: V2_CONTRACTS.Voter, data: `0x1703e5f9${gaugePadded}` }); // isAlive(gauge)
-                gaugeCalls.push({ to: V2_CONTRACTS.Voter, data: `0xc4f08165${gaugePadded}` }); // gaugeToFees(gauge)
-                gaugeCalls.push({ to: V2_CONTRACTS.Voter, data: `0x929c8dcd${gaugePadded}` }); // gaugeToBribe(gauge)
-            }
-            const gaugeInfoResults = await batchRpcCall(gaugeCalls);
-
-            // Build final gauge list
-            const gaugeList: GaugeInfo[] = [];
-            for (let i = 0; i < validPools.length; i++) {
-                const p = validPools[i];
-                const base = i * 3;
-
-                const isAlive = gaugeInfoResults[base] === '0x0000000000000000000000000000000000000000000000000000000000000001';
-                const feeReward = `0x${gaugeInfoResults[base + 1].slice(-40)}` as Address;
-                const bribeReward = `0x${gaugeInfoResults[base + 2].slice(-40)}` as Address;
-
-                // Get token symbols
-                const t0Info = tokenMap.get(p.token0.toLowerCase()) || KNOWN_TOKENS[p.token0.toLowerCase()];
-                const t1Info = tokenMap.get(p.token1.toLowerCase()) || KNOWN_TOKENS[p.token1.toLowerCase()];
-                const symbol0 = t0Info?.symbol || p.token0.slice(0, 6);
-                const symbol1 = t1Info?.symbol || p.token1.slice(0, 6);
-
+            // Build gauge list from static config with live weights
+            const gaugeList: GaugeInfo[] = GAUGE_LIST.map((g, i) => {
+                const weight = weightResults[i + 1] !== '0x' ? BigInt(weightResults[i + 1]) : BigInt(0);
                 const weightPercent = totalWeight > BigInt(0)
-                    ? Number((p.weight * BigInt(10000)) / totalWeight) / 100
+                    ? Number((weight * BigInt(10000)) / totalWeight) / 100
                     : 0;
 
-                gaugeList.push({
-                    pool: p.pool,
-                    gauge: p.gauge,
-                    token0: p.token0,
-                    token1: p.token1,
-                    symbol0,
-                    symbol1,
-                    poolType: p.poolType,
-                    isStable: p.isStable,
-                    weight: p.weight,
+                return {
+                    pool: g.pool as Address,
+                    gauge: g.gauge as Address,
+                    token0: g.token0 as Address,
+                    token1: g.token1 as Address,
+                    symbol0: g.symbol0,
+                    symbol1: g.symbol1,
+                    poolType: g.type,
+                    isStable: false,
+                    weight,
                     weightPercent,
-                    isAlive,
-                    feeReward,
-                    bribeReward,
-                    rewardTokens: [], // Skip bribe reward fetching for now (can add later)
-                });
-            }
+                    isAlive: g.isAlive,
+                    feeReward: '0x0000000000000000000000000000000000000000' as Address,
+                    bribeReward: '0x0000000000000000000000000000000000000000' as Address,
+                    rewardTokens: [],
+                };
+            });
 
             setGauges(gaugeList);
         } catch (err) {
