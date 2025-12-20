@@ -347,10 +347,16 @@ export function SwapInterface() {
                 </div>
             </div>
 
-            {/* Error Display */}
+            {/* Error Display - Compact */}
             {error && (
                 <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-                    {error}
+                    {error.includes('User rejected') || error.includes('user rejected')
+                        ? 'Transaction cancelled'
+                        : error.includes('insufficient')
+                            ? 'Insufficient balance'
+                            : error.length > 50
+                                ? error.slice(0, 50) + '...'
+                                : error}
                 </div>
             )}
 
