@@ -269,16 +269,14 @@ export default function PortfolioPage() {
         const t0 = getTokenInfo(selectedPosition.token0);
         const t1 = getTokenInfo(selectedPosition.token1);
 
-        // Calculate price ratio at current tick
-        const sqrtPriceCurrent = Math.pow(1.0001, currentTick / 2);
-        const sqrtPriceLower = Math.pow(1.0001, tickLower / 2);
-        const sqrtPriceUpper = Math.pow(1.0001, tickUpper / 2);
+        // For CL, we use the current price to calculate the ratio
+        // price = 1.0001^tick (in token1/token0 raw units)
+        // Need to adjust for decimals: actual_price = raw_price * 10^(t0.decimals - t1.decimals)
+        const rawPrice = Math.pow(1.0001, currentTick);
+        const actualPrice = rawPrice * Math.pow(10, t0.decimals - t1.decimals);
 
-        // Adjust for decimals
-        const decimalAdjust = Math.pow(10, t1.decimals - t0.decimals);
+        console.log('calculateAmount1FromAmount0:', { currentTick, rawPrice, actualPrice, t0decimals: t0.decimals, t1decimals: t1.decimals });
 
-        // Calculate the ratio of token1 to token0 for this position
-        // For in-range positions: amount1 = amount0 * (sqrtP - sqrtPa) / (1/sqrtP - 1/sqrtPb)
         if (currentTick < tickLower) {
             // Position is below range, only token0 needed
             return '0';
@@ -286,12 +284,10 @@ export default function PortfolioPage() {
             // Position is above range, only token1 needed - can't compute from amount0
             return '';
         } else {
-            // In range
-            const numerator = sqrtPriceCurrent - sqrtPriceLower;
-            const denominator = (1 / sqrtPriceCurrent) - (1 / sqrtPriceUpper);
-            if (denominator === 0) return '';
-            const ratio = numerator / denominator * decimalAdjust;
-            const amount1 = parseFloat(amount0) * ratio;
+            // In range - use simple price conversion
+            // amount1 = amount0 * price
+            const amount1 = parseFloat(amount0) * actualPrice;
+            console.log('Calculated amount1:', amount1);
             return amount1.toFixed(6);
         }
     };
@@ -306,11 +302,10 @@ export default function PortfolioPage() {
         const t0 = getTokenInfo(selectedPosition.token0);
         const t1 = getTokenInfo(selectedPosition.token1);
 
-        const sqrtPriceCurrent = Math.pow(1.0001, currentTick / 2);
-        const sqrtPriceLower = Math.pow(1.0001, tickLower / 2);
-        const sqrtPriceUpper = Math.pow(1.0001, tickUpper / 2);
-
-        const decimalAdjust = Math.pow(10, t1.decimals - t0.decimals);
+        // price = 1.0001^tick (in token1/token0 raw units)
+        // actual_price = raw_price * 10^(t0.decimals - t1.decimals)
+        const rawPrice = Math.pow(1.0001, currentTick);
+        const actualPrice = rawPrice * Math.pow(10, t0.decimals - t1.decimals);
 
         if (currentTick < tickLower) {
             // Only token0 needed - can't compute from amount1
@@ -319,11 +314,10 @@ export default function PortfolioPage() {
             // Only token1 needed
             return '0';
         } else {
-            const numerator = sqrtPriceCurrent - sqrtPriceLower;
-            const denominator = (1 / sqrtPriceCurrent) - (1 / sqrtPriceUpper);
-            if (numerator === 0) return '';
-            const ratio = denominator / numerator / decimalAdjust;
-            const amount0 = parseFloat(amount1) * ratio;
+            // In range - use simple price conversion
+            // amount0 = amount1 / price
+            if (actualPrice === 0) return '';
+            const amount0 = parseFloat(amount1) / actualPrice;
             return amount0.toFixed(6);
         }
     };
@@ -887,6 +881,12 @@ export default function PortfolioPage() {
 
     // Increase liquidity for CL position
     const handleIncreaseLiquidity = async () => {
+        // Prevent multiple submissions
+        if (actionLoading) {
+            console.log('Action already in progress, skipping');
+            return;
+        }
+
         if (!address || !selectedPosition || (!amount0ToAdd && !amount1ToAdd)) return;
         setActionLoading(true);
         try {
@@ -895,6 +895,18 @@ export default function PortfolioPage() {
             const amount0Desired = amount0ToAdd ? BigInt(Math.floor(parseFloat(amount0ToAdd) * (10 ** t0.decimals))) : BigInt(0);
             const amount1Desired = amount1ToAdd ? BigInt(Math.floor(parseFloat(amount1ToAdd) * (10 ** t1.decimals))) : BigInt(0);
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // Check if either token is WSEI (for native value handling)
+            const isToken0WSEI = selectedPosition.token0.toLowerCase() === WSEI.address.toLowerCase();
+            const isToken1WSEI = selectedPosition.token1.toLowerCase() === WSEI.address.toLowerCase();
+
+            // Calculate native value if using WSEI
+            let nativeValue = BigInt(0);
+            if (isToken0WSEI && amount0Desired > BigInt(0)) {
+                nativeValue = amount0Desired;
+            } else if (isToken1WSEI && amount1Desired > BigInt(0)) {
+                nativeValue = amount1Desired;
+            }
 
             // Helper to check allowance
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
@@ -914,8 +926,8 @@ export default function PortfolioPage() {
                 return allowance >= amount;
             };
 
-            // Approve token0 if needed (only if allowance insufficient)
-            if (amount0Desired > BigInt(0)) {
+            // Approve token0 if needed (skip for WSEI when using native)
+            if (amount0Desired > BigInt(0) && !(isToken0WSEI && nativeValue > BigInt(0))) {
                 const hasAllowance = await checkAllowance(selectedPosition.token0, amount0Desired);
                 if (!hasAllowance) {
                     await writeContractAsync({
@@ -927,8 +939,8 @@ export default function PortfolioPage() {
                 }
             }
 
-            // Approve token1 if needed (only if allowance insufficient)
-            if (amount1Desired > BigInt(0)) {
+            // Approve token1 if needed (skip for WSEI when using native)
+            if (amount1Desired > BigInt(0) && !(isToken1WSEI && nativeValue > BigInt(0))) {
                 const hasAllowance = await checkAllowance(selectedPosition.token1, amount1Desired);
                 if (!hasAllowance) {
                     await writeContractAsync({
@@ -953,6 +965,7 @@ export default function PortfolioPage() {
                     amount1Min: BigInt(0),
                     deadline,
                 }],
+                value: nativeValue,
             });
 
             alert('Liquidity increased successfully!');
