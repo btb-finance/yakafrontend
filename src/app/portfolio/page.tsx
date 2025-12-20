@@ -231,14 +231,48 @@ export default function PortfolioPage() {
 
                 const t0 = getTokenInfo(selectedPosition.token0);
                 const t1 = getTokenInfo(selectedPosition.token1);
+                const isToken0WSEI = selectedPosition.token0.toLowerCase() === WSEI.address.toLowerCase();
+                const isToken1WSEI = selectedPosition.token1.toLowerCase() === WSEI.address.toLowerCase();
 
                 console.log('Balance responses:', bal0Response, bal1Response);
 
-                if (bal0Response.result && bal0Response.result !== '0x') {
+                // For WSEI, fetch native SEI balance instead
+                if (isToken0WSEI) {
+                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_getBalance',
+                            params: [address, 'latest'],
+                            id: 10,
+                        }),
+                    }).then(r => r.json());
+                    if (nativeBal.result) {
+                        const nativeWei = BigInt(nativeBal.result);
+                        setBalance0((Number(nativeWei) / 1e18).toFixed(6));
+                    }
+                } else if (bal0Response.result && bal0Response.result !== '0x') {
                     const bal0Wei = BigInt(bal0Response.result);
                     setBalance0((Number(bal0Wei) / (10 ** t0.decimals)).toFixed(6));
                 }
-                if (bal1Response.result && bal1Response.result !== '0x') {
+
+                if (isToken1WSEI) {
+                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_getBalance',
+                            params: [address, 'latest'],
+                            id: 11,
+                        }),
+                    }).then(r => r.json());
+                    if (nativeBal.result) {
+                        const nativeWei = BigInt(nativeBal.result);
+                        setBalance1((Number(nativeWei) / 1e18).toFixed(6));
+                    }
+                } else if (bal1Response.result && bal1Response.result !== '0x') {
                     const bal1Wei = BigInt(bal1Response.result);
                     setBalance1((Number(bal1Wei) / (10 ** t1.decimals)).toFixed(6));
                 }
@@ -1614,7 +1648,7 @@ export default function PortfolioPage() {
                         <div className="mb-4">
                             <div className="flex justify-between items-center mb-2">
                                 <label className="text-sm text-gray-400">
-                                    {getTokenInfo(selectedPosition.token0).symbol} Amount
+                                    {selectedPosition.token0.toLowerCase() === WSEI.address.toLowerCase() ? 'SEI (native)' : getTokenInfo(selectedPosition.token0).symbol} Amount
                                 </label>
                                 <div className="flex items-center gap-2 text-sm">
                                     <span className="text-gray-500">Balance: {balance0}</span>
@@ -1636,7 +1670,7 @@ export default function PortfolioPage() {
                         <div className="mb-6">
                             <div className="flex justify-between items-center mb-2">
                                 <label className="text-sm text-gray-400">
-                                    {getTokenInfo(selectedPosition.token1).symbol} Amount
+                                    {selectedPosition.token1.toLowerCase() === WSEI.address.toLowerCase() ? 'SEI (native)' : getTokenInfo(selectedPosition.token1).symbol} Amount
                                 </label>
                                 <div className="flex items-center gap-2 text-sm">
                                     <span className="text-gray-500">Balance: {balance1}</span>
