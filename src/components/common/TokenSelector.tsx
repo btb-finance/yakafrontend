@@ -258,7 +258,14 @@ export function TokenSelector({
                         )}
 
                         {/* Token List */}
-                        <div className="max-h-[50vh] md:max-h-72 overflow-y-auto space-y-2 overscroll-contain" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+                        <div
+                            className="max-h-[50vh] md:max-h-72 overflow-y-scroll space-y-2 overscroll-contain"
+                            style={{
+                                WebkitOverflowScrolling: 'touch',
+                                touchAction: 'pan-y',
+                                overscrollBehavior: 'contain'
+                            }}
+                        >
                             {filteredTokens.length === 0 && !customToken ? (
                                 <div className="text-center py-8 text-gray-400">
                                     {isValidAddress(search) ? 'Checking address...' : 'No tokens found'}
