@@ -228,6 +228,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
     // Handle CL liquidity add
     const handleAddCLLiquidity = async () => {
+        // Prevent multiple submissions
+        if (txProgress !== 'idle' && txProgress !== 'done' && txProgress !== 'error') {
+            console.log('Transaction already in progress, skipping');
+            return;
+        }
+
         if (!tokenA || !tokenB || !amountA || !amountB || !address) {
             return;
         }
@@ -463,13 +469,17 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         }
     };
 
+    // Check if we're in the middle of a CL transaction
+    const isCLInProgress = txProgress !== 'idle' && txProgress !== 'done' && txProgress !== 'error';
+
     const canAdd = isConnected &&
         tokenA &&
         tokenB &&
         amountA &&
         amountB &&
         parseFloat(amountA) > 0 &&
-        parseFloat(amountB) > 0;
+        parseFloat(amountB) > 0 &&
+        !isCLInProgress;
 
     const poolExists = clPoolPrice !== null;
     const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
@@ -912,11 +922,11 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                             <div className={mobileStyles.footer}>
                                 <motion.button
                                     onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
-                                    disabled={!canAdd || isLoading}
+                                    disabled={!canAdd || isLoading || isCLInProgress}
                                     className="w-full py-4 sm:py-5 rounded-xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98]"
                                     whileTap={canAdd ? { scale: 0.98 } : {}}
                                 >
-                                    {isLoading ? (
+                                    {isLoading || isCLInProgress ? (
                                         <span className="flex items-center justify-center gap-3">
                                             <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
