@@ -400,7 +400,7 @@ export default function PortfolioPage() {
                 const count = countResult.result ? parseInt(countResult.result, 16) : 0;
 
                 for (let i = 0; i < count; i++) {
-                    // Get tokenId at index
+                    // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
                     const tokenIdResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -409,7 +409,7 @@ export default function PortfolioPage() {
                             method: 'eth_call',
                             params: [{
                                 to: V2_CONTRACTS.VotingEscrow,
-                                data: `0x2f745c59${address.slice(2).toLowerCase().padStart(64, '0')}${i.toString(16).padStart(64, '0')}`
+                                data: `0x8bf9d84c${address.slice(2).toLowerCase().padStart(64, '0')}${i.toString(16).padStart(64, '0')}`
                             }, 'latest']
                         })
                     }).then(r => r.json());
@@ -417,7 +417,7 @@ export default function PortfolioPage() {
                     if (!tokenIdResult.result) continue;
                     const tokenId = BigInt(tokenIdResult.result);
 
-                    // Get locked data
+                    // Get locked data using locked(uint256) - selector 0xb45a3c0e
                     const lockedResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -426,12 +426,12 @@ export default function PortfolioPage() {
                             method: 'eth_call',
                             params: [{
                                 to: V2_CONTRACTS.VotingEscrow,
-                                data: `0xf32ddc50${tokenId.toString(16).padStart(64, '0')}`
+                                data: `0xb45a3c0e${tokenId.toString(16).padStart(64, '0')}`
                             }, 'latest']
                         })
                     }).then(r => r.json());
 
-                    // Get voting power
+                    // Get voting power using balanceOfNFT(uint256) - selector 0xe7e242d4
                     const vpResult = await fetch('https://evm-rpc.sei-apis.com', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -440,7 +440,7 @@ export default function PortfolioPage() {
                             method: 'eth_call',
                             params: [{
                                 to: V2_CONTRACTS.VotingEscrow,
-                                data: `0xf1127ed8${tokenId.toString(16).padStart(64, '0')}`
+                                data: `0xe7e242d4${tokenId.toString(16).padStart(64, '0')}`
                             }, 'latest']
                         })
                     }).then(r => r.json());
