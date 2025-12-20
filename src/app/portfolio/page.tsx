@@ -1028,211 +1028,128 @@ export default function PortfolioPage() {
     }
 
     return (
-        <div className="container mx-auto px-4 md:px-6 py-4 md:py-8">
-            {/* Header */}
+        <div className="container mx-auto px-3 sm:px-6 py-4">
+            {/* Header - Compact inline */}
             <motion.div
-                className="text-center mb-6 md:mb-8"
+                className="flex items-center justify-between gap-3 mb-4"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2">
-                    <span className="gradient-text">My Portfolio</span>
-                </h1>
-                <p className="text-sm md:text-base text-gray-400">
-                    Track your LP positions, locked WIND, and rewards
-                </p>
+                <div>
+                    <h1 className="text-xl sm:text-2xl font-bold">
+                        <span className="gradient-text">Portfolio</span>
+                    </h1>
+                    <p className="text-xs sm:text-sm text-gray-400">
+                        {clPositions.length + v2Positions.length} positions · {veNFTs.length} locks
+                    </p>
+                </div>
+                {totalPendingRewards > BigInt(0) && (
+                    <div className="text-right">
+                        <div className="text-xs text-gray-400">Claimable</div>
+                        <div className="text-sm sm:text-base font-bold text-green-400">
+                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(2)} WIND
+                        </div>
+                    </div>
+                )}
             </motion.div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-6 md:mb-8">
-                <motion.div
-                    className="glass-card p-3 md:p-4"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                >
-                    <div className="text-xs text-gray-400 mb-1">LP Positions</div>
-                    <div className="text-xl md:text-2xl font-bold gradient-text">{clPositions.length + v2Positions.length}</div>
-                    <div className="text-xs text-gray-500 mt-0.5 md:mt-1">{clPositions.length} CL · {v2Positions.length} V2</div>
-                </motion.div>
-
-                <motion.div
-                    className="glass-card p-3 md:p-4"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                >
-                    <div className="text-xs text-gray-400 mb-1">Locked WIND</div>
-                    <div className="text-xl md:text-2xl font-bold text-primary">
-                        {parseFloat(formatUnits(totalLockedYaka, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5 md:mt-1">{veNFTs.length} veNFT{veNFTs.length !== 1 ? 's' : ''}</div>
-                </motion.div>
-
-                <motion.div
-                    className="glass-card p-4"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                >
-                    <div className="text-xs text-gray-400 mb-1">Pending Rewards</div>
-                    <div className="text-2xl font-bold text-green-400">
-                        {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">WIND to claim</div>
-                </motion.div>
-
-                <motion.div
-                    className="glass-card p-4"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                >
-                    <div className="text-xs text-gray-400 mb-1">Voting Power</div>
-                    <div className="text-2xl font-bold text-secondary">
-                        {parseFloat(formatUnits(totalVotingPower, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">veWIND</div>
-                </motion.div>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6 border-b border-white/10 pb-2 overflow-x-auto">
+            {/* Tabs - Compact */}
+            <div className="flex gap-1 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
                 {(['overview', 'positions', 'staked', 'locks', 'rewards'] as const).map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === tab
+                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${activeTab === tab
                             ? 'bg-primary text-white'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            : 'text-gray-400 hover:text-white bg-white/5'
                             }`}
                     >
-                        {tab === 'overview' && '📊 '}
-                        {tab === 'positions' && '💧 '}
-                        {tab === 'staked' && '⚡ '}
-                        {tab === 'locks' && '🔒 '}
-                        {tab === 'rewards' && '🎁 '}
                         {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
 
-            {/* Overview Tab */}
+            {/* Overview Tab - Compact summary */}
             {activeTab === 'overview' && (
-                <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {/* Recent Positions */}
-                    <div className="glass-card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">Recent LP Positions</h3>
-                            <Link href="/pools" className="text-sm text-primary hover:underline">View All →</Link>
+                <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="glass-card p-3">
+                            <div className="text-[10px] text-gray-400">LP Positions</div>
+                            <div className="text-lg font-bold gradient-text">{clPositions.length + v2Positions.length}</div>
+                            <div className="text-[10px] text-gray-500">{clPositions.length} CL · {v2Positions.length} V2</div>
                         </div>
-                        {clLoading ? (
-                            <div className="text-center py-8 text-gray-400">Loading positions...</div>
-                        ) : clPositions.length === 0 && v2Positions.length === 0 ? (
-                            <div className="text-center py-8">
-                                <p className="text-gray-400 mb-4">No LP positions yet</p>
-                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Add Liquidity</Link>
+                        <div className="glass-card p-3">
+                            <div className="text-[10px] text-gray-400">Staked</div>
+                            <div className="text-lg font-bold text-yellow-400">{stakedPositions.length}</div>
+                            <div className="text-[10px] text-gray-500">earning rewards</div>
+                        </div>
+                        <div className="glass-card p-3">
+                            <div className="text-[10px] text-gray-400">Locked WIND</div>
+                            <div className="text-lg font-bold text-primary">
+                                {parseFloat(formatUnits(totalLockedYaka, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </div>
-                        ) : (
-                            <div className="space-y-3">
+                            <div className="text-[10px] text-gray-500">{veNFTs.length} veNFT{veNFTs.length !== 1 ? 's' : ''}</div>
+                        </div>
+                        <div className="glass-card p-3">
+                            <div className="text-[10px] text-gray-400">Claimable</div>
+                            <div className="text-lg font-bold text-green-400">
+                                {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(2)}
+                            </div>
+                            <div className="text-[10px] text-gray-500">WIND rewards</div>
+                        </div>
+                    </div>
+
+                    {/* Quick Actions */}
+                    {totalPendingRewards > BigInt(0) && (
+                        <button
+                            onClick={handleClaimAllRewards}
+                            disabled={actionLoading}
+                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50"
+                        >
+                            {actionLoading ? 'Claiming...' : `Claim ${parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND`}
+                        </button>
+                    )}
+
+                    {/* Recent Positions Preview */}
+                    {clPositions.length > 0 && (
+                        <div className="glass-card p-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium">Recent Positions</span>
+                                <button onClick={() => setActiveTab('positions')} className="text-[10px] text-primary">View All →</button>
+                            </div>
+                            <div className="space-y-1.5">
                                 {clPositions.slice(0, 3).map((pos, i) => {
                                     const t0 = getTokenInfo(pos.token0);
                                     const t1 = getTokenInfo(pos.token1);
                                     return (
-                                        <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex -space-x-2">
-                                                    <div className="w-8 h-8 rounded-full bg-secondary/30 flex items-center justify-center text-xs font-bold">{t0.symbol.slice(0, 2)}</div>
-                                                    <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center text-xs font-bold">{t1.symbol.slice(0, 2)}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="font-medium text-sm">{t0.symbol}/{t1.symbol}</div>
-                                                    <div className="text-xs text-gray-400">Position #{pos.tokenId.toString()}</div>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-xs px-2 py-1 rounded-full bg-secondary/20 text-secondary">CL</span>
-                                            </div>
+                                        <div key={i} className="flex items-center justify-between p-2 rounded bg-white/5 text-xs">
+                                            <span className="font-medium">{t0.symbol}/{t1.symbol}</span>
+                                            <span className="text-gray-400">#{pos.tokenId.toString()}</span>
                                         </div>
                                     );
                                 })}
                             </div>
-                        )}
-                    </div>
-
-                    {/* Locks Overview */}
-                    <div className="glass-card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">Locked WIND (veNFTs)</h3>
-                            <Link href="/vote" className="text-sm text-primary hover:underline">Manage Locks →</Link>
                         </div>
-                        {loadingVeNFTs ? (
-                            <div className="text-center py-8 text-gray-400">Loading locks...</div>
-                        ) : veNFTs.length === 0 ? (
-                            <div className="text-center py-8">
-                                <p className="text-gray-400 mb-4">No locked WIND</p>
-                                <Link href="/vote" className="btn-primary px-6 py-2 rounded-lg">Lock WIND</Link>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {veNFTs.slice(0, 3).map((nft, i) => {
-                                    const lockEndDate = new Date(Number(nft.lockEnd) * 1000);
-                                    const isPermanent = Number(nft.lockEnd) === 0 || Number(nft.lockEnd) > Date.now() / 1000 + 3600 * 24 * 365 * 3;
-                                    return (
-                                        <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                                            <div>
-                                                <div className="font-medium text-sm">veNFT #{nft.tokenId.toString()}</div>
-                                                <div className="text-xs text-gray-400">
-                                                    {parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString()} WIND locked
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-sm font-medium text-primary">
-                                                    {parseFloat(formatUnits(nft.votingPower, 18)).toFixed(2)} veWIND
-                                                </div>
-                                                <div className="text-xs text-gray-400">
-                                                    {isPermanent ? 'Permanent Lock' : `Unlocks ${lockEndDate.toLocaleDateString()}`}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
+                    )}
 
-                    {/* Pending Rewards */}
-                    <div className="glass-card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">Pending Rewards</h3>
-                            <Link href="/pools" className="text-sm text-primary hover:underline">Manage Positions →</Link>
-                        </div>
-                        {loadingStaked ? (
-                            <div className="text-center py-8 text-gray-400">Loading rewards...</div>
-                        ) : stakedPositions.length === 0 ? (
-                            <div className="text-center py-8">
-                                <p className="text-gray-400 mb-4">No staked positions</p>
-                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">Stake LP</Link>
+                    {/* Locks Preview */}
+                    {veNFTs.length > 0 && (
+                        <div className="glass-card p-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium">Your Locks</span>
+                                <button onClick={() => setActiveTab('locks')} className="text-[10px] text-primary">View All →</button>
                             </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {stakedPositions.slice(0, 3).map((pos, i) => (
-                                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                                        <div>
-                                            <div className="font-medium text-sm">{pos.token0Symbol}/{pos.token1Symbol}</div>
-                                            <div className="text-xs text-gray-400">Staked #{pos.tokenId.toString()}</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-sm font-medium text-green-400">
-                                                {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND
-                                            </div>
-                                            <div className="text-xs text-gray-400">pending</div>
-                                        </div>
+                            <div className="space-y-1.5">
+                                {veNFTs.slice(0, 2).map((nft, i) => (
+                                    <div key={i} className="flex items-center justify-between p-2 rounded bg-white/5 text-xs">
+                                        <span className="font-medium">veNFT #{nft.tokenId.toString()}</span>
+                                        <span className="text-primary">{parseFloat(formatUnits(nft.votingPower, 18)).toFixed(0)} veWIND</span>
                                     </div>
                                 ))}
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </motion.div>
             )}
 
@@ -1252,19 +1169,19 @@ export default function PortfolioPage() {
                                         const t1 = getTokenInfo(pos.token1);
                                         const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
                                         return (
-                                            <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex -space-x-2">
-                                                            <div className="w-10 h-10 rounded-full bg-secondary/30 flex items-center justify-center text-sm font-bold">{t0.symbol.slice(0, 2)}</div>
-                                                            <div className="w-10 h-10 rounded-full bg-primary/30 flex items-center justify-center text-sm font-bold">{t1.symbol.slice(0, 2)}</div>
+                                            <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/10">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="relative w-12 h-7 flex-shrink-0">
+                                                            <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t0.symbol.slice(0, 2)}</div>
+                                                            <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">{t1.symbol.slice(0, 2)}</div>
                                                         </div>
-                                                        <div>
-                                                            <div className="font-semibold">{t0.symbol}/{t1.symbol}</div>
-                                                            <div className="text-xs text-gray-400">#{pos.tokenId.toString()} · Fee: {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}</div>
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-sm truncate">{t0.symbol}/{t1.symbol}</div>
+                                                            <div className="text-[10px] text-gray-400">#{pos.tokenId.toString()} · {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}</div>
                                                         </div>
                                                     </div>
-                                                    <span className="text-xs px-2 py-1 rounded-full bg-secondary/20 text-secondary">CL</span>
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">CL</span>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-4 text-sm">
                                                     <div>
@@ -1351,132 +1268,82 @@ export default function PortfolioPage() {
 
             {/* Staked Tab */}
             {activeTab === 'staked' && (
-                <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {/* Summary Card */}
-                    <div className="glass-card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">Staked LP Positions</h3>
-                            <Link href="/pools" className="text-sm text-primary hover:underline">Manage Stakes →</Link>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20">
-                                <div className="text-xs text-gray-400 mb-1">Total Staked</div>
-                                <div className="text-2xl font-bold gradient-text">{stakedPositions.length}</div>
-                                <div className="text-xs text-gray-500">NFT Positions</div>
-                            </div>
-                            <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
-                                <div className="text-xs text-gray-400 mb-1">Total Pending</div>
-                                <div className="text-xl font-bold text-green-400">
-                                    {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)}
-                                </div>
-                                <div className="text-xs text-gray-500">WIND rewards</div>
-                            </div>
-                            <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
-                                <div className="text-xs text-gray-400 mb-1">Active Gauges</div>
-                                <div className="text-xl font-bold text-blue-400">
-                                    {new Set(stakedPositions.map(p => p.gaugeAddress)).size}
-                                </div>
-                                <div className="text-xs text-gray-500">earning rewards</div>
-                            </div>
-                        </div>
-                    </div>
-
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                     {/* Staked Positions List */}
-                    <div className="glass-card p-6">
-                        <h3 className="font-semibold mb-4">Your Staked NFTs</h3>
+                    <div className="glass-card p-3 sm:p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold text-sm">Your Staked NFTs</h3>
+                            {stakedPositions.length > 0 && (
+                                <span className="text-xs text-green-400">
+                                    {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND pending
+                                </span>
+                            )}
+                        </div>
                         {loadingStaked ? (
-                            <div className="text-center py-12 text-gray-400">
-                                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                                Loading staked positions...
+                            <div className="text-center py-8 text-gray-400">
+                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                                Loading...
                             </div>
                         ) : stakedPositions.length === 0 ? (
-                            <div className="text-center py-12">
-                                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                                    <span className="text-4xl">⚡</span>
-                                </div>
-                                <p className="text-gray-400 mb-2">No staked positions</p>
-                                <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                                    Stake your LP positions to earn WIND emissions
-                                </p>
-                                <Link href="/pools" className="btn-primary px-6 py-3 rounded-lg">View Your Positions</Link>
+                            <div className="text-center py-8">
+                                <p className="text-gray-400 text-sm mb-3">No staked positions</p>
+                                <Link href="/pools" className="btn-primary px-4 py-2 text-sm rounded-lg">Stake LP</Link>
                             </div>
                         ) : (
-                            <div className="space-y-4">
+                            <div className="space-y-2">
                                 {stakedPositions.map((pos, i) => {
                                     const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
                                     const dailyRewards = Number(formatUnits(pos.rewardRate, 18)) * 86400;
 
                                     return (
-                                        <div key={i} className="p-5 rounded-xl bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border border-yellow-500/20">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="flex -space-x-3">
-                                                        <div className="w-12 h-12 rounded-full bg-secondary/30 flex items-center justify-center text-sm font-bold border-2 border-bg-primary">
+                                        <div key={i} className="p-3 rounded-xl bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border border-yellow-500/20">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="relative w-12 h-7 flex-shrink-0">
+                                                        <div className="absolute left-0 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
                                                             {pos.token0Symbol.slice(0, 2)}
                                                         </div>
-                                                        <div className="w-12 h-12 rounded-full bg-primary/30 flex items-center justify-center text-sm font-bold border-2 border-bg-primary">
+                                                        <div className="absolute left-4 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
                                                             {pos.token1Symbol.slice(0, 2)}
                                                         </div>
                                                     </div>
-                                                    <div>
-                                                        <div className="font-bold text-lg">{pos.token0Symbol}/{pos.token1Symbol}</div>
-                                                        <div className="text-sm text-gray-400">
-                                                            NFT #{pos.tokenId.toString()} · {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}
+                                                    <div className="min-w-0">
+                                                        <div className="font-bold text-sm truncate">{pos.token0Symbol}/{pos.token1Symbol}</div>
+                                                        <div className="text-[10px] text-gray-400">
+                                                            #{pos.tokenId.toString()} · {feeMap[pos.tickSpacing] || `${pos.tickSpacing}ts`}
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <span className="text-xs px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 font-medium">
-                                                    ⚡ Staked
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-medium">
+                                                    Staked
                                                 </span>
                                             </div>
 
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                <div className="p-3 rounded-lg bg-white/5">
-                                                    <div className="text-xs text-gray-400 mb-1">Status</div>
-                                                    <div className="font-semibold text-green-400">✓ Active</div>
-                                                </div>
-                                                <div className="p-3 rounded-lg bg-white/5">
-                                                    <div className="text-xs text-gray-400 mb-1">Pending Rewards</div>
-                                                    <div className="font-semibold text-green-400">
-                                                        {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} WIND
-                                                    </div>
-                                                </div>
-                                                <div className="p-3 rounded-lg bg-white/5">
-                                                    <div className="text-xs text-gray-400 mb-1">Est. Daily</div>
-                                                    <div className="font-semibold text-blue-400">
-                                                        ~{dailyRewards.toFixed(4)} WIND
-                                                    </div>
-                                                </div>
-                                                <div className="p-3 rounded-lg bg-white/5">
-                                                    <div className="text-xs text-gray-400 mb-1">Gauge</div>
-                                                    <div className="font-mono text-xs truncate">
-                                                        {pos.gaugeAddress.slice(0, 8)}...{pos.gaugeAddress.slice(-6)}
-                                                    </div>
-                                                </div>
+                                            {/* Inline info */}
+                                            <div className="flex items-center justify-between text-xs mb-2 px-1">
+                                                <span className="text-green-400 font-medium">
+                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND
+                                                </span>
+                                                <span className="text-gray-400">
+                                                    ~{dailyRewards.toFixed(2)}/day
+                                                </span>
                                             </div>
-                                            {/* Action Buttons */}
-                                            <div className="flex gap-3 mt-4 pt-4 border-t border-white/10">
-                                                <button
-                                                    onClick={() => {
-                                                        alert('To increase liquidity on a staked position:\n\n1. Click "Unstake" to return the NFT to your wallet\n2. Go to "Positions" tab\n3. Click "+ Increase" on the position\n4. Re-stake the position in the gauge');
-                                                    }}
-                                                    className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition font-medium"
-                                                >
-                                                    + Increase
-                                                </button>
+
+                                            {/* Action Buttons - Compact */}
+                                            <div className="flex gap-1.5">
                                                 <button
                                                     onClick={() => handleClaimRewards(pos)}
                                                     disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
-                                                    className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50 font-medium"
+                                                    className="flex-1 py-1.5 text-[10px] rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50 font-medium"
                                                 >
-                                                    {actionLoading ? '...' : `Claim ${parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND`}
+                                                    Claim
                                                 </button>
                                                 <button
                                                     onClick={() => handleUnstakePosition(pos)}
                                                     disabled={actionLoading}
-                                                    className="flex-1 py-2.5 px-4 text-sm rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50 font-medium"
+                                                    className="flex-1 py-1.5 text-[10px] rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition disabled:opacity-50 font-medium"
                                                 >
-                                                    {actionLoading ? '...' : 'Unstake'}
+                                                    Unstake
                                                 </button>
                                             </div>
                                         </div>
@@ -1490,113 +1357,113 @@ export default function PortfolioPage() {
 
             {/* Locks Tab */}
             {activeTab === 'locks' && (
-                <motion.div className="glass-card p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <h3 className="font-semibold mb-4">veNFT Locks</h3>
-                    {loadingVeNFTs ? (
-                        <div className="text-center py-12 text-gray-400">Loading locks...</div>
-                    ) : veNFTs.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-                                <span className="text-4xl">🔒</span>
-                            </div>
-                            <p className="text-gray-400 mb-4">No WIND locked yet</p>
-                            <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
-                                Lock WIND to get veWIND voting power and earn protocol revenue
-                            </p>
-                            <Link href="/vote" className="btn-primary px-6 py-3 rounded-lg">Lock WIND</Link>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="glass-card p-3 sm:p-4">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="font-semibold text-sm">Your veNFT Locks</h3>
+                            <Link href="/vote" className="text-[10px] text-primary font-medium">
+                                Lock More →
+                            </Link>
                         </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {veNFTs.map((nft, i) => {
-                                const lockEndDate = new Date(Number(nft.lockEnd) * 1000);
-                                const isPermanent = Number(nft.lockEnd) === 0 || Number(nft.lockEnd) > Date.now() / 1000 + 3600 * 24 * 365 * 3;
-                                return (
-                                    <div key={i} className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="font-semibold">veNFT #{nft.tokenId.toString()}</div>
-                                            {isPermanent && (
-                                                <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">Permanent</span>
+                        {loadingVeNFTs ? (
+                            <div className="text-center py-6 text-gray-400 text-sm">Loading...</div>
+                        ) : veNFTs.length === 0 ? (
+                            <div className="text-center py-6">
+                                <p className="text-gray-400 text-sm mb-3">No WIND locked yet</p>
+                                <Link href="/vote" className="btn-primary px-4 py-2 text-xs rounded-lg">Lock WIND</Link>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {veNFTs.map((nft, i) => {
+                                    const lockEndDate = new Date(Number(nft.lockEnd) * 1000);
+                                    const isPermanent = Number(nft.lockEnd) === 0 || Number(nft.lockEnd) > Date.now() / 1000 + 3600 * 24 * 365 * 3;
+                                    return (
+                                        <div key={i} className="p-3 rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="font-semibold text-sm">veNFT #{nft.tokenId.toString()}</div>
+                                                {isPermanent && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">Permanent</span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <div>
+                                                    <span className="text-gray-400">Locked: </span>
+                                                    <span className="font-medium">{parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} WIND</span>
+                                                </div>
+                                                <div className="text-primary font-medium">
+                                                    {parseFloat(formatUnits(nft.votingPower, 18)).toFixed(0)} veWIND
+                                                </div>
+                                            </div>
+                                            {!isPermanent && (
+                                                <div className="text-[10px] text-gray-400 mt-1">
+                                                    Unlocks {lockEndDate.toLocaleDateString()}
+                                                </div>
                                             )}
                                         </div>
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div>
-                                                <div className="text-xs text-gray-400">Locked Amount</div>
-                                                <div className="font-medium">{parseFloat(formatUnits(nft.lockedAmount, 18)).toLocaleString()} WIND</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-gray-400">Voting Power</div>
-                                                <div className="font-medium text-primary">{parseFloat(formatUnits(nft.votingPower, 18)).toFixed(2)} veWIND</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-gray-400">Unlock Date</div>
-                                                <div className="font-medium">{isPermanent ? '∞ Permanent' : lockEndDate.toLocaleDateString()}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                                    );
+                                })}
+                                {/* Manage on Vote Page */}
+                                <Link
+                                    href="/vote"
+                                    className="block w-full py-2 text-center text-xs text-primary hover:bg-primary/10 rounded-lg transition"
+                                >
+                                    Manage Locks on Vote Page →
+                                </Link>
+                            </div>
+                        )}
+                    </div>
                 </motion.div>
             )}
 
             {/* Rewards Tab */}
             {activeTab === 'rewards' && (
-                <motion.div className="space-y-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {/* Total Pending */}
-                    <div className="glass-card p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">Total Pending Rewards</h3>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="glass-card p-3 sm:p-4">
+                        {/* Header with Claim All */}
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <div className="text-xl sm:text-2xl font-bold text-green-400">
+                                    {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
+                                </div>
+                                <div className="text-[10px] text-gray-400">
+                                    From {stakedPositions.length} position{stakedPositions.length !== 1 ? 's' : ''}
+                                </div>
+                            </div>
                             <button
                                 onClick={handleClaimAllRewards}
                                 disabled={actionLoading || totalPendingRewards <= BigInt(0)}
-                                className="btn-primary px-4 py-2 text-sm rounded-lg disabled:opacity-50"
+                                className="px-3 py-2 text-xs font-bold rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50"
                             >
-                                {actionLoading ? 'Claiming...' : 'Claim All'}
+                                {actionLoading ? '...' : 'Claim All'}
                             </button>
                         </div>
-                        <div className="text-4xl font-bold gradient-text mb-2">
-                            {parseFloat(formatUnits(totalPendingRewards, 18)).toFixed(4)} WIND
-                        </div>
-                        <div className="text-sm text-gray-400">
-                            From {stakedPositions.length} staked position{stakedPositions.length !== 1 ? 's' : ''}
-                        </div>
-                    </div>
 
-                    {/* By Position */}
-                    <div className="glass-card p-6">
-                        <h3 className="font-semibold mb-4">Rewards by Position</h3>
+                        {/* Rewards List */}
                         {loadingStaked ? (
-                            <div className="text-center py-8 text-gray-400">Loading rewards...</div>
+                            <div className="text-center py-6 text-gray-400 text-sm">Loading...</div>
                         ) : stakedPositions.length === 0 ? (
-                            <div className="text-center py-8">
-                                <p className="text-gray-400 mb-4">No staked positions earning rewards</p>
-                                <p className="text-sm text-gray-500 mb-6">Stake your LP positions to start earning WIND</p>
-                                <Link href="/pools" className="btn-primary px-6 py-2 rounded-lg">View Positions</Link>
+                            <div className="text-center py-6">
+                                <p className="text-gray-400 text-sm mb-2">No staked positions</p>
+                                <Link href="/pools" className="btn-primary px-4 py-2 text-xs rounded-lg">Stake LP</Link>
                             </div>
                         ) : (
-                            <div className="space-y-3">
+                            <div className="space-y-1.5">
                                 {stakedPositions.map((pos, i) => (
-                                    <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                                        <div>
-                                            <div className="font-medium">{pos.token0Symbol}/{pos.token1Symbol}</div>
-                                            <div className="text-xs text-gray-400">
-                                                Position #{pos.tokenId.toString()} · Gauge: {pos.gaugeAddress.slice(0, 8)}...
-                                            </div>
+                                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-white/5">
+                                        <div className="min-w-0">
+                                            <div className="font-medium text-sm truncate">{pos.token0Symbol}/{pos.token1Symbol}</div>
+                                            <div className="text-[10px] text-gray-400">#{pos.tokenId.toString()}</div>
                                         </div>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-right">
-                                                <div className="font-semibold text-green-400">
-                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(6)} WIND
-                                                </div>
-                                                <div className="text-xs text-gray-400">pending</div>
-                                            </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-semibold text-green-400">
+                                                {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)}
+                                            </span>
                                             <button
                                                 onClick={() => handleClaimRewards(pos)}
                                                 disabled={actionLoading || pos.pendingRewards <= BigInt(0)}
-                                                className="px-3 py-1.5 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                                                className="px-2 py-1 text-[10px] rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
                                             >
-                                                {actionLoading ? '...' : 'Claim'}
+                                                Claim
                                             </button>
                                         </div>
                                     </div>
@@ -1633,11 +1500,11 @@ export default function PortfolioPage() {
                             <div className="p-2 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
-                                        <div className="flex -space-x-1 flex-shrink-0">
-                                            <div className="w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold">
+                                        <div className="relative w-8 h-5 flex-shrink-0">
+                                            <div className="absolute left-0 w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[8px] font-bold border border-[var(--bg-primary)]">
                                                 {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
                                             </div>
-                                            <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
+                                            <div className="absolute left-3 w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[8px] font-bold border border-[var(--bg-primary)]">
                                                 {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
                                             </div>
                                         </div>
