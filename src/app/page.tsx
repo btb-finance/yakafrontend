@@ -140,6 +140,46 @@ export default function Home() {
               </motion.button>
             </Link>
           </div>
+
+          {/* veWIND Holder Congratulations Banner */}
+          {isConnected && totalVeNFTs > 0 && (
+            <motion.div
+              className="mt-8 mx-auto max-w-2xl"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <div className="p-4 md:p-6 rounded-2xl bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-teal-500/20 border border-green-500/40 shadow-lg shadow-green-500/10">
+                <div className="flex items-center gap-3 md:gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
+                    <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg md:text-xl font-bold text-green-400 mb-1">
+                      🎉 Congratulations! You&apos;re a veWIND Holder!
+                    </h3>
+                    <p className="text-sm md:text-base text-gray-300">
+                      You received the WIND airdrop! Keep voting to earn trading fees and rewards.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link href="/vote" className="flex-1 min-w-[140px]">
+                    <button className="w-full py-2.5 px-4 rounded-xl bg-green-500/20 border border-green-500/40 text-green-400 font-medium text-sm hover:bg-green-500/30 transition">
+                      Vote Now →
+                    </button>
+                  </Link>
+                  <Link href="/portfolio" className="flex-1 min-w-[140px]">
+                    <button className="w-full py-2.5 px-4 rounded-xl bg-white/5 border border-white/10 text-gray-300 font-medium text-sm hover:bg-white/10 transition">
+                      View veNFTs
+                    </button>
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       </section>
 
