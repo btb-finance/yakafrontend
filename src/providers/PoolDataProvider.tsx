@@ -26,12 +26,41 @@ interface PoolData {
     rewardRate?: bigint;
 }
 
+// Gauge/Voting Types
+export interface RewardToken {
+    address: Address;
+    symbol: string;
+    amount: bigint;
+    decimals: number;
+}
+
+export interface GaugeInfo {
+    pool: Address;
+    gauge: Address;
+    token0: Address;
+    token1: Address;
+    symbol0: string;
+    symbol1: string;
+    poolType: 'V2' | 'CL';
+    isStable: boolean;
+    weight: bigint;
+    weightPercent: number;
+    isAlive: boolean;
+    feeReward: Address;
+    bribeReward: Address;
+    rewardTokens: RewardToken[];
+}
+
 interface PoolDataContextType {
     v2Pools: PoolData[];
     clPools: PoolData[];
     allPools: PoolData[];
     tokenInfoMap: Map<string, TokenInfo>;
     poolRewards: Map<string, bigint>;
+    // Gauge/Voting data
+    gauges: GaugeInfo[];
+    totalVoteWeight: bigint;
+    gaugesLoading: boolean;
     isLoading: boolean;
     refetch: () => void;
     getTokenInfo: (address: string) => TokenInfo | undefined;
@@ -39,13 +68,14 @@ interface PoolDataContextType {
 
 const PoolDataContext = createContext<PoolDataContextType | undefined>(undefined);
 
-// ============================================
-// ABIs (minimal)
-// ============================================
-const FACTORY_ABI = [
-    { inputs: [], name: 'allPoolsLength', outputs: [{ type: 'uint256' }], stateMutability: 'view', type: 'function' },
-    { inputs: [{ type: 'uint256' }], name: 'allPools', outputs: [{ type: 'address' }], stateMutability: 'view', type: 'function' },
-] as const;
+// Known token symbols and decimals
+const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
+    '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7': { symbol: 'WSEI', decimals: 18 },
+    '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': { symbol: 'USDC', decimals: 6 },
+    '0x188e342cdedd8fdf84d765eb59b7433d30f5484d': { symbol: 'WIND', decimals: 18 },
+    '0x0000000000000000000000000000000000000000': { symbol: 'SEI', decimals: 18 },
+    '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': { symbol: 'USDT', decimals: 6 },
+};
 
 // ============================================
 // Batch RPC Helper
@@ -80,8 +110,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [poolRewards, setPoolRewards] = useState<Map<string, bigint>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
 
+    // Gauge/Voting state
+    const [gauges, setGauges] = useState<GaugeInfo[]>([]);
+    const [totalVoteWeight, setTotalVoteWeight] = useState<bigint>(BigInt(0));
+    const [gaugesLoading, setGaugesLoading] = useState(true);
+
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
+        setGaugesLoading(true);
         try {
             // Step 1: Get pool counts
             const countCalls = [
@@ -263,10 +299,154 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setPoolRewards(newRewards);
             }
 
+            setIsLoading(false);
+
+            // ============================================
+            // Step 6: Fetch Gauge/Voting Data (for /vote page)
+            // ============================================
+            await fetchGaugeData(newTokenMap);
+
         } catch (err) {
             console.error('[PoolDataProvider] Fetch error:', err);
+            setIsLoading(false);
+            setGaugesLoading(false);
         }
-        setIsLoading(false);
+    }, []);
+
+    // Fetch gauge data using batch RPC
+    const fetchGaugeData = useCallback(async (tokenMap: Map<string, TokenInfo>) => {
+        try {
+            // Get pool count and total weight from Voter
+            const voterCalls = [
+                { to: V2_CONTRACTS.Voter, data: '0x1f7b6d32' }, // length()
+                { to: V2_CONTRACTS.Voter, data: '0x96c82e57' }, // totalWeight()
+            ];
+            const [poolCountHex, totalWeightHex] = await batchRpcCall(voterCalls);
+            const poolCount = Math.min(parseInt(poolCountHex, 16) || 0, 50);
+            const totalWeight = totalWeightHex !== '0x' ? BigInt(totalWeightHex) : BigInt(0);
+            setTotalVoteWeight(totalWeight);
+
+            if (poolCount === 0) {
+                setGauges([]);
+                setGaugesLoading(false);
+                return;
+            }
+
+            // Get all pool addresses from Voter.pools(uint256)
+            const poolAddrCalls = [];
+            for (let i = 0; i < poolCount; i++) {
+                poolAddrCalls.push({
+                    to: V2_CONTRACTS.Voter,
+                    data: `0xac4afa38${i.toString(16).padStart(64, '0')}` // pools(uint256)
+                });
+            }
+            const poolAddrResults = await batchRpcCall(poolAddrCalls);
+            const poolAddrs = poolAddrResults.map(r => `0x${r.slice(-40)}` as Address);
+
+            // Batch fetch: gauge, weight, token0, token1 for each pool
+            const infoCalls: { to: string; data: string }[] = [];
+            for (const pool of poolAddrs) {
+                const poolPadded = pool.slice(2).padStart(64, '0');
+                infoCalls.push({ to: V2_CONTRACTS.Voter, data: `0xb9a09fd5${poolPadded}` }); // gauges(pool)
+                infoCalls.push({ to: V2_CONTRACTS.Voter, data: `0xa7cac846${poolPadded}` }); // weights(pool)
+                infoCalls.push({ to: pool, data: '0x0dfe1681' }); // token0()
+                infoCalls.push({ to: pool, data: '0xd21220a7' }); // token1()
+                infoCalls.push({ to: pool, data: '0xd0c93a7c' }); // tickSpacing() - for CL detection
+                infoCalls.push({ to: pool, data: '0x22be3de1' }); // stable() - for V2 detection
+            }
+            const infoResults = await batchRpcCall(infoCalls);
+
+            // Parse pool info
+            const poolInfos: {
+                pool: Address;
+                gauge: Address;
+                weight: bigint;
+                token0: Address;
+                token1: Address;
+                poolType: 'V2' | 'CL';
+                isStable: boolean;
+            }[] = [];
+
+            for (let i = 0; i < poolAddrs.length; i++) {
+                const base = i * 6;
+                const gauge = `0x${infoResults[base].slice(-40)}` as Address;
+                const weight = infoResults[base + 1] !== '0x' ? BigInt(infoResults[base + 1]) : BigInt(0);
+                const token0 = `0x${infoResults[base + 2].slice(-40)}` as Address;
+                const token1 = `0x${infoResults[base + 3].slice(-40)}` as Address;
+                const tickSpacing = infoResults[base + 4];
+                const stableResult = infoResults[base + 5];
+
+                // Detect pool type
+                const isCL = tickSpacing && tickSpacing !== '0x' && !tickSpacing.includes('error');
+                const isStable = stableResult === '0x0000000000000000000000000000000000000000000000000000000000000001';
+
+                poolInfos.push({
+                    pool: poolAddrs[i],
+                    gauge,
+                    weight,
+                    token0,
+                    token1,
+                    poolType: isCL ? 'CL' : 'V2',
+                    isStable,
+                });
+            }
+
+            // Filter to valid gauges only
+            const validPools = poolInfos.filter(p => p.gauge !== '0x0000000000000000000000000000000000000000');
+
+            // Batch fetch: isAlive, gaugeToFees, gaugeToBribe for each gauge
+            const gaugeCalls: { to: string; data: string }[] = [];
+            for (const p of validPools) {
+                const gaugePadded = p.gauge.slice(2).padStart(64, '0');
+                gaugeCalls.push({ to: V2_CONTRACTS.Voter, data: `0x1703e5f9${gaugePadded}` }); // isAlive(gauge)
+                gaugeCalls.push({ to: V2_CONTRACTS.Voter, data: `0xc4f08165${gaugePadded}` }); // gaugeToFees(gauge)
+                gaugeCalls.push({ to: V2_CONTRACTS.Voter, data: `0x929c8dcd${gaugePadded}` }); // gaugeToBribe(gauge)
+            }
+            const gaugeInfoResults = await batchRpcCall(gaugeCalls);
+
+            // Build final gauge list
+            const gaugeList: GaugeInfo[] = [];
+            for (let i = 0; i < validPools.length; i++) {
+                const p = validPools[i];
+                const base = i * 3;
+
+                const isAlive = gaugeInfoResults[base] === '0x0000000000000000000000000000000000000000000000000000000000000001';
+                const feeReward = `0x${gaugeInfoResults[base + 1].slice(-40)}` as Address;
+                const bribeReward = `0x${gaugeInfoResults[base + 2].slice(-40)}` as Address;
+
+                // Get token symbols
+                const t0Info = tokenMap.get(p.token0.toLowerCase()) || KNOWN_TOKENS[p.token0.toLowerCase()];
+                const t1Info = tokenMap.get(p.token1.toLowerCase()) || KNOWN_TOKENS[p.token1.toLowerCase()];
+                const symbol0 = t0Info?.symbol || p.token0.slice(0, 6);
+                const symbol1 = t1Info?.symbol || p.token1.slice(0, 6);
+
+                const weightPercent = totalWeight > BigInt(0)
+                    ? Number((p.weight * BigInt(10000)) / totalWeight) / 100
+                    : 0;
+
+                gaugeList.push({
+                    pool: p.pool,
+                    gauge: p.gauge,
+                    token0: p.token0,
+                    token1: p.token1,
+                    symbol0,
+                    symbol1,
+                    poolType: p.poolType,
+                    isStable: p.isStable,
+                    weight: p.weight,
+                    weightPercent,
+                    isAlive,
+                    feeReward,
+                    bribeReward,
+                    rewardTokens: [], // Skip bribe reward fetching for now (can add later)
+                });
+            }
+
+            setGauges(gaugeList);
+        } catch (err) {
+            console.error('[PoolDataProvider] Gauge fetch error:', err);
+        }
+        setGaugesLoading(false);
     }, []);
 
     // Initial fetch
@@ -290,6 +470,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         allPools: [...v2Pools, ...clPools],
         tokenInfoMap,
         poolRewards,
+        gauges,
+        totalVoteWeight,
+        gaugesLoading,
         isLoading,
         refetch: fetchAllData,
         getTokenInfo,
