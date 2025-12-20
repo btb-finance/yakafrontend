@@ -1607,101 +1607,145 @@ export default function PortfolioPage() {
                 </motion.div>
             )}
 
-            {/* Increase Liquidity Modal */}
+            {/* Increase Liquidity Modal - Compact Mobile Style */}
             {showIncreaseLiquidityModal && selectedPosition && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
                     <motion.div
-                        className="glass-card p-6 max-w-md w-full mx-4"
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
+                        className="w-full sm:max-w-md bg-[#0d0d14] sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-auto"
+                        initial={{ y: '100%', opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                     >
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-bold">Increase Liquidity</h3>
-                            <button
-                                onClick={() => setShowIncreaseLiquidityModal(false)}
-                                className="text-gray-400 hover:text-white"
-                            >✕</button>
+                        {/* Header */}
+                        <div className="sticky top-0 bg-[#0d0d14] z-10 px-4 py-3 border-b border-white/10">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-bold">Increase Liquidity</h3>
+                                <button
+                                    onClick={() => setShowIncreaseLiquidityModal(false)}
+                                    className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
+                                >✕</button>
+                            </div>
                         </div>
 
-                        <div className="p-4 rounded-lg bg-white/5 mb-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="flex -space-x-2">
-                                    <div className="w-8 h-8 rounded-full bg-secondary/30 flex items-center justify-center text-xs font-bold">
-                                        {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
+                        {/* Content */}
+                        <div className="p-4 space-y-3">
+                            {/* Position Info - Compact */}
+                            <div className="p-2 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="flex -space-x-1 flex-shrink-0">
+                                            <div className="w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold">
+                                                {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
+                                            </div>
+                                            <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
+                                                {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
+                                            </div>
+                                        </div>
+                                        <span className="font-semibold text-xs truncate">
+                                            {getTokenInfo(selectedPosition.token0).symbol}/{getTokenInfo(selectedPosition.token1).symbol}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400">#{selectedPosition.tokenId.toString()}</span>
                                     </div>
-                                    <div className="w-8 h-8 rounded-full bg-primary/30 flex items-center justify-center text-xs font-bold">
-                                        {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
+                                </div>
+                            </div>
+
+                            {/* Token Inputs - Compact */}
+                            <div className="space-y-0.5">
+                                {/* Token 0 */}
+                                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-xs text-gray-400">
+                                            {selectedPosition.token0.toLowerCase() === WSEI.address.toLowerCase() ? 'SEI' : getTokenInfo(selectedPosition.token0).symbol}
+                                        </label>
+                                        <span className="text-[10px] text-gray-400">
+                                            Bal: {balance0}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            value={amount0ToAdd}
+                                            onChange={(e) => handleAmount0Change(e.target.value)}
+                                            placeholder="0.0"
+                                            className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
+                                        />
+                                        <div className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 rounded-lg flex-shrink-0">
+                                            <div className="w-5 h-5 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold">
+                                                {getTokenInfo(selectedPosition.token0).symbol.slice(0, 2)}
+                                            </div>
+                                            <span className="font-semibold text-sm">{getTokenInfo(selectedPosition.token0).symbol}</span>
+                                        </div>
+                                    </div>
+                                    {/* Quick percentage buttons */}
+                                    {balance0 && parseFloat(balance0) > 0 && (
+                                        <div className="flex gap-1 mt-2">
+                                            {[25, 50, 75, 100].map(pct => (
+                                                <button
+                                                    key={pct}
+                                                    onClick={() => handleAmount0Change((parseFloat(balance0) * pct / 100).toFixed(6))}
+                                                    className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                                >
+                                                    {pct === 100 ? 'MAX' : `${pct}%`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Token 1 */}
+                                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-xs text-gray-400">
+                                            {selectedPosition.token1.toLowerCase() === WSEI.address.toLowerCase() ? 'SEI' : getTokenInfo(selectedPosition.token1).symbol} (auto)
+                                        </label>
+                                        <span className="text-[10px] text-gray-400">
+                                            Bal: {balance1}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            value={amount1ToAdd}
+                                            placeholder="Auto-calculated"
+                                            className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 text-gray-400"
+                                            readOnly
+                                        />
+                                        <div className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 rounded-lg flex-shrink-0">
+                                            <div className="w-5 h-5 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
+                                                {getTokenInfo(selectedPosition.token1).symbol.slice(0, 2)}
+                                            </div>
+                                            <span className="font-semibold text-sm">{getTokenInfo(selectedPosition.token1).symbol}</span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <div className="font-semibold">
-                                        {getTokenInfo(selectedPosition.token0).symbol}/{getTokenInfo(selectedPosition.token1).symbol}
-                                    </div>
-                                    <div className="text-xs text-gray-400">Position #{selectedPosition.tokenId.toString()}</div>
-                                </div>
-                            </div>
-                            <div className="text-sm text-gray-400">
-                                Position #{selectedPosition.tokenId.toString()}
                             </div>
                         </div>
 
-                        <div className="mb-4">
-                            <div className="flex justify-between items-center mb-2">
-                                <label className="text-sm text-gray-400">
-                                    {selectedPosition.token0.toLowerCase() === WSEI.address.toLowerCase() ? 'SEI (native)' : getTokenInfo(selectedPosition.token0).symbol} Amount
-                                </label>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-gray-500">Balance: {balance0}</span>
-                                    <button
-                                        onClick={() => handleAmount0Change(balance0)}
-                                        className="text-primary hover:text-primary/80 font-medium"
-                                    >MAX</button>
-                                </div>
-                            </div>
-                            <input
-                                type="number"
-                                value={amount0ToAdd}
-                                onChange={(e) => handleAmount0Change(e.target.value)}
-                                placeholder="0.0"
-                                className="w-full p-3 rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 outline-none"
-                            />
-                        </div>
-
-                        <div className="mb-6">
-                            <div className="flex justify-between items-center mb-2">
-                                <label className="text-sm text-gray-400">
-                                    {selectedPosition.token1.toLowerCase() === WSEI.address.toLowerCase() ? 'SEI (native)' : getTokenInfo(selectedPosition.token1).symbol} Amount
-                                </label>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-gray-500">Balance: {balance1}</span>
-                                    <button
-                                        onClick={() => handleAmount1Change(balance1)}
-                                        className="text-primary hover:text-primary/80 font-medium"
-                                    >MAX</button>
-                                </div>
-                            </div>
-                            <input
-                                type="number"
-                                value={amount1ToAdd}
-                                onChange={(e) => handleAmount1Change(e.target.value)}
-                                placeholder="0.0"
-                                className="w-full p-3 rounded-lg bg-white/5 border border-white/10 focus:border-primary/50 outline-none"
-                            />
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowIncreaseLiquidityModal(false)}
-                                className="flex-1 py-3 rounded-lg border border-white/20 hover:bg-white/5 transition"
-                            >
-                                Cancel
-                            </button>
+                        {/* Footer */}
+                        <div className="sticky bottom-0 bg-[#0d0d14] p-4 pt-2 border-t border-white/10">
                             <button
                                 onClick={handleIncreaseLiquidity}
                                 disabled={actionLoading || (!amount0ToAdd && !amount1ToAdd)}
-                                className="flex-1 py-3 rounded-lg btn-primary disabled:opacity-50"
+                                className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${!actionLoading && (amount0ToAdd || amount1ToAdd)
+                                    ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl active:scale-[0.98]'
+                                    : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                    }`}
                             >
-                                {actionLoading ? 'Adding...' : 'Add Liquidity'}
+                                {actionLoading ? (
+                                    <span className="flex items-center justify-center gap-3">
+                                        <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        Adding...
+                                    </span>
+                                ) : (!amount0ToAdd && !amount1ToAdd) ? (
+                                    'Enter Amount'
+                                ) : (
+                                    '✨ Add Liquidity'
+                                )}
                             </button>
                         </div>
                     </motion.div>
