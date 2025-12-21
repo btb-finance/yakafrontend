@@ -1,4 +1,5 @@
 // Wind Swap Contract Addresses - Sei Mainnet
+// All contracts verified on SeiScan
 
 // ============================================
 // V2 Core Contracts
@@ -23,6 +24,9 @@ export const V2_CONTRACTS = {
     // V2 Pool Factory
     PoolFactory: '0x16D9D5a7E268bD079e67221fda6C5A6719669F8f',
 
+    // Pool implementation
+    Pool: '0x1Ea24b7b6387520A73c23217995A73C1e4fbda46',
+
     // Rewards distributor for veNFT rebases
     RewardsDistributor: '0x74114c7F375F76CfB9Cff2a8B2EF6A9af23Be380',
 
@@ -46,6 +50,20 @@ export const V2_CONTRACTS = {
 
     // Forwarder
     Forwarder: '0x9658272eea9E243Fa5b072fEAaA1CaDe29fa80dF',
+
+    // Governance
+    ProtocolGovernor: '0x68182459aBfFa6C0f8afC33A689801159BCA85EA',
+    EpochGovernor: '0x6f988ECdca8b87c482D09301D6Ee2002Ce7009B9',
+} as const;
+
+// ============================================
+// V2 Libraries
+// ============================================
+export const V2_LIBRARIES = {
+    PerlinNoise: '0x23774e759f7C757a484E23C98ac8b9bcB620B4Cd',
+    Trig: '0xE9b96ECE82A102de5fcA3E049F18a1714D2b2BE1',
+    BalanceLogicLibrary: '0x15cc58F057a6683c94a98e394788AD09d7A943f4',
+    DelegationLogicLibrary: '0x38bf0E610319072875aF751285077E074caDbD25',
 } as const;
 
 // ============================================
@@ -99,6 +117,19 @@ export const CL_CONTRACTS = {
 // Common Addresses
 // ============================================
 export const COMMON = {
+    // Wrapped SEI
     WSEI: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+
+    // Zero address
     ZERO_ADDRESS: '0x0000000000000000000000000000000000000000',
+} as const;
+
+// ============================================
+// All Contracts Combined (for easy access)
+// ============================================
+export const ALL_CONTRACTS = {
+    ...V2_CONTRACTS,
+    ...V2_LIBRARIES,
+    ...CL_CONTRACTS,
+    ...COMMON,
 } as const;
