@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { formatUnits, Address } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
+import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 
 // ============================================
 // Types
@@ -11,6 +12,7 @@ interface TokenInfo {
     address: Address;
     symbol: string;
     decimals: number;
+    logoURI?: string;
 }
 
 interface PoolData {
@@ -68,28 +70,21 @@ interface PoolDataContextType {
 
 const PoolDataContext = createContext<PoolDataContextType | undefined>(undefined);
 
-// Known token symbols and decimals
-const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number }> = {
-    '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7': { symbol: 'WSEI', decimals: 18 },
-    '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392': { symbol: 'USDC', decimals: 6 },
-    '0x188e342cdedd8fdf84d765eb59b7433d30f5484d': { symbol: 'WIND', decimals: 18 },
-    '0x0000000000000000000000000000000000000000': { symbol: 'SEI', decimals: 18 },
-    '0xb75d0b03c06a926e488e2659df1a861f860bd3d1': { symbol: 'USDT', decimals: 6 },
-    '0x0555e30da8f98308edb960aa94c0db47230d2b9c': { symbol: 'WBTC', decimals: 8 },
-    '0x9151434b16b9763660705744891fa906f660ecc5': { symbol: 'USDT', decimals: 6 },
-    '0x3894085ef7ff0f0aedf52e2a2704928d1ec074f1': { symbol: 'USDC.n', decimals: 6 },
-    '0x0a526e425809aea71eb279d24ae22dee6c92a4fe': { symbol: 'DRG', decimals: 18 },
-    '0x95597eb8d227a7c4b4f5e807a815c5178ee6dbe1': { symbol: 'MILLI', decimals: 6 },
-    '0x58e11d8ed38a2061361e90916540c5c32281a380': { symbol: 'GGC', decimals: 18 },
-    '0xc18b6a15fb0ceaf5eb18696eefcb5bc7b9107149': { symbol: 'POPO', decimals: 18 },
-    '0xf9bdbf259ece5ae17e29bf92eb7abd7b8b465db9': { symbol: 'Frog', decimals: 18 },
-    '0x5f0e07dfee5832faa00c63f2d33a0d79150e8598': { symbol: 'SEIYAN', decimals: 6 },
-    '0xdf3d7dd2848f491645974215474c566e79f2e538': { symbol: 'S8N', decimals: 18 },
-    '0xf63980e3818607c0797e994cfd34c1c592968469': { symbol: 'SUPERSEIZ', decimals: 18 },
-    '0x443ac9f358226f5f48f2cd10bc0121e7a6176323': { symbol: 'BAT', decimals: 18 },
-    '0x888888b7ae1b196e4dfd25c992c9ad13358f0e24': { symbol: 'YKP', decimals: 18 },
-    '0x888d81e3ea5e8362b5f69188cbcf34fa8da4b888': { symbol: 'LARRY', decimals: 18 },
-    '0x160345fc359604fc6e70e3c5facbde5f7a9342d8': { symbol: 'WETH', decimals: 18 },
+// Build KNOWN_TOKENS from the global DEFAULT_TOKEN_LIST - single source of truth!
+const KNOWN_TOKENS: Record<string, { symbol: string; decimals: number; logoURI?: string }> = {};
+for (const token of DEFAULT_TOKEN_LIST) {
+    // Use lowercase address as key for easy lookup
+    KNOWN_TOKENS[token.address.toLowerCase()] = {
+        symbol: token.symbol,
+        decimals: token.decimals,
+        logoURI: token.logoURI,
+    };
+}
+// Also add WSEI explicitly (some pools use WSEI address directly)
+KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
+    symbol: WSEI.symbol,
+    decimals: WSEI.decimals,
+    logoURI: WSEI.logoURI,
 };
 
 // ============================================
@@ -139,17 +134,31 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const { GAUGE_LIST } = await import('@/config/gauges');
 
                 // Build quick pool list from gauges for instant display
-                const quickClPools: PoolData[] = GAUGE_LIST.map(g => ({
-                    address: g.pool as Address,
-                    token0: { address: g.token0 as Address, symbol: g.symbol0, decimals: 18 },
-                    token1: { address: g.token1 as Address, symbol: g.symbol1, decimals: 18 },
-                    poolType: g.type,
-                    stable: false,
-                    tickSpacing: g.tickSpacing,
-                    reserve0: '0',
-                    reserve1: '0',
-                    tvl: '0',
-                }));
+                const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
+                    const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
+                    const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
+                    return {
+                        address: g.pool as Address,
+                        token0: {
+                            address: g.token0 as Address,
+                            symbol: known0?.symbol || g.symbol0,
+                            decimals: known0?.decimals || 18,
+                            logoURI: known0?.logoURI,
+                        },
+                        token1: {
+                            address: g.token1 as Address,
+                            symbol: known1?.symbol || g.symbol1,
+                            decimals: known1?.decimals || 18,
+                            logoURI: known1?.logoURI,
+                        },
+                        poolType: g.type,
+                        stable: false,
+                        tickSpacing: g.tickSpacing,
+                        reserve0: '0',
+                        reserve1: '0',
+                        tvl: '0',
+                    };
+                });
 
                 // Set pools immediately for fast display
                 if (quickClPools.length > 0) {
@@ -274,10 +283,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
                 const decimals = decimalsHex ? parseInt(decimalsHex, 16) || 18 : 18;
 
+                // Get logoURI from KNOWN_TOKENS if available
+                const knownToken = KNOWN_TOKENS[tokenAddresses[i].toLowerCase()];
+
                 newTokenMap.set(tokenAddresses[i].toLowerCase(), {
                     address: tokenAddresses[i] as Address,
-                    symbol,
-                    decimals,
+                    symbol: knownToken?.symbol || symbol, // Prefer known symbol
+                    decimals: knownToken?.decimals || decimals,
+                    logoURI: knownToken?.logoURI, // Add logo from global token list
                 });
             }
 

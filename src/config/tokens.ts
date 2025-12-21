@@ -15,7 +15,7 @@ export const SEI: Token = {
     symbol: 'SEI',
     name: 'Sei',
     decimals: 18,
-    logoURI: '/tokens/sei.svg',
+    logoURI: '/logo/WSEI.png',
     isNative: true,
 };
 
@@ -25,7 +25,7 @@ export const WSEI: Token = {
     symbol: 'WSEI',
     name: 'Wrapped SEI',
     decimals: 18,
-    logoURI: '/tokens/sei.svg',
+    logoURI: '/logo/WSEI.png',
 };
 
 // WIND Protocol Token
@@ -46,7 +46,7 @@ export const USDC: Token = {
     symbol: 'USDC',
     name: 'USD Coin',
     decimals: 6,
-    logoURI: '/tokens/usdc.svg',
+    logoURI: '/logo/USDCoin.svg',
 };
 
 export const USDT: Token = {
@@ -54,7 +54,7 @@ export const USDT: Token = {
     symbol: 'USDT',
     name: 'Tether USD',
     decimals: 6,
-    logoURI: '/tokens/usdt.svg',
+    logoURI: '/logo/usdt0.png',
 };
 
 // New Tokens
@@ -63,7 +63,7 @@ export const WBTC: Token = {
     symbol: 'WBTC',
     name: 'Wrapped BTC',
     decimals: 8,
-    logoURI: '/tokens/wbtc.svg',
+    logoURI: '/logo/wbtc.jpg',
 };
 
 export const USDCT: Token = {
@@ -71,7 +71,7 @@ export const USDCT: Token = {
     symbol: 'USDT',
     name: 'Tether USD (Bridged)',
     decimals: 6,
-    logoURI: '/tokens/usdt.svg',
+    logoURI: '/logo/usdt0.png',
 };
 
 export const USDCN: Token = {
@@ -79,7 +79,7 @@ export const USDCN: Token = {
     symbol: 'USDC.n',
     name: 'USD Coin (Noble)',
     decimals: 6,
-    logoURI: '/tokens/usdc.svg',
+    logoURI: '/logo/USDCoin.svg',
 };
 
 export const DRG: Token = {
@@ -87,6 +87,7 @@ export const DRG: Token = {
     symbol: 'DRG',
     name: 'Dragonswap',
     decimals: 18,
+    logoURI: '/logo/DRG.png',
 };
 
 export const MILLI: Token = {
@@ -94,6 +95,7 @@ export const MILLI: Token = {
     symbol: 'MILLI',
     name: 'MILLI',
     decimals: 6,
+    logoURI: '/logo/MILLI.png',
 };
 
 export const GGC: Token = {
@@ -115,6 +117,7 @@ export const FROG: Token = {
     symbol: 'Frog',
     name: 'Frog',
     decimals: 18,
+    logoURI: '/logo/FROG.png',
 };
 
 export const SEIYAN: Token = {
@@ -122,6 +125,7 @@ export const SEIYAN: Token = {
     symbol: 'SEIYAN',
     name: 'SEIYAN',
     decimals: 6,
+    logoURI: '/logo/seiyan.jpg',
 };
 
 export const S8N: Token = {
@@ -164,7 +168,7 @@ export const WETH: Token = {
     symbol: 'WETH',
     name: 'Wrapped Ether',
     decimals: 18,
-    logoURI: '/tokens/eth.svg',
+    logoURI: '/logo/WrappedEther(Wormhole).png',
 };
 
 // Default token list

@@ -703,7 +703,18 @@ export const VOTING_ESCROW_ABI = [
         stateMutability: 'nonpayable',
         type: 'function',
     },
+    {
+        inputs: [
+            { name: '_from', type: 'uint256' },
+            { name: '_to', type: 'uint256' },
+        ],
+        name: 'merge',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
 ] as const;
+
 
 // RewardsDistributor ABI (veNFT rebases)
 export const REWARDS_DISTRIBUTOR_ABI = [

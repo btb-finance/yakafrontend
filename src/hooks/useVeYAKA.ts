@@ -319,6 +319,35 @@ export function useVeYAKA() {
         }
     }, [address, writeContractAsync, refetchBalance]);
 
+    // Merge two veNFTs (from -> to)
+    const merge = useCallback(async (fromTokenId: bigint, toTokenId: bigint) => {
+        if (!address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.VotingEscrow as Address,
+                abi: VOTING_ESCROW_ABI,
+                functionName: 'merge',
+                args: [fromTokenId, toTokenId],
+            });
+
+            setIsLoading(false);
+            refetchBalance();
+            return { hash };
+        } catch (err: any) {
+            console.error('Merge error:', err);
+            setError(err.message || 'Failed to merge veNFTs');
+            setIsLoading(false);
+            return null;
+        }
+    }, [address, writeContractAsync, refetchBalance]);
+
     return {
         positions,
         veNFTCount: veNFTCount ? Number(veNFTCount) : 0,
@@ -327,6 +356,7 @@ export function useVeYAKA() {
         extendLock,
         withdraw,
         claimRebases,
+        merge,
         isLoading,
         error,
         refetch: refetchBalance,

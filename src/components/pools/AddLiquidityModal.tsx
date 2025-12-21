@@ -179,21 +179,50 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         fetchPoolPrice();
     }, [tokenA, tokenB, tickSpacing, poolType]);
 
-    // Auto-calculate Token B amount for CL
-    useEffect(() => {
-        const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
+    // Determine if range is one-sided based on current price
+    const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
+    const pLower = priceLower ? parseFloat(priceLower) : 0;
+    const pUpper = priceUpper ? parseFloat(priceUpper) : Infinity;
 
+    // For single-sided LP, determine which side
+    const isRangeAboveCurrent = currentPrice !== null && pLower > 0 && currentPrice <= pLower;
+    const isRangeBelowCurrent = currentPrice !== null && pUpper > 0 && pUpper !== Infinity && currentPrice >= pUpper;
+    const isSingleSided = isRangeAboveCurrent || isRangeBelowCurrent;
+
+    // Determine which token is token0 and token1 (for correct single-sided logic)
+    const actualTokenA = tokenA?.isNative ? WSEI : tokenA;
+    const actualTokenB = tokenB?.isNative ? WSEI : tokenB;
+    const isAToken0 = actualTokenA && actualTokenB ?
+        actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase() : true;
+
+    // CORRECT Uniswap V3 CL Math:
+    // When range is ABOVE current (current tick < tickLower): deposit token0 ONLY
+    // When range is BELOW current (current tick > tickUpper): deposit token1 ONLY
+    // In UI terms:
+    // - if A is token0 and range is above: deposit A (token0), B should be 0
+    // - if A is token0 and range is below: deposit B (token1), A should be 0
+    // - if A is token1 and range is above: deposit B (token0), A should be 0
+    // - if A is token1 and range is below: deposit A (token1), B should be 0
+    const depositTokenAForOneSided = (isRangeAboveCurrent && isAToken0) || (isRangeBelowCurrent && !isAToken0);
+    const depositTokenBForOneSided = (isRangeAboveCurrent && !isAToken0) || (isRangeBelowCurrent && isAToken0);
+
+    // Auto-calculate Token B amount for CL (when user enters Token A)
+    useEffect(() => {
         if (poolType !== 'cl' || !currentPrice || !amountA || parseFloat(amountA) <= 0) {
             return;
         }
 
-        const pLower = priceLower ? parseFloat(priceLower) : 0;
-        const pUpper = priceUpper ? parseFloat(priceUpper) : Infinity;
-        const pCurrent = currentPrice;
+        // If this is an "Above Current" single-sided position where we should deposit B
+        // then A should be auto-set to 0, not the other way around
+        if (isRangeAboveCurrent) {
+            // Don't auto-calc B from A when A should be 0
+            // Instead, if user entered A, clear it and let them know to use B
+            return;
+        }
 
         if (pLower <= 0 && pUpper === Infinity) {
             const amtA = parseFloat(amountA);
-            const amtB = amtA * pCurrent;
+            const amtB = amtA * currentPrice;
             setAmountB(amtB.toFixed(6));
             return;
         }
@@ -204,19 +233,22 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
         const sqrtPriceLower = Math.sqrt(pLower);
         const sqrtPriceUpper = Math.sqrt(pUpper);
-        const sqrtPriceCurrent = Math.sqrt(pCurrent);
+        const sqrtPriceCurrent = Math.sqrt(currentPrice);
         const amtA = parseFloat(amountA);
 
-        if (pCurrent <= pLower) {
-            setAmountB('0');
-        } else if (pCurrent >= pUpper) {
-            setAmountB('0');
+        if (isRangeBelowCurrent) {
+            // Range is below current - only deposit token0 (A if A is token0, B if A is token1)
+            // If A is token0, B should be 0
+            if (isAToken0) {
+                setAmountB('0');
+            }
         } else {
+            // Normal range (contains current price)
             const L = amtA * (sqrtPriceCurrent * sqrtPriceUpper) / (sqrtPriceUpper - sqrtPriceCurrent);
             const amtB = L * (sqrtPriceCurrent - sqrtPriceLower);
             setAmountB(amtB.toFixed(6));
         }
-    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper]);
+    }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper, isAToken0, isRangeAboveCurrent, isRangeBelowCurrent]);
 
     // Handle V2 liquidity add
     const handleAddLiquidity = async () => {
@@ -240,12 +272,13 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return;
         }
 
-        if (!tokenA || !tokenB || !amountA || !amountB || !address) {
+        if (!tokenA || !tokenB || !address) {
             return;
         }
 
-        const amtA = parseFloat(amountA);
-        const amtB = parseFloat(amountB);
+        // For CL single-sided LP, one amount can be 0 or empty
+        const amtA = parseFloat(amountA || '0');
+        const amtB = parseFloat(amountB || '0');
 
         // For CL, single-sided liquidity is allowed when price range is outside current price
         // At least one amount must be positive
@@ -482,14 +515,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const canAdd = isConnected &&
         tokenA &&
         tokenB &&
-        amountA &&
         (poolType === 'cl'
-            ? (parseFloat(amountA) > 0 || parseFloat(amountB || '0') > 0) // CL allows single-sided
-            : (parseFloat(amountA) > 0 && parseFloat(amountB || '0') > 0)) && // V2 needs both
+            ? (parseFloat(amountA || '0') > 0 || parseFloat(amountB || '0') > 0) // CL allows single-sided
+            : (amountA && parseFloat(amountA) > 0 && parseFloat(amountB || '0') > 0)) && // V2 needs both
         !isCLInProgress;
 
     const poolExists = clPoolPrice !== null;
-    const currentPrice = clPoolPrice ?? (initialPrice ? parseFloat(initialPrice) : null);
 
     // Check if pool config is pre-defined (clicking Add LP on existing pool)
     const isPoolPreConfigured = !!(initialPool?.token0 && initialPool?.token1);
@@ -782,9 +813,78 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     </div>
                                                 );
                                             })()}
+
+                                            {/* Single-Sided LP Presets */}
+                                            {currentPrice && tokenA && tokenB && (() => {
+                                                // Determine sorted token order for correct labeling
+                                                const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+                                                const actualTokenB = tokenB.isNative ? WSEI : tokenB;
+                                                const isAToken0 = actualTokenA.address.toLowerCase() < actualTokenB.address.toLowerCase();
+                                                // CORRECT Uniswap V3 CL Math:
+                                                // When range is ABOVE current: deposit token0 (lower sorted address)
+                                                // When range is BELOW current: deposit token1 (higher sorted address)
+                                                const aboveToken = isAToken0 ? tokenA : tokenB; // token0
+                                                const belowToken = isAToken0 ? tokenB : tokenA; // token1
+
+                                                return (
+                                                    <div className="mt-3">
+                                                        <div className="text-[10px] text-gray-500 mb-1.5 flex items-center gap-1">
+                                                            <span>🎯</span> One-Sided LP (Advanced)
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    // Set range above current price - only deposit token0
+                                                                    const lower = currentPrice * 1.0045; // +0.45% from current
+                                                                    const upper = currentPrice * 1.10;  // +10% from current
+                                                                    setPriceLower(lower.toFixed(6));
+                                                                    setPriceUpper(upper.toFixed(6));
+                                                                    // Clear amounts - Above means deposit token0 (aboveToken)
+                                                                    if (isAToken0) {
+                                                                        // A is token0, deposit A
+                                                                        setAmountA('');
+                                                                        setAmountB('0');
+                                                                    } else {
+                                                                        // B is token0, deposit B
+                                                                        setAmountA('0');
+                                                                        setAmountB('');
+                                                                    }
+                                                                }}
+                                                                className="py-2.5 px-2 rounded-lg text-center transition-all active:scale-[0.98] bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/30 hover:border-green-500/50"
+                                                            >
+                                                                <div className="text-xs font-bold text-green-400">↑ Above Current</div>
+                                                                <div className="text-[9px] text-gray-500 mt-0.5">Only {aboveToken.symbol}</div>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    // Set range below current price - only deposit token1
+                                                                    const lower = currentPrice * 0.90;  // -10% from current
+                                                                    const upper = currentPrice * 0.9955; // -0.45% from current
+                                                                    setPriceLower(lower.toFixed(6));
+                                                                    setPriceUpper(upper.toFixed(6));
+                                                                    // Clear amounts - Below means deposit token1 (belowToken)
+                                                                    if (isAToken0) {
+                                                                        // A is token0, B is token1, deposit B
+                                                                        setAmountA('0');
+                                                                        setAmountB('');
+                                                                    } else {
+                                                                        // B is token0, A is token1, deposit A
+                                                                        setAmountA('');
+                                                                        setAmountB('0');
+                                                                    }
+                                                                }}
+                                                                className="py-2.5 px-2 rounded-lg text-center transition-all active:scale-[0.98] bg-gradient-to-r from-red-500/10 to-red-500/5 border border-red-500/30 hover:border-red-500/50"
+                                                            >
+                                                                <div className="text-xs font-bold text-red-400">↓ Below Current</div>
+                                                                <div className="text-[9px] text-gray-500 mt-0.5">Only {belowToken.symbol}</div>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
 
-                                        {/* Visual Price Range Display with +/- controls */}
+                                        {/* Visual Price Range Display with Draggable Slider */}
                                         {(priceLower || priceUpper) && currentPrice && (
                                             <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                                                 <div className="flex items-center justify-between mb-3">
@@ -796,22 +896,78 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     </span>
                                                 </div>
 
-                                                {/* Visual range bar */}
-                                                <div className="relative h-2 bg-white/10 rounded-full mb-4 overflow-hidden">
-                                                    <div
-                                                        className="absolute h-full bg-gradient-to-r from-red-500 via-green-500 to-red-500 rounded-full"
-                                                        style={{
-                                                            left: `${Math.max(0, Math.min(50, (1 - (currentPrice - parseFloat(priceLower || '0')) / currentPrice) * 50))}%`,
-                                                            right: `${Math.max(0, Math.min(50, (1 - (parseFloat(priceUpper || '999999') - currentPrice) / currentPrice) * 50))}%`
-                                                        }}
+                                                {/* Draggable Range Slider */}
+                                                <div className="relative h-10 mb-4">
+                                                    {/* Track background */}
+                                                    <div className="absolute top-1/2 left-0 right-0 h-2 bg-white/10 rounded-full -translate-y-1/2" />
+
+                                                    {/* Active range (colored part) */}
+                                                    {(() => {
+                                                        const lower = parseFloat(priceLower || '0');
+                                                        const upper = parseFloat(priceUpper || String(currentPrice * 2));
+                                                        const minRange = currentPrice * 0.1;
+                                                        const maxRange = currentPrice * 3;
+                                                        const leftPercent = Math.max(0, Math.min(100, ((lower - minRange) / (maxRange - minRange)) * 100));
+                                                        const rightPercent = Math.max(0, Math.min(100, ((upper - minRange) / (maxRange - minRange)) * 100));
+                                                        return (
+                                                            <div
+                                                                className="absolute top-1/2 h-2 bg-gradient-to-r from-primary via-green-400 to-secondary rounded-full -translate-y-1/2"
+                                                                style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
+                                                            />
+                                                        );
+                                                    })()}
+
+                                                    {/* Current price marker */}
+                                                    {(() => {
+                                                        const minRange = currentPrice * 0.1;
+                                                        const maxRange = currentPrice * 3;
+                                                        const currentPercent = Math.max(0, Math.min(100, ((currentPrice - minRange) / (maxRange - minRange)) * 100));
+                                                        return (
+                                                            <div
+                                                                className="absolute top-1/2 w-1 h-4 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-10"
+                                                                style={{ left: `${currentPercent}%` }}
+                                                            >
+                                                                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[8px] text-gray-400 whitespace-nowrap">
+                                                                    Current
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {/* Lower bound thumb (draggable) */}
+                                                    <input
+                                                        type="range"
+                                                        min={currentPrice * 0.1}
+                                                        max={currentPrice * 3}
+                                                        step={currentPrice * 0.01}
+                                                        value={parseFloat(priceLower || String(currentPrice * 0.5))}
+                                                        onChange={(e) => setPriceLower(parseFloat(e.target.value).toFixed(6))}
+                                                        className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-grab z-20"
                                                     />
-                                                    <div className="absolute left-1/2 top-0 w-0.5 h-full bg-white -translate-x-1/2" />
+
+                                                    {/* Upper bound thumb (draggable) */}
+                                                    <input
+                                                        type="range"
+                                                        min={currentPrice * 0.1}
+                                                        max={currentPrice * 3}
+                                                        step={currentPrice * 0.01}
+                                                        value={parseFloat(priceUpper || String(currentPrice * 1.5))}
+                                                        onChange={(e) => setPriceUpper(parseFloat(e.target.value).toFixed(6))}
+                                                        className="absolute top-1/2 left-0 right-0 h-2 -translate-y-1/2 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-green-500 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:hover:scale-110 [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-green-500 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-grab z-20"
+                                                    />
                                                 </div>
 
-                                                {/* Min/Max with +/- buttons */}
+                                                {/* Min/Max with +/- buttons and percentage */}
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="text-center">
-                                                        <div className="text-xs text-red-400 mb-1">Min</div>
+                                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                                            <span className="text-xs text-red-400">Min Price</span>
+                                                            {priceLower && currentPrice && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+                                                                    {(((parseFloat(priceLower) - currentPrice) / currentPrice) * 100).toFixed(1)}%
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => setPriceLower((parseFloat(priceLower || '0') * 0.95).toFixed(6))}
@@ -827,7 +983,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         </div>
                                                     </div>
                                                     <div className="text-center">
-                                                        <div className="text-xs text-green-400 mb-1">Max</div>
+                                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                                            <span className="text-xs text-green-400">Max Price</span>
+                                                            {priceUpper && currentPrice && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                                                                    +{(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100).toFixed(1)}%
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => setPriceUpper((parseFloat(priceUpper || '999999') * 0.95).toFixed(6))}
@@ -843,17 +1006,24 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                         </div>
                                                     </div>
                                                 </div>
+
                                             </div>
                                         )}
+
                                     </div>
                                 )}
 
-                                {/* Token Inputs Section */}
                                 <div className="space-y-0.5">
                                     {/* Token A */}
-                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                    <div className={`p-3 rounded-lg border ${depositTokenAForOneSided ? 'bg-green-500/5 border-green-500/30' : depositTokenBForOneSided ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10'}`}>
                                         <div className="flex items-center justify-between mb-2">
-                                            <label className="text-xs text-gray-400">You Deposit</label>
+                                            <label className="text-xs text-gray-400">
+                                                {depositTokenAForOneSided ? (
+                                                    <span className="text-green-400">✓ You Deposit</span>
+                                                ) : depositTokenBForOneSided ? (
+                                                    <span className="text-gray-500">Not needed (0)</span>
+                                                ) : 'You Deposit'}
+                                            </label>
                                             <span className="text-[10px] text-gray-400">
                                                 Bal: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
                                             </span>
@@ -863,9 +1033,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 type="text"
                                                 inputMode="decimal"
                                                 value={amountA}
-                                                onChange={(e) => setAmountA(e.target.value)}
-                                                placeholder="0.0"
-                                                className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
+                                                onChange={(e) => !depositTokenBForOneSided && setAmountA(e.target.value)}
+                                                readOnly={depositTokenBForOneSided}
+                                                placeholder={depositTokenBForOneSided ? '0' : '0.0'}
+                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${depositTokenBForOneSided ? 'text-gray-400' : ''}`}
                                             />
                                             <button
                                                 onClick={() => setSelectorOpen('A')}
@@ -877,8 +1048,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 <span className="font-semibold text-sm">{tokenA?.symbol || 'Select'}</span>
                                             </button>
                                         </div>
-                                        {/* Quick percentage buttons */}
-                                        {balanceA && parseFloat(balanceA) > 0 && (
+                                        {/* Quick percentage buttons - only show when it's the deposit token */}
+                                        {balanceA && parseFloat(balanceA) > 0 && !depositTokenBForOneSided && (
                                             <div className="flex gap-1 mt-2">
                                                 {[25, 50, 75, 100].map(pct => (
                                                     <button
@@ -896,13 +1067,17 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
 
                                     {/* Token B */}
-                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                    <div className={`p-3 rounded-lg border ${depositTokenBForOneSided ? 'bg-green-500/5 border-green-500/30' : 'bg-white/5 border-white/10'}`}>
                                         <div className="flex items-center justify-between mb-2">
                                             <label className="text-xs text-gray-400">
-                                                {poolType === 'cl' ? 'Auto-calc' : 'You Deposit'}
+                                                {depositTokenBForOneSided ? (
+                                                    <span className="text-green-400">✓ You Deposit</span>
+                                                ) : poolType === 'cl' ? (
+                                                    depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
+                                                ) : 'You Deposit'}
                                             </label>
                                             <button
-                                                onClick={() => balanceB && poolType !== 'cl' && setAmountB(balanceB)}
+                                                onClick={() => balanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(balanceB)}
                                                 className="text-[10px] text-gray-400 hover:text-primary transition-colors"
                                             >
                                                 Bal: {balanceB ? parseFloat(balanceB).toFixed(4) : '--'}
@@ -913,10 +1088,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 type="text"
                                                 inputMode="decimal"
                                                 value={amountB}
-                                                onChange={(e) => poolType !== 'cl' && setAmountB(e.target.value)}
-                                                readOnly={poolType === 'cl'}
-                                                placeholder={poolType === 'cl' ? 'Auto' : '0.0'}
-                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' ? 'text-gray-400' : ''}`}
+                                                onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
+                                                readOnly={poolType === 'cl' && !depositTokenBForOneSided}
+                                                placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
+                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
                                             />
                                             <button
                                                 onClick={() => setSelectorOpen('B')}
@@ -928,6 +1103,20 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
                                             </button>
                                         </div>
+                                        {/* Quick percentage buttons - only show when it's the deposit token */}
+                                        {balanceB && parseFloat(balanceB) > 0 && depositTokenBForOneSided && (
+                                            <div className="flex gap-1 mt-2">
+                                                {[25, 50, 75, 100].map(pct => (
+                                                    <button
+                                                        key={pct}
+                                                        onClick={() => setAmountB((parseFloat(balanceB) * pct / 100).toFixed(6))}
+                                                        className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                                    >
+                                                        {pct === 100 ? 'MAX' : `${pct}%`}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

@@ -2,18 +2,62 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract } from 'wagmi';
 import { formatUnits, Address } from 'viem';
 import Link from 'next/link';
 import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
-import { WIND } from '@/config/tokens';
+import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
+import { V2_CONTRACTS } from '@/config/contracts';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 
+// Helper to get token logo from global token list
+const getTokenLogo = (addr: string): string | undefined => {
+    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+    return token?.logoURI;
+};
+
+// Minter ABI for epoch info
+const MINTER_ABI = [
+    {
+        inputs: [],
+        name: 'activePeriod',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'epochCount',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
+// Voter ABI for distribute (permissionless!)
+const VOTER_DISTRIBUTE_ABI = [
+    {
+        inputs: [{ name: '_start', type: 'uint256' }, { name: '_finish', type: 'uint256' }],
+        name: 'distribute',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'length',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+] as const;
+
 export default function VotePage() {
+
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<'lock' | 'vote' | 'rewards'>('lock');
 
@@ -27,6 +71,12 @@ export default function VotePage() {
     const [voteWeights, setVoteWeights] = useState<Record<string, number>>({});
     const [isVoting, setIsVoting] = useState(false);
 
+    // Lock management state
+    const [managingNFT, setManagingNFT] = useState<bigint | null>(null);
+    const [increaseAmountValue, setIncreaseAmountValue] = useState('');
+    const [extendDuration, setExtendDuration] = useState<keyof typeof LOCK_DURATIONS>('4Y');
+    const [mergeTarget, setMergeTarget] = useState<bigint | null>(null);
+
     // Hooks
     const {
         positions,
@@ -36,10 +86,12 @@ export default function VotePage() {
         extendLock,
         withdraw,
         claimRebases,
+        merge,
         isLoading,
         error,
         refetch,
     } = useVeYAKA();
+
 
     const {
         gauges,
@@ -53,6 +105,56 @@ export default function VotePage() {
     } = useVoter();
 
     const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
+
+    // Read epoch info from Minter
+    const { data: activePeriod } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'activePeriod',
+    });
+
+    const { data: epochCount } = useReadContract({
+        address: V2_CONTRACTS.Minter as Address,
+        abi: MINTER_ABI,
+        functionName: 'epochCount',
+    });
+
+    // Calculate epoch times
+    const epochStartDate = activePeriod ? new Date(Number(activePeriod) * 1000) : null;
+    const epochEndDate = activePeriod ? new Date((Number(activePeriod) + 7 * 24 * 60 * 60) * 1000) : null;
+    const timeUntilNextEpoch = activePeriod ? Math.max(0, Number(activePeriod) + 7 * 24 * 60 * 60 - Math.floor(Date.now() / 1000)) : 0;
+    const daysRemaining = Math.floor(timeUntilNextEpoch / 86400);
+    const hoursRemaining = Math.floor((timeUntilNextEpoch % 86400) / 3600);
+    const epochHasEnded = timeUntilNextEpoch === 0;
+
+    // Read voter pool count for distribute
+    const { data: voterPoolCount } = useReadContract({
+        address: V2_CONTRACTS.Voter as Address,
+        abi: VOTER_DISTRIBUTE_ABI,
+        functionName: 'length',
+    });
+
+    // Distribute state
+    const [isDistributing, setIsDistributing] = useState(false);
+    const { writeContractAsync } = useWriteContract();
+
+    // Handle distribute rewards (anyone can call this!)
+    const handleDistributeRewards = async () => {
+        if (!voterPoolCount || Number(voterPoolCount) === 0) return;
+        setIsDistributing(true);
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.Voter as Address,
+                abi: VOTER_DISTRIBUTE_ABI,
+                functionName: 'distribute',
+                args: [BigInt(0), voterPoolCount],
+            });
+            setTxHash(hash);
+        } catch (err: any) {
+            console.error('Distribute failed:', err);
+        }
+        setIsDistributing(false);
+    };
 
     // Auto-select first veNFT when positions load
     useEffect(() => {
@@ -99,6 +201,41 @@ export default function VotePage() {
     const handleClaimRebases = async (tokenId: bigint) => {
         const result = await claimRebases(tokenId);
         if (result) setTxHash(result.hash);
+    };
+
+    const handleIncreaseAmount = async (tokenId: bigint) => {
+        if (!increaseAmountValue || parseFloat(increaseAmountValue) <= 0) return;
+        const result = await increaseAmount(tokenId, increaseAmountValue);
+        if (result) {
+            setTxHash(result.hash);
+            setIncreaseAmountValue('');
+            setManagingNFT(null);
+        }
+    };
+
+    const handleExtendLock = async (tokenId: bigint) => {
+        const result = await extendLock(tokenId, LOCK_DURATIONS[extendDuration]);
+        if (result) {
+            setTxHash(result.hash);
+            setManagingNFT(null);
+        }
+    };
+
+    const handleMaxLock = async (tokenId: bigint) => {
+        // Max lock is 4 years
+        const result = await extendLock(tokenId, LOCK_DURATIONS['4Y']);
+        if (result) {
+            setTxHash(result.hash);
+        }
+    };
+
+    const handleMerge = async (fromTokenId: bigint, toTokenId: bigint) => {
+        const result = await merge(fromTokenId, toTokenId);
+        if (result) {
+            setTxHash(result.hash);
+            setMergeTarget(null);
+            setManagingNFT(null);
+        }
     };
 
     const handleVote = async () => {
@@ -165,7 +302,73 @@ export default function VotePage() {
                 </div>
             </motion.div>
 
+            {/* Epoch Info Banner */}
+            <motion.div
+                className={`mb-4 p-3 rounded-xl border ${epochHasEnded
+                    ? 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'
+                    : 'bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-500/20'}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="text-xl">{epochHasEnded ? '🎉' : '📅'}</div>
+                        <div>
+                            <div className="text-xs text-gray-400">Current Epoch</div>
+                            <div className={`font-bold ${epochHasEnded ? 'text-green-400' : 'text-blue-400'}`}>
+                                Epoch {epochCount !== undefined ? epochCount.toString() : '...'}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                        <div className="text-center hidden sm:block">
+                            <div className="text-gray-400">Started</div>
+                            <div className="font-medium text-white">
+                                {epochStartDate ? epochStartDate.toLocaleDateString() : '...'}
+                            </div>
+                        </div>
+                        <div className="text-center hidden sm:block">
+                            <div className="text-gray-400">Ends</div>
+                            <div className="font-medium text-white">
+                                {epochEndDate ? epochEndDate.toLocaleDateString() : '...'}
+                            </div>
+                        </div>
+                        {epochHasEnded ? (
+                            <button
+                                onClick={handleDistributeRewards}
+                                disabled={isDistributing || !voterPoolCount || Number(voterPoolCount) === 0}
+                                className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isDistributing ? (
+                                    <>
+                                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Distributing...
+                                    </>
+                                ) : (
+                                    <>💰 Distribute Rewards</>
+                                )}
+                            </button>
+                        ) : (
+                            <div className="text-center px-3 py-1 rounded-lg bg-blue-500/20">
+                                <div className="text-gray-400">Time Left</div>
+                                <div className="font-bold text-blue-400">
+                                    {daysRemaining}d {hoursRemaining}h
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {epochHasEnded && (
+                    <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-gray-400">
+                        ✨ Epoch ended! Anyone can trigger reward distribution to send fees to voters.
+                    </div>
+                )}
+            </motion.div>
+
+
             {/* Stats Row - Compact */}
+
             <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className="glass-card p-2 sm:p-3 text-center">
                     <div className="text-[10px] text-gray-400">WIND Balance</div>
@@ -183,21 +386,24 @@ export default function VotePage() {
                 </div>
             </div>
 
-            {/* Tabs - Compact */}
-            <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
+            {/* Tabs - Prominent Buttons */}
+            <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
                 {tabConfig.map((tab) => (
                     <button
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
-                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${activeTab === tab.key
-                            ? 'bg-primary text-white'
-                            : 'text-gray-400 hover:text-white bg-white/5'
+                        className={`flex-1 min-w-0 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2 flex items-center justify-center gap-2 ${activeTab === tab.key
+                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary shadow-lg shadow-primary/30'
+                            : 'bg-white/5 text-gray-300 border-white/10 hover:border-primary/50 hover:bg-white/10 hover:text-white'
                             }`}
                     >
-                        {tab.label}
+                        <span className="text-base">{tab.icon}</span>
+                        <span className="hidden sm:inline">{tab.label}</span>
+                        <span className="sm:hidden">{tab.key === 'lock' ? 'Lock' : tab.key === 'vote' ? 'Vote' : 'Earn'}</span>
                     </button>
                 ))}
             </div>
+
 
             {/* Error Display */}
             {error && (
@@ -260,28 +466,14 @@ export default function VotePage() {
                         {/* Duration Selection */}
                         <div className="mb-3">
                             <label className="text-xs text-gray-400 mb-2 block">Lock Duration</label>
-                            <div className="grid grid-cols-4 gap-1">
-                                {(Object.keys(LOCK_DURATIONS) as Array<keyof typeof LOCK_DURATIONS>).slice(0, 4).map((duration) => (
+                            <div className="grid grid-cols-4 gap-2">
+                                {(['1M', '6M', '1Y', '4Y'] as const).map((duration) => (
                                     <button
                                         key={duration}
                                         onClick={() => setLockDuration(duration)}
-                                        className={`py-2 rounded-lg text-xs font-medium transition ${lockDuration === duration
-                                            ? 'bg-primary text-white'
-                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                            }`}
-                                    >
-                                        {duration}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="grid grid-cols-3 gap-1 mt-1">
-                                {(Object.keys(LOCK_DURATIONS) as Array<keyof typeof LOCK_DURATIONS>).slice(4).map((duration) => (
-                                    <button
-                                        key={duration}
-                                        onClick={() => setLockDuration(duration)}
-                                        className={`py-2 rounded-lg text-xs font-medium transition ${lockDuration === duration
-                                            ? 'bg-primary text-white'
-                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                        className={`py-3 px-2 rounded-xl text-sm font-bold transition-all duration-200 border-2 ${lockDuration === duration
+                                            ? 'bg-gradient-to-r from-primary to-secondary text-white border-primary shadow-lg shadow-primary/30 scale-105'
+                                            : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 hover:border-primary/50 hover:text-white'
                                             }`}
                                     >
                                         {duration}
@@ -289,6 +481,8 @@ export default function VotePage() {
                                 ))}
                             </div>
                         </div>
+
+
 
                         {/* Preview - Inline */}
                         <div className="flex items-center justify-between text-xs mb-3 p-2 rounded-lg bg-gradient-to-r from-primary/10 to-secondary/10">
@@ -315,31 +509,162 @@ export default function VotePage() {
                     {positions.length > 0 && (
                         <div className="glass-card p-3 sm:p-4 mt-3">
                             <h3 className="text-sm font-semibold mb-2">Your veNFTs ({positions.length})</h3>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {positions.map((position) => {
                                     const isExpired = position.end < BigInt(Math.floor(Date.now() / 1000)) && !position.isPermanent;
                                     const endDate = new Date(Number(position.end) * 1000);
+                                    const isManaging = managingNFT === position.tokenId;
 
                                     return (
-                                        <div key={position.tokenId.toString()} className="p-2 rounded-lg bg-white/5 border border-white/10">
+                                        <div key={position.tokenId.toString()} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                            {/* Position Info */}
                                             <div className="flex justify-between items-center">
                                                 <div className="min-w-0">
                                                     <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
-                                                    <div className="font-bold text-sm">{parseFloat(formatUnits(position.amount, 18)).toFixed(0)} WIND</div>
+                                                    <div className="font-bold text-sm">{parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND</div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-sm text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toFixed(0)} veWIND</div>
+                                                    <div className="font-bold text-sm text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toLocaleString()} veWIND</div>
                                                     <div className="text-[10px] text-gray-400">
                                                         {position.isPermanent ? '∞ Permanent' : isExpired ? '🔓 Unlocked' : endDate.toLocaleDateString()}
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* Action Buttons - show for non-expired locks */}
+                                            {!isExpired && (
+                                                <div className="flex gap-2 mt-2">
+                                                    <button
+                                                        onClick={() => setManagingNFT(isManaging ? null : position.tokenId)}
+                                                        className={`flex-1 py-1.5 text-[10px] rounded transition ${isManaging ? 'bg-primary text-white' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}
+                                                    >
+                                                        {isManaging ? '✕ Close' : '⚙️ Manage'}
+                                                    </button>
+                                                    {!position.isPermanent && (
+                                                        <button
+                                                            onClick={() => handleMaxLock(position.tokenId)}
+                                                            disabled={isLoading}
+                                                            className="flex-1 py-1.5 text-[10px] rounded bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30 transition disabled:opacity-50"
+                                                        >
+                                                            🔒 Max Lock (4Y)
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Management Panel */}
+                                            {isManaging && !isExpired && (
+                                                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
+                                                    {/* Increase Amount - available for all locks */}
+                                                    <div>
+                                                        <label className="text-[10px] text-gray-400 mb-1 block">Add More WIND</label>
+                                                        <div className="flex gap-2">
+                                                            <div className="flex-1 flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
+                                                                <input
+                                                                    type="text"
+                                                                    value={increaseAmountValue}
+                                                                    onChange={(e) => setIncreaseAmountValue(e.target.value)}
+                                                                    placeholder="0.0"
+                                                                    className="flex-1 min-w-0 bg-transparent text-sm font-bold outline-none placeholder-gray-600"
+                                                                />
+                                                                <button
+                                                                    onClick={() => setIncreaseAmountValue(formattedYakaBalance || '0')}
+                                                                    className="px-2 py-0.5 text-[8px] font-medium rounded bg-white/10 hover:bg-white/20 text-primary"
+                                                                >
+                                                                    MAX
+                                                                </button>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleIncreaseAmount(position.tokenId)}
+                                                                disabled={isLoading || !increaseAmountValue || parseFloat(increaseAmountValue) <= 0}
+                                                                className="px-3 py-2 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                            >
+                                                                + Add
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Extend Lock - only for non-permanent locks */}
+                                                    {!position.isPermanent && (
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-400 mb-1 block">Extend Lock Duration</label>
+                                                            <div className="flex gap-2">
+                                                                <div className="flex-1 grid grid-cols-4 gap-1">
+                                                                    {(['1M', '3M', '1Y', '4Y'] as const).map((duration) => (
+                                                                        <button
+                                                                            key={duration}
+                                                                            onClick={() => setExtendDuration(duration)}
+                                                                            className={`py-1 rounded text-[10px] font-medium transition ${extendDuration === duration
+                                                                                ? 'bg-primary text-white'
+                                                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                                }`}
+                                                                        >
+                                                                            {duration}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => handleExtendLock(position.tokenId)}
+                                                                    disabled={isLoading}
+                                                                    className="px-3 py-2 text-[10px] font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition disabled:opacity-50"
+                                                                >
+                                                                    Extend
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Info for permanent locks */}
+                                                    {position.isPermanent && (
+                                                        <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                                                            <span>✨</span>
+                                                            <span>Permanent lock - maximum voting power forever!</span>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Merge - Only show if user has more than 1 veNFT */}
+                                                    {positions.length > 1 && !position.isPermanent && (
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-400 mb-1 block">Merge with another veNFT</label>
+                                                            <div className="flex gap-2 flex-wrap">
+                                                                {positions
+                                                                    .filter(p => p.tokenId !== position.tokenId && !p.isPermanent)
+                                                                    .map(p => (
+                                                                        <button
+                                                                            key={p.tokenId.toString()}
+                                                                            onClick={() => setMergeTarget(mergeTarget === p.tokenId ? null : p.tokenId)}
+                                                                            className={`px-2 py-1 text-[10px] rounded transition ${mergeTarget === p.tokenId
+                                                                                ? 'bg-purple-500 text-white'
+                                                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                                }`}
+                                                                        >
+                                                                            #{p.tokenId.toString()} ({parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND)
+                                                                        </button>
+                                                                    ))}
+                                                            </div>
+                                                            {mergeTarget && (
+                                                                <button
+                                                                    onClick={() => handleMerge(mergeTarget, position.tokenId)}
+                                                                    disabled={isLoading}
+                                                                    className="w-full mt-2 py-2 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition disabled:opacity-50"
+                                                                >
+                                                                    🔀 Merge #{mergeTarget.toString()} → #{position.tokenId.toString()}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+
+
+                                            {/* Withdraw Button for Expired */}
                                             {isExpired && (
                                                 <button
                                                     onClick={() => handleWithdraw(position.tokenId)}
-                                                    className="w-full mt-2 py-1.5 text-[10px] rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+                                                    className="w-full mt-2 py-2 text-xs rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 font-medium"
                                                 >
-                                                    Withdraw
+                                                    🔓 Withdraw WIND
                                                 </button>
                                             )}
                                         </div>
@@ -348,6 +673,7 @@ export default function VotePage() {
                             </div>
                         </div>
                     )}
+
                 </motion.div>
             )}
 
@@ -429,12 +755,20 @@ export default function VotePage() {
                                             <div className="flex items-center justify-between gap-2 mb-2">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <div className="relative w-10 h-6 flex-shrink-0">
-                                                        <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                            {gauge.symbol0.slice(0, 2)}
-                                                        </div>
-                                                        <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                            {gauge.symbol1.slice(0, 2)}
-                                                        </div>
+                                                        {getTokenLogo(gauge.token0) ? (
+                                                            <img src={getTokenLogo(gauge.token0)} alt={gauge.symbol0} className="absolute left-0 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                        ) : (
+                                                            <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                {gauge.symbol0.slice(0, 2)}
+                                                            </div>
+                                                        )}
+                                                        {getTokenLogo(gauge.token1) ? (
+                                                            <img src={getTokenLogo(gauge.token1)} alt={gauge.symbol1} className="absolute left-3 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                        ) : (
+                                                            <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                {gauge.symbol1.slice(0, 2)}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-1">

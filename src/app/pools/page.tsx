@@ -215,8 +215,8 @@ export default function PoolsPage() {
                 {/* Table Header - Desktop only */}
                 <div className="hidden md:grid grid-cols-12 gap-4 p-5 border-b border-white/5 text-sm text-gray-400 font-medium">
                     <div className="col-span-4">Pool</div>
-                    <div className="col-span-2 text-center">Type</div>
-                    <div className="col-span-2 text-center">Rewards</div>
+                    <div className="col-span-2 text-center">APR</div>
+                    <div className="col-span-2 text-center">24h Vol</div>
                     <div className="col-span-2 text-right">TVL</div>
                     <div className="col-span-2 text-center">Action</div>
                 </div>
@@ -249,18 +249,26 @@ export default function PoolsPage() {
                             {/* Pool Info */}
                             <div className="md:col-span-4 flex items-center gap-2">
                                 <div className="relative flex-shrink-0">
-                                    <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
-                                        ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
-                                        : 'bg-gradient-to-br from-primary to-secondary'
-                                        }`}>
-                                        {pool.token0.symbol[0]}
-                                    </div>
-                                    <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
-                                        ? 'bg-gradient-to-br from-blue-500 to-purple-500'
-                                        : 'bg-gradient-to-br from-secondary to-accent'
-                                        }`}>
-                                        {pool.token1.symbol[0]}
-                                    </div>
+                                    {pool.token0.logoURI ? (
+                                        <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full" />
+                                    ) : (
+                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
+                                            ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                                            : 'bg-gradient-to-br from-primary to-secondary'
+                                            }`}>
+                                            {pool.token0.symbol[0]}
+                                        </div>
+                                    )}
+                                    {pool.token1.logoURI ? (
+                                        <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)]" />
+                                    ) : (
+                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                            ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                            : 'bg-gradient-to-br from-secondary to-accent'
+                                            }`}>
+                                            {pool.token1.symbol[0]}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="ml-4 md:ml-4 flex-1 min-w-0">
                                     <div className="font-semibold text-sm md:text-lg truncate">
@@ -279,40 +287,16 @@ export default function PoolsPage() {
                                         )}
                                     </div>
                                 </div>
-                                {/* Mobile: Type badge inline */}
-                                <span className={`md:hidden text-[10px] px-1.5 py-0.5 rounded font-medium ${pool.poolType === 'CL'
-                                    ? 'bg-cyan-500/20 text-cyan-400'
-                                    : 'bg-primary/20 text-primary'
-                                    }`}>
-                                    {pool.poolType === 'CL' ? 'CL' : 'V2'}
-                                </span>
                             </div>
 
-                            {/* Desktop: Type */}
+                            {/* Desktop: APR */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${pool.poolType === 'CL'
-                                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30'
-                                    : 'bg-primary/20 text-primary border border-primary/30'
-                                    }`}>
-                                    {pool.poolType === 'CL' ? '⚡ Concentrated' : '💧 Classic'}
-                                </span>
+                                <span className="text-sm font-medium text-gray-500">—</span>
                             </div>
 
-                            {/* Desktop: Rewards */}
+                            {/* Desktop: 24h Volume */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                {(() => {
-                                    const weeklyAmount = formatWeeklyRewards(pool.address);
-                                    if (weeklyAmount) {
-                                        return (
-                                            <Tooltip content={`${weeklyAmount} WIND distributed per week`}>
-                                                <span className="text-xs px-3 py-1.5 rounded-full font-medium bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 cursor-help">
-                                                    🔥 {weeklyAmount}/wk
-                                                </span>
-                                            </Tooltip>
-                                        );
-                                    }
-                                    return <span className="text-xs text-gray-500">—</span>;
-                                })()}
+                                <span className="text-sm font-medium text-gray-500">—</span>
                             </div>
 
                             {/* Desktop: TVL (Token Amounts) */}
@@ -329,25 +313,25 @@ export default function PoolsPage() {
                                 </div>
                             </div>
 
-                            {/* Mobile: TVL + Action Row */}
+                            {/* Mobile: Stats + Action Row */}
                             <div className="flex md:hidden items-center justify-between gap-2">
-                                <div className="flex-1 text-[10px] min-w-0">
-                                    <div className="font-medium truncate">{pool.reserve0} {pool.token0.symbol}</div>
-                                    <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
+                                <div className="flex items-center gap-2 text-[10px] min-w-0 flex-1">
+                                    {/* TVL */}
+                                    <div className="min-w-0">
+                                        <div className="font-medium truncate">{pool.reserve0} {pool.token0.symbol}</div>
+                                        <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
+                                    </div>
                                 </div>
-                                {formatWeeklyRewards(pool.address) && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex-shrink-0">
-                                        🔥 {formatWeeklyRewards(pool.address)}
-                                    </span>
-                                )}
+                                {/* APR & Vol badges */}
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">APR —</span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Vol —</span>
+                                </div>
                                 <button
                                     onClick={() => openAddLiquidityModal(pool)}
-                                    className={`px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 ${pool.poolType === 'CL'
-                                        ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
-                                        : 'bg-gradient-to-r from-primary to-secondary text-white'
-                                        }`}
+                                    className="px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
                                 >
-                                    Add
+                                    +LP
                                 </button>
                             </div>
 
