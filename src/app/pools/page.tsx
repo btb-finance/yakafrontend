@@ -249,18 +249,26 @@ export default function PoolsPage() {
                             {/* Pool Info */}
                             <div className="md:col-span-4 flex items-center gap-2">
                                 <div className="relative flex-shrink-0">
-                                    <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
-                                        ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
-                                        : 'bg-gradient-to-br from-primary to-secondary'
-                                        }`}>
-                                        {pool.token0.symbol[0]}
-                                    </div>
-                                    <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
-                                        ? 'bg-gradient-to-br from-blue-500 to-purple-500'
-                                        : 'bg-gradient-to-br from-secondary to-accent'
-                                        }`}>
-                                        {pool.token1.symbol[0]}
-                                    </div>
+                                    {pool.token0.logoURI ? (
+                                        <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full" />
+                                    ) : (
+                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
+                                            ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                                            : 'bg-gradient-to-br from-primary to-secondary'
+                                            }`}>
+                                            {pool.token0.symbol[0]}
+                                        </div>
+                                    )}
+                                    {pool.token1.logoURI ? (
+                                        <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)]" />
+                                    ) : (
+                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                            ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                            : 'bg-gradient-to-br from-secondary to-accent'
+                                            }`}>
+                                            {pool.token1.symbol[0]}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="ml-4 md:ml-4 flex-1 min-w-0">
                                     <div className="font-semibold text-sm md:text-lg truncate">
