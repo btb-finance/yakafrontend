@@ -8,8 +8,8 @@ import { CL_CONTRACTS } from '@/config/contracts';
 // Common intermediate tokens for routing
 const INTERMEDIATE_TOKENS = [WSEI, USDC];
 
-// Most used tick spacings
-const TICK_SPACINGS = [10, 80] as const;
+// CL tick spacings from CLFactory contract
+const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
 
 interface RouteQuote {
     amountOut: string;

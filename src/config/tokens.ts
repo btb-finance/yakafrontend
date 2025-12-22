@@ -30,7 +30,7 @@ export const WSEI: Token = {
 
 // WIND Protocol Token
 export const WIND: Token = {
-    address: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
+    address: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
     symbol: 'WIND',
     name: 'Wind Swap',
     decimals: 18,

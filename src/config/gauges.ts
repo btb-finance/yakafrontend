@@ -15,14 +15,14 @@ export interface GaugeConfig {
 
 export const GAUGE_LIST: GaugeConfig[] = [
     {
-        pool: '0xd50528b20c403966be3d1d96acb5a4e85a69830b',
-        gauge: '0xcdac0ca12a3d5b7792ae3da681b1fa5b1a8ba644',
+        pool: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1',
+        gauge: '', // TODO: Create gauge for this new pool
         token0: '0xe15fc38f6d8c56af07bbcbe3baf5708a2bf42392',
         token1: '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7',
         symbol0: 'USDC',
         symbol1: 'WSEI',
         type: 'CL',
-        tickSpacing: 80,
+        tickSpacing: 200,
         isAlive: true,
     },
     {

@@ -12,12 +12,13 @@ import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
 type PoolType = 'all' | 'v2' | 'cl';
 type SortBy = 'tvl' | 'apr';
 
-// Fee tier mapping for CL pools
+// Fee tier mapping for CL pools (from CLFactory contract)
 const FEE_TIERS: Record<number, string> = {
-    1: '0.009%',
-    10: '0.045%',
-    80: '0.25%',
-    2000: '1%',
+    1: '0.005%',     // Stables
+    50: '0.02%',     // Correlated pairs
+    100: '0.045%',   // Standard pairs
+    200: '0.25%',    // Medium volatility
+    2000: '1%',      // High volatility
 };
 
 // Pool config for modal

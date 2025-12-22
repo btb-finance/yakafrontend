@@ -173,7 +173,7 @@ export function SwapInterface() {
                 const v3Route = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
 
                 if (v3Route && parseFloat(v3Route.amountOut) > 0) {
-                    const feeMap: Record<number, string> = { 10: '0.05%', 80: '0.30%' };
+                    const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
                     if (v3Route.routeType === 'direct') {
                         routes.push({
                             type: 'v3',

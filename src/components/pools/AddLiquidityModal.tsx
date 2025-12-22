@@ -51,7 +51,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const [txHash, setTxHash] = useState<string | null>(null);
 
     // CL specific state
-    const [tickSpacing, setTickSpacing] = useState(initialPool?.tickSpacing || 80);
+    const [tickSpacing, setTickSpacing] = useState(initialPool?.tickSpacing || 200);
     const [priceLower, setPriceLower] = useState('');
     const [priceUpper, setPriceUpper] = useState('');
     const [clPoolPrice, setClPoolPrice] = useState<number | null>(null);
@@ -78,6 +78,26 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             if (initialPool.stable !== undefined) setStable(initialPool.stable);
         }
     }, [isOpen, initialPool]);
+
+    // Auto-detect stablecoin pairs and set appropriate tick spacing
+    useEffect(() => {
+        if (!isOpen || !tokenA || !tokenB || poolType !== 'cl') return;
+        // If it's a pre-configured pool with tickSpacing already set, don't override
+        if (initialPool?.tickSpacing) return;
+
+        // List of stablecoin symbols
+        const STABLES = ['USDC', 'USDT', 'USDC.n', 'DAI', 'FRAX', 'LUSD', 'BUSD'];
+        const isAStable = STABLES.includes(tokenA.symbol.toUpperCase());
+        const isBStable = STABLES.includes(tokenB.symbol.toUpperCase());
+
+        // If both are stablecoins, use 0.02% (tick spacing 50)
+        if (isAStable && isBStable) {
+            setTickSpacing(50);
+        } else {
+            // Otherwise default to 0.25% (tick spacing 200)
+            setTickSpacing(200);
+        }
+    }, [isOpen, tokenA, tokenB, poolType, initialPool]);
 
     // Reset state when modal closes
     useEffect(() => {
@@ -627,7 +647,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 </div>
                                                 <span className="font-semibold text-xs truncate">{tokenA?.symbol}/{tokenB?.symbol}</span>
                                                 <span className="text-[10px] text-gray-400 flex-shrink-0">
-                                                    {poolType === 'cl' ? (tickSpacing === 1 ? '0.01%' : tickSpacing === 10 ? '0.045%' : tickSpacing === 80 ? '0.25%' : '1%') : (stable ? 'S' : 'V')}
+                                                    {poolType === 'cl' ? ({ 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' }[tickSpacing] || `${tickSpacing}ts`) : (stable ? 'S' : 'V')}
                                                 </span>
                                             </div>
                                             {poolType === 'cl' && clPoolPrice && (
@@ -707,13 +727,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                 {poolType === 'cl' && !isPoolPreConfigured && (
                                     <div>
                                         <label className="text-sm text-gray-400 mb-3 block font-medium">Fee Tier</label>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                             {[
-                                                { spacing: 1, fee: '0.01%', label: 'Lowest', best: 'Stables' },
-                                                { spacing: 10, fee: '0.045%', label: 'Low', best: 'Most pairs' },
-                                                { spacing: 80, fee: '0.25%', label: 'Medium', best: 'Popular' },
-                                                { spacing: 2000, fee: '1%', label: 'High', best: 'Exotic' },
-                                            ].map(({ spacing, fee, label, best }) => (
+                                                { spacing: 1, fee: '0.005%', best: 'Stables' },
+                                                { spacing: 50, fee: '0.02%', best: 'Correlated' },
+                                                { spacing: 100, fee: '0.045%', best: 'Standard' },
+                                                { spacing: 200, fee: '0.25%', best: 'Medium' },
+                                                { spacing: 2000, fee: '1%', best: 'Exotic' },
+                                            ].map(({ spacing, fee, best }) => (
                                                 <button
                                                     key={spacing}
                                                     onClick={() => setTickSpacing(spacing)}

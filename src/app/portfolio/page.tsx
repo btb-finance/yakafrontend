@@ -1192,7 +1192,7 @@ export default function PortfolioPage() {
                                     {clPositions.map((pos, i) => {
                                         const t0 = getTokenInfo(pos.token0);
                                         const t1 = getTokenInfo(pos.token1);
-                                        const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
+                                        const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
                                         return (
                                             <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/10">
                                                 <div className="flex items-center justify-between mb-2">
@@ -1325,7 +1325,7 @@ export default function PortfolioPage() {
                         ) : (
                             <div className="space-y-2">
                                 {stakedPositions.map((pos, i) => {
-                                    const feeMap: Record<number, string> = { 1: '0.009%', 10: '0.045%', 80: '0.25%', 2000: '1%' };
+                                    const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
                                     const dailyRewards = Number(formatUnits(pos.rewardRate, 18)) * 86400;
 
                                     return (

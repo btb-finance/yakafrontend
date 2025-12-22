@@ -6,64 +6,64 @@
 // ============================================
 export const V2_CONTRACTS = {
     // Protocol Token (WIND)
-    WIND: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D',
-    YAKA: '0x188E342cdEDd8FdF84D765Eb59B7433D30F5484D', // Legacy alias
+    WIND: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
+    YAKA: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421', // Legacy alias
 
     // Core Voting Escrow
-    VotingEscrow: '0xE0d5DCB4D4Afc0f9Ab930616F4f18990ee17519b',
+    VotingEscrow: '0x9312A9702c3F0105246e12874c4A0EdC6aD07593',
 
     // Router for V2 swaps and liquidity
-    Router: '0x7D208C039e4dD152B4bb2570908E10D5193737f7',
+    Router: '0x5f401E565ed095eeC0EFAf1970E4B60ba5aa8995',
 
     // Voter for gauge voting
-    Voter: '0xe0Ec2B044fCFABF673df4c21C15Ac90fEa2A1d99',
+    Voter: '0x4B7e64A935aEAc6f1837a57bdA329c797Fa2aD22',
 
     // Token minter
-    Minter: '0xD761233979b7523172656007b7718C8c4BB8329e',
+    Minter: '0xD56369432BBb4F40143f8C930D96c83c10c68aEE',
 
     // V2 Pool Factory
-    PoolFactory: '0x16D9D5a7E268bD079e67221fda6C5A6719669F8f',
+    PoolFactory: '0xeE6476aa1B912f7c3Ab45b73990f26B840c42069',
 
     // Pool implementation
-    Pool: '0x1Ea24b7b6387520A73c23217995A73C1e4fbda46',
+    Pool: '0x41B5fD249039e4ab492227dB014DDbA79c2a1B92',
 
     // Rewards distributor for veNFT rebases
-    RewardsDistributor: '0x74114c7F375F76CfB9Cff2a8B2EF6A9af23Be380',
+    RewardsDistributor: '0x2ac111A4647708781f797F0a8794b0aEC43ED854',
 
     // Factory registry
-    FactoryRegistry: '0xa403CA20e2D69Be9B160f134294563BCe03acDA9',
+    FactoryRegistry: '0x168df826C17d245187f74bD67008aE623e4496f9',
 
     // Gauge Factory
-    GaugeFactory: '0xe831eF0378229258691dcD271288B7c18EEFc009',
+    GaugeFactory: '0x5137eF6b4FB51E482aafDFE4B82E2618f6DE499a',
 
     // Voting Rewards Factory
-    VotingRewardsFactory: '0x3e7039B47a0b80370442324311eD9f13013eb928',
+    VotingRewardsFactory: '0xD121d8f547F15ca30ECfC928D8313a6E49921f67',
 
     // Managed Rewards Factory
-    ManagedRewardsFactory: '0xdb75aa8Fa45D6443E9431e3161C7D028733E1341',
+    ManagedRewardsFactory: '0x425b61141356F2Ae2d9710FD7fA6718f0D3De958',
 
     // VeArt Proxy for NFT art
-    VeArtProxy: '0x273dFfA4321575D443f988CEd423e275564D3627',
+    VeArtProxy: '0x7292f11B204D5B3fB0CC7D10E0C10a26540359D5',
 
     // Airdrop Distributor
-    AirdropDistributor: '0x4783060c04121a2953e5A04245F1D377ED744066',
+    AirdropDistributor: '0x9726ec2930C452594f1FAccA5112a8B57790A5A4',
 
     // Forwarder
-    Forwarder: '0x9658272eea9E243Fa5b072fEAaA1CaDe29fa80dF',
+    Forwarder: '0x2EB4C1f3Dd12947dF49f5e7E399B4250d4640692',
 
     // Governance
-    ProtocolGovernor: '0x68182459aBfFa6C0f8afC33A689801159BCA85EA',
-    EpochGovernor: '0x6f988ECdca8b87c482D09301D6Ee2002Ce7009B9',
+    ProtocolGovernor: '0x70123139AAe07Ce9d7734E92Cd1D658d6d9Ce3d2',
+    EpochGovernor: '0x8Fc6107ba0b72cd72ad840Ab0Bcce94b30262b44',
 } as const;
 
 // ============================================
 // V2 Libraries
 // ============================================
 export const V2_LIBRARIES = {
-    PerlinNoise: '0x23774e759f7C757a484E23C98ac8b9bcB620B4Cd',
-    Trig: '0xE9b96ECE82A102de5fcA3E049F18a1714D2b2BE1',
-    BalanceLogicLibrary: '0x15cc58F057a6683c94a98e394788AD09d7A943f4',
-    DelegationLogicLibrary: '0x38bf0E610319072875aF751285077E074caDbD25',
+    PerlinNoise: '0xa1FB21086A696CdBF40D20fbEF7F5b4fC5091398',
+    Trig: '0x53A64478C875B521d4fc7A9AdA3f7269137f7F80',
+    BalanceLogicLibrary: '0x7ae7DF0efA84607606e830Bbd9181327b7Cd77c4',
+    DelegationLogicLibrary: '0x1b3A8866763f4144b5f574166573BfC5352A6812',
 } as const;
 
 // ============================================
@@ -71,46 +71,46 @@ export const V2_LIBRARIES = {
 // ============================================
 export const CL_CONTRACTS = {
     // CL Factory for creating pools
-    CLFactory: '0x0aeEAf8d3bb4a9466e6AC8985F5173ddB42Ec081',
+    CLFactory: '0xA0E081764Ed601074C1B370eb117413145F5e8Cc',
 
     // CL Pool implementation
-    CLPool: '0x1f595d057f11ae1a3637b1f36883FB04038b50e6',
+    CLPool: '0x4aDA3B73188649D7af11eb00464E789220077800',
 
     // CL Gauge Factory
-    CLGaugeFactory: '0xEaAB66dC4DAcd6925033930753A850D6f50a7204',
+    CLGaugeFactory: '0xbb24DA8eDAD6324a6f58485702588eFF08b3Cd64',
 
     // CL Gauge implementation
-    CLGauge: '0xBE796C4176d24ba9645C199D081dB6AB0f1002A4',
+    CLGauge: '0xb24D93B3f9C48E05879B1Be77e88489950E16982',
 
     // Swap Router for CL swaps
-    SwapRouter: '0xDc77ecB025C7478469dAc8E6facB8cf5806B9277',
+    SwapRouter: '0x960cDB8A41FC53eD72750F6b5E81DEAEBADCF818',
 
     // NFT Position Manager for CL positions
-    NonfungiblePositionManager: '0x7850B615a1F0E26734c13EF936022241B28C7AAA',
+    NonfungiblePositionManager: '0x0e98B82C5FAec199DfAFe2b151d51d40522e7f35',
 
     // Token Position Descriptor (NFT metadata)
-    NonfungibleTokenPositionDescriptor: '0x9e4DF2287C14C4D621AEB37A12B0CA98883E8ECa',
+    NonfungibleTokenPositionDescriptor: '0xe4C6586B13EebB8a8d05A35e147784b0Fa7F077e',
 
     // Quoter for getting swap quotes
-    QuoterV2: '0xEC98E8bFaA9375E2D588042F045aD028BaDC43CB',
+    QuoterV2: '0x4A42169A43c148674708622583682dA668B8b43D',
 
     // Mixed Route Quoter (supports V2 + CL routes)
-    MixedRouteQuoterV1: '0x476faE73abA86E6e300234235BD56Bd94913ce07',
+    MixedRouteQuoterV1: '0xCC4Af1C94AfC5eA71Fee618A880c271E0416F9a4',
 
     // Sugar Helper for data aggregation
-    SugarHelper: '0x0447C16fFB1DC5826840A8A8EA830B5ac284f59f',
+    SugarHelper: '0x1057B7121E75E3df8fb78aA8bdD71d78a850Cf6B',
 
     // Custom Swap Fee Module
-    CustomSwapFeeModule: '0x918D30a7F7E0A20708c2887f263f25cB6bAEdD03',
+    CustomSwapFeeModule: '0xa63203F534539e85175B813db14C4a701FDE0a15',
 
     // Custom Unstaked Fee Module
-    CustomUnstakedFeeModule: '0x1a783c295Dd59383BcF657f2c57Ef85895bec117',
+    CustomUnstakedFeeModule: '0x4D464AaE5AA2cE4012c32daF8B58C952dA731463',
 
     // NFT Descriptor Library
-    NFTDescriptor: '0x435A9BE1a4E1492Ad9055A3e580747E72219386D',
+    NFTDescriptor: '0x30D2CcF8Bf963Ce8D8905c8Eac8Bfff0De805024',
 
     // NFT SVG Library
-    NFTSVG: '0x97C0a6ba35146E58D3d9d05b5e5B046a62531632',
+    NFTSVG: '0x974bbfc2DE0EfEd83A950fcB323c429d29c288F3',
 } as const;
 
 // ============================================

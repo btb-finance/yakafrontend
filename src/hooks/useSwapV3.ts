@@ -7,8 +7,8 @@ import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
 import { SWAP_ROUTER_ABI, ERC20_ABI } from '@/config/abis';
 
-// Most used tick spacings only (10 and 80)
-const TICK_SPACINGS = [10, 80] as const;
+// CL tick spacings from CLFactory contract
+const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
 
 interface SwapQuoteV3 {
     amountOut: string;
