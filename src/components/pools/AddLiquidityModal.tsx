@@ -130,6 +130,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 : [actualTokenB, actualTokenA];
 
             try {
+                // Step 1: Get pool address
                 const getPoolSelector = '28af8d0b';
                 const token0Padded = token0.address.slice(2).toLowerCase().padStart(64, '0');
                 const token1Padded = token1.address.slice(2).toLowerCase().padStart(64, '0');
@@ -157,6 +158,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const pool = '0x' + poolResult.result.slice(-40);
                 setClPoolAddress(pool);
 
+                // Step 2: Fetch slot0 for price - now immediately after getting pool address
                 const slot0Selector = '3850c7bd';
                 const slot0Response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                     method: 'POST',
@@ -176,6 +178,12 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 }
 
                 const sqrtPriceX96 = BigInt('0x' + slot0Result.result.slice(2, 66));
+                if (sqrtPriceX96 === BigInt(0)) {
+                    // Pool exists but has no price set (not initialized)
+                    setClPoolPrice(null);
+                    return;
+                }
+
                 const Q96 = BigInt(2) ** BigInt(96);
                 const priceRaw = Number(sqrtPriceX96 * sqrtPriceX96 * BigInt(10 ** token0.decimals)) / Number(Q96 * Q96 * BigInt(10 ** token1.decimals));
                 const price = actualTokenA.address.toLowerCase() === token0.address.toLowerCase()

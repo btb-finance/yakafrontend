@@ -790,7 +790,12 @@ export default function VotePage() {
 
                                             {/* Row 2: Vote controls or status */}
                                             <div className="flex items-center justify-between gap-2">
-                                                {positions.length > 0 ? (
+                                                {!gauge.gauge ? (
+                                                    /* No gauge exists yet - show Coming Soon */
+                                                    <span className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
+                                                        🚧 Voting Coming Soon
+                                                    </span>
+                                                ) : positions.length > 0 ? (
                                                     <>
                                                         <div className="flex gap-1">
                                                             {[100, 50, 25].map((pct) => (

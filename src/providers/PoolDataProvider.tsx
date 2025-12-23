@@ -88,9 +88,22 @@ KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
 };
 
 // ============================================
-// Batch RPC Helper
+// Batch RPC Helper with retry and chunking
 // ============================================
-async function batchRpcCall(calls: { to: string; data: string }[]): Promise<string[]> {
+async function batchRpcCall(calls: { to: string; data: string }[], retries = 2): Promise<string[]> {
+    // Split into smaller chunks to avoid rate limits (10 calls per batch)
+    const CHUNK_SIZE = 10;
+
+    if (calls.length > CHUNK_SIZE) {
+        const results: string[] = [];
+        for (let i = 0; i < calls.length; i += CHUNK_SIZE) {
+            const chunk = calls.slice(i, i + CHUNK_SIZE);
+            const chunkResults = await batchRpcCall(chunk, retries);
+            results.push(...chunkResults);
+        }
+        return results;
+    }
+
     const batch = calls.map((call, i) => ({
         jsonrpc: '2.0',
         method: 'eth_call',
@@ -98,21 +111,71 @@ async function batchRpcCall(calls: { to: string; data: string }[]): Promise<stri
         id: i + 1
     }));
 
-    const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batch)
-    });
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(batch)
+            });
 
-    const results = await response.json();
-    return Array.isArray(results)
-        ? results.sort((a: any, b: any) => a.id - b.id).map((r: any) => r.result || '0x')
-        : [results.result || '0x'];
+            const results = await response.json();
+            return Array.isArray(results)
+                ? results.sort((a: any, b: any) => a.id - b.id).map((r: any) => r.result || '0x')
+                : [results.result || '0x'];
+        } catch (err) {
+            if (attempt < retries) {
+                // Wait before retry (100ms * attempt)
+                await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
+                continue;
+            }
+            console.warn('[batchRpcCall] All retries failed:', err);
+            return calls.map(() => '0x'); // Return empty results on complete failure
+        }
+    }
+    return calls.map(() => '0x');
 }
 
 // ============================================
 // Provider Component
 // ============================================
+const CACHE_KEY = 'windswap_pool_cache';
+const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour
+
+// Helper to load from localStorage
+function loadCachedPools(): { clPools: PoolData[]; v2Pools: PoolData[]; timestamp: number } | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            const data = JSON.parse(cached);
+            // Check if cache is still valid (less than 1 hour old)
+            if (Date.now() - data.timestamp < CACHE_EXPIRY) {
+                console.log('[PoolDataProvider] ⚡ Loading from cache');
+                return data;
+            }
+        }
+    } catch (e) {
+        console.warn('[PoolDataProvider] Cache read error');
+    }
+    return null;
+}
+
+// Helper to save to localStorage
+function saveCachePools(clPools: PoolData[], v2Pools: PoolData[]) {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+            clPools,
+            v2Pools,
+            timestamp: Date.now()
+        }));
+        console.log('[PoolDataProvider] 💾 Saved to cache');
+    } catch (e) {
+        console.warn('[PoolDataProvider] Cache write error');
+    }
+}
+
 export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [v2Pools, setV2Pools] = useState<PoolData[]>([]);
     const [clPools, setClPools] = useState<PoolData[]>([]);
@@ -129,45 +192,56 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
         setGaugesLoading(true);
         try {
-            // Step 0: Instant load from static GAUGE_LIST for fast display
-            try {
-                const { GAUGE_LIST } = await import('@/config/gauges');
+            // Step 0a: Try loading from localStorage cache FIRST (instant!)
+            const cached = loadCachedPools();
+            if (cached && cached.clPools.length > 0) {
+                setClPools(cached.clPools);
+                setV2Pools(cached.v2Pools);
+                setIsLoading(false); // Show cached data immediately!
+                console.log(`[PoolDataProvider] ⚡ Loaded ${cached.clPools.length} pools from cache`);
+            }
 
-                // Build quick pool list from gauges for instant display
-                const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
-                    const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
-                    const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
-                    return {
-                        address: g.pool as Address,
-                        token0: {
-                            address: g.token0 as Address,
-                            symbol: known0?.symbol || g.symbol0,
-                            decimals: known0?.decimals || 18,
-                            logoURI: known0?.logoURI,
-                        },
-                        token1: {
-                            address: g.token1 as Address,
-                            symbol: known1?.symbol || g.symbol1,
-                            decimals: known1?.decimals || 18,
-                            logoURI: known1?.logoURI,
-                        },
-                        poolType: g.type,
-                        stable: false,
-                        tickSpacing: g.tickSpacing,
-                        reserve0: '0',
-                        reserve1: '0',
-                        tvl: '0',
-                    };
-                });
+            // Step 0b: Fall back to static GAUGE_LIST if no cache
+            if (!cached || cached.clPools.length === 0) {
+                try {
+                    const { GAUGE_LIST } = await import('@/config/gauges');
 
-                // Set pools immediately for fast display
-                if (quickClPools.length > 0) {
-                    setClPools(quickClPools.filter(p => p.poolType === 'CL'));
-                    setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
-                    setIsLoading(false); // Show pools immediately!
+                    // Build quick pool list from gauges for instant display
+                    const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
+                        const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
+                        const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
+                        return {
+                            address: g.pool as Address,
+                            token0: {
+                                address: g.token0 as Address,
+                                symbol: known0?.symbol || g.symbol0,
+                                decimals: known0?.decimals || 18,
+                                logoURI: known0?.logoURI,
+                            },
+                            token1: {
+                                address: g.token1 as Address,
+                                symbol: known1?.symbol || g.symbol1,
+                                decimals: known1?.decimals || 18,
+                                logoURI: known1?.logoURI,
+                            },
+                            poolType: g.type,
+                            stable: false,
+                            tickSpacing: g.tickSpacing,
+                            reserve0: '0',
+                            reserve1: '0',
+                            tvl: '0',
+                        };
+                    });
+
+                    // Set pools immediately for fast display
+                    if (quickClPools.length > 0) {
+                        setClPools(quickClPools.filter(p => p.poolType === 'CL'));
+                        setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
+                        setIsLoading(false); // Show pools immediately!
+                    }
+                } catch (e) {
+                    console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
                 }
-            } catch (e) {
-                console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
             }
 
             // Step 1: Get pool counts
@@ -333,58 +407,76 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 };
             });
 
-            // Merge TVL data from RPC into the GAUGE_LIST pools
-            // For CL pools, fetch actual token balances in each pool
-            const clBalanceCalls: { to: string; data: string; poolAddr: string; isToken0: boolean }[] = [];
-            for (const p of clDetails) {
-                const poolPadded = p.addr.slice(2).toLowerCase().padStart(64, '0');
-                clBalanceCalls.push({ to: p.token0, data: `0x70a08231${poolPadded}`, poolAddr: p.addr, isToken0: true });
-                clBalanceCalls.push({ to: p.token1, data: `0x70a08231${poolPadded}`, poolAddr: p.addr, isToken0: false });
+            // Fetch token balances for GAUGE_LIST pools (NOT factory pools - to avoid mismatch)
+            // Get the same pool list we're displaying
+            let gaugePoolsForBalance: { pool: string; token0: string; token1: string }[] = [];
+            try {
+                const { GAUGE_LIST } = await import('@/config/gauges');
+                gaugePoolsForBalance = GAUGE_LIST.map(g => ({ pool: g.pool, token0: g.token0, token1: g.token1 }));
+            } catch (e) {
+                console.warn('[PoolDataProvider] Could not load GAUGE_LIST for balance fetch');
             }
 
-            const clBalanceResults = await batchRpcCall(clBalanceCalls.map(c => ({ to: c.to, data: c.data })));
-            const clTvlMap = new Map<string, { balance0: bigint; balance1: bigint; token0: Address; token1: Address }>();
+            // Progressive loading: fetch each pool independently and update UI immediately
+            // This way users see data as it arrives, not waiting for all pools
+            const fetchPoolBalance = async (poolInfo: { pool: string; token0: string; token1: string }, retries = 2) => {
+                for (let attempt = 0; attempt <= retries; attempt++) {
+                    try {
+                        const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
+                        const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify([
+                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token0, data: `0x70a08231${poolPadded}` }, 'latest'], id: 1 },
+                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token1, data: `0x70a08231${poolPadded}` }, 'latest'], id: 2 }
+                            ])
+                        });
 
-            for (let i = 0; i < clBalanceCalls.length; i += 2) {
-                const call = clBalanceCalls[i];
-                const balance0 = clBalanceResults[i] !== '0x' ? BigInt(clBalanceResults[i]) : BigInt(0);
-                const balance1 = clBalanceResults[i + 1] !== '0x' ? BigInt(clBalanceResults[i + 1]) : BigInt(0);
-                const poolDetail = clDetails.find(p => p.addr.toLowerCase() === call.poolAddr.toLowerCase());
-                if (poolDetail) {
-                    clTvlMap.set(call.poolAddr.toLowerCase(), {
-                        balance0,
-                        balance1,
-                        token0: poolDetail.token0,
-                        token1: poolDetail.token1
-                    });
+                        const results = await response.json();
+                        if (!Array.isArray(results) || results.length < 2) throw new Error('Invalid response');
+
+                        const balance0 = results[0]?.result && results[0].result !== '0x' ? BigInt(results[0].result) : BigInt(0);
+                        const balance1 = results[1]?.result && results[1].result !== '0x' ? BigInt(results[1].result) : BigInt(0);
+
+                        const decimals0 = KNOWN_TOKENS[poolInfo.token0.toLowerCase()]?.decimals || 18;
+                        const decimals1 = KNOWN_TOKENS[poolInfo.token1.toLowerCase()]?.decimals || 18;
+
+                        const val0 = Number(balance0) / Math.pow(10, decimals0);
+                        const val1 = Number(balance1) / Math.pow(10, decimals1);
+
+                        const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
+                        const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
+                        const tvl = (val0 + val1).toFixed(2);
+
+                        // Update this specific pool immediately
+                        setClPools(prev => prev.map(pool =>
+                            pool.address.toLowerCase() === poolInfo.pool.toLowerCase()
+                                ? { ...pool, reserve0, reserve1, tvl }
+                                : pool
+                        ));
+                        return; // Success - exit retry loop
+                    } catch (err) {
+                        if (attempt < retries) {
+                            await new Promise(r => setTimeout(r, 200 * (attempt + 1))); // Wait before retry
+                            continue;
+                        }
+                        console.warn(`[PoolDataProvider] Failed to fetch balance for ${poolInfo.pool} after ${retries} retries`);
+                    }
                 }
-            }
+            };
 
+            // Fire all pool balance fetches in parallel, wait for all to complete, then save cache
+            await Promise.all(gaugePoolsForBalance.map(p => fetchPoolBalance(p)));
+
+            // Save to cache after all pools are fetched
+            setClPools(currentPools => {
+                saveCachePools(currentPools, v2Pools);
+                return currentPools;
+            });
+
+            // Update V2 pools with reserve data (from v2Details which is correct since no V2 pools in GAUGE_LIST)
             const v2ReservesMap = new Map<string, { reserve0: bigint; reserve1: bigint }>();
             v2Details.forEach(p => v2ReservesMap.set(p.addr.toLowerCase(), { reserve0: p.reserve0, reserve1: p.reserve1 }));
-
-            // Update CL pools with actual token balance TVL
-            setClPools(prev => prev.map(pool => {
-                const tvlData = clTvlMap.get(pool.address.toLowerCase());
-                if (tvlData) {
-                    // Get token decimals from known tokens or default to common values
-                    const decimals0 = KNOWN_TOKENS[tvlData.token0.toLowerCase()]?.decimals || 18;
-                    const decimals1 = KNOWN_TOKENS[tvlData.token1.toLowerCase()]?.decimals || 18;
-
-                    const val0 = Number(tvlData.balance0) / Math.pow(10, decimals0);
-                    const val1 = Number(tvlData.balance1) / Math.pow(10, decimals1);
-
-                    // Store reserve amounts as formatted strings for display
-                    const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
-                    const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
-                    const tvl = (val0 + val1).toFixed(2);
-
-                    return { ...pool, reserve0, reserve1, tvl };
-                }
-                return pool;
-            }));
-
-            // Update V2 pools with reserve data
             setV2Pools(prev => prev.map(pool => {
                 const reserves = v2ReservesMap.get(pool.address.toLowerCase());
                 if (reserves) {
@@ -563,6 +655,110 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
+
+    // Focused retry for failed pools only - runs every 5 seconds until all pools loaded
+    useEffect(() => {
+        let retryCount = 0;
+        const MAX_RETRIES = 12; // 60 seconds of retrying
+
+        const retryFailedPools = async () => {
+            // Check current state via callback to avoid stale closure
+            let failedPoolAddresses: string[] = [];
+            setClPools(currentPools => {
+                // A pool is "failed" if both reserves are 0 (either '0' or '0.00')
+                failedPoolAddresses = currentPools
+                    .filter(p => {
+                        const r0 = parseFloat(p.reserve0) || 0;
+                        const r1 = parseFloat(p.reserve1) || 0;
+                        return r0 === 0 && r1 === 0;
+                    })
+                    .map(p => p.address.toLowerCase());
+                return currentPools; // Return unchanged
+            });
+
+            if (failedPoolAddresses.length === 0) {
+                console.log('[PoolDataProvider] ✅ All pools loaded!');
+                return;
+            }
+
+            if (retryCount >= MAX_RETRIES) {
+                console.log(`[PoolDataProvider] ⚠️ Max retries, ${failedPoolAddresses.length} pools still failed`);
+                return;
+            }
+
+            retryCount++;
+            console.log(`[PoolDataProvider] 🔄 Retry ${retryCount}/${MAX_RETRIES} for ${failedPoolAddresses.length} failed pools`);
+
+            try {
+                const { GAUGE_LIST } = await import('@/config/gauges');
+                const poolsToRetry = GAUGE_LIST.filter(g => failedPoolAddresses.includes(g.pool.toLowerCase()));
+
+                // Retry each failed pool
+                for (const poolInfo of poolsToRetry) {
+                    try {
+                        const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
+                        const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify([
+                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token0, data: `0x70a08231${poolPadded}` }, 'latest'], id: 1 },
+                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token1, data: `0x70a08231${poolPadded}` }, 'latest'], id: 2 }
+                            ])
+                        });
+
+                        const results = await response.json();
+                        if (Array.isArray(results) && results.length >= 2) {
+                            const balance0 = results[0]?.result && results[0].result !== '0x' ? BigInt(results[0].result) : BigInt(0);
+                            const balance1 = results[1]?.result && results[1].result !== '0x' ? BigInt(results[1].result) : BigInt(0);
+
+                            const decimals0 = KNOWN_TOKENS[poolInfo.token0.toLowerCase()]?.decimals || 18;
+                            const decimals1 = KNOWN_TOKENS[poolInfo.token1.toLowerCase()]?.decimals || 18;
+
+                            const val0 = Number(balance0) / Math.pow(10, decimals0);
+                            const val1 = Number(balance1) / Math.pow(10, decimals1);
+
+                            const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
+                            const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
+                            const tvl = (val0 + val1).toFixed(2);
+
+                            setClPools(prev => {
+                                const updated = prev.map(pool =>
+                                    pool.address.toLowerCase() === poolInfo.pool.toLowerCase()
+                                        ? { ...pool, reserve0, reserve1, tvl }
+                                        : pool
+                                );
+                                // Save to cache after each successful update
+                                saveCachePools(updated, []);
+                                return updated;
+                            });
+                            console.log(`[PoolDataProvider] ✅ ${poolInfo.pool.slice(0, 10)}...`);
+                        }
+                    } catch (err) {
+                        // Continue to next pool
+                    }
+                    // Small delay between requests to avoid rate limiting
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            } catch (e) {
+                console.warn('[PoolDataProvider] Retry failed');
+            }
+        };
+
+        // Start retry after 3 seconds, then every 5 seconds
+        const timeout = setTimeout(() => {
+            retryFailedPools();
+            const interval = setInterval(retryFailedPools, 5000);
+            // Store interval for cleanup
+            (window as any).__poolRetryInterval = interval;
+        }, 3000);
+
+        return () => {
+            clearTimeout(timeout);
+            if ((window as any).__poolRetryInterval) {
+                clearInterval((window as any).__poolRetryInterval);
+            }
+        };
+    }, []);
 
     // Auto-refresh every 10 minutes (only if page is still open)
     useEffect(() => {
