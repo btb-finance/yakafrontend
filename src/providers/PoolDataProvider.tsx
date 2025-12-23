@@ -139,6 +139,43 @@ async function batchRpcCall(calls: { to: string; data: string }[], retries = 2):
 // ============================================
 // Provider Component
 // ============================================
+const CACHE_KEY = 'windswap_pool_cache';
+const CACHE_EXPIRY = 60 * 60 * 1000; // 1 hour
+
+// Helper to load from localStorage
+function loadCachedPools(): { clPools: PoolData[]; v2Pools: PoolData[]; timestamp: number } | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            const data = JSON.parse(cached);
+            // Check if cache is still valid (less than 1 hour old)
+            if (Date.now() - data.timestamp < CACHE_EXPIRY) {
+                console.log('[PoolDataProvider] ⚡ Loading from cache');
+                return data;
+            }
+        }
+    } catch (e) {
+        console.warn('[PoolDataProvider] Cache read error');
+    }
+    return null;
+}
+
+// Helper to save to localStorage
+function saveCachePools(clPools: PoolData[], v2Pools: PoolData[]) {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+            clPools,
+            v2Pools,
+            timestamp: Date.now()
+        }));
+        console.log('[PoolDataProvider] 💾 Saved to cache');
+    } catch (e) {
+        console.warn('[PoolDataProvider] Cache write error');
+    }
+}
+
 export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [v2Pools, setV2Pools] = useState<PoolData[]>([]);
     const [clPools, setClPools] = useState<PoolData[]>([]);
@@ -155,45 +192,56 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
         setGaugesLoading(true);
         try {
-            // Step 0: Instant load from static GAUGE_LIST for fast display
-            try {
-                const { GAUGE_LIST } = await import('@/config/gauges');
+            // Step 0a: Try loading from localStorage cache FIRST (instant!)
+            const cached = loadCachedPools();
+            if (cached && cached.clPools.length > 0) {
+                setClPools(cached.clPools);
+                setV2Pools(cached.v2Pools);
+                setIsLoading(false); // Show cached data immediately!
+                console.log(`[PoolDataProvider] ⚡ Loaded ${cached.clPools.length} pools from cache`);
+            }
 
-                // Build quick pool list from gauges for instant display
-                const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
-                    const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
-                    const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
-                    return {
-                        address: g.pool as Address,
-                        token0: {
-                            address: g.token0 as Address,
-                            symbol: known0?.symbol || g.symbol0,
-                            decimals: known0?.decimals || 18,
-                            logoURI: known0?.logoURI,
-                        },
-                        token1: {
-                            address: g.token1 as Address,
-                            symbol: known1?.symbol || g.symbol1,
-                            decimals: known1?.decimals || 18,
-                            logoURI: known1?.logoURI,
-                        },
-                        poolType: g.type,
-                        stable: false,
-                        tickSpacing: g.tickSpacing,
-                        reserve0: '0',
-                        reserve1: '0',
-                        tvl: '0',
-                    };
-                });
+            // Step 0b: Fall back to static GAUGE_LIST if no cache
+            if (!cached || cached.clPools.length === 0) {
+                try {
+                    const { GAUGE_LIST } = await import('@/config/gauges');
 
-                // Set pools immediately for fast display
-                if (quickClPools.length > 0) {
-                    setClPools(quickClPools.filter(p => p.poolType === 'CL'));
-                    setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
-                    setIsLoading(false); // Show pools immediately!
+                    // Build quick pool list from gauges for instant display
+                    const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
+                        const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
+                        const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
+                        return {
+                            address: g.pool as Address,
+                            token0: {
+                                address: g.token0 as Address,
+                                symbol: known0?.symbol || g.symbol0,
+                                decimals: known0?.decimals || 18,
+                                logoURI: known0?.logoURI,
+                            },
+                            token1: {
+                                address: g.token1 as Address,
+                                symbol: known1?.symbol || g.symbol1,
+                                decimals: known1?.decimals || 18,
+                                logoURI: known1?.logoURI,
+                            },
+                            poolType: g.type,
+                            stable: false,
+                            tickSpacing: g.tickSpacing,
+                            reserve0: '0',
+                            reserve1: '0',
+                            tvl: '0',
+                        };
+                    });
+
+                    // Set pools immediately for fast display
+                    if (quickClPools.length > 0) {
+                        setClPools(quickClPools.filter(p => p.poolType === 'CL'));
+                        setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
+                        setIsLoading(false); // Show pools immediately!
+                    }
+                } catch (e) {
+                    console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
                 }
-            } catch (e) {
-                console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
             }
 
             // Step 1: Get pool counts
@@ -417,9 +465,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 }
             };
 
-            // Fire all pool balance fetches in parallel - each updates UI as it completes
-            // Don't await - let them run independently
-            gaugePoolsForBalance.forEach(p => fetchPoolBalance(p));
+            // Fire all pool balance fetches in parallel, wait for all to complete, then save cache
+            await Promise.all(gaugePoolsForBalance.map(p => fetchPoolBalance(p)));
+
+            // Save to cache after all pools are fetched
+            setClPools(currentPools => {
+                saveCachePools(currentPools, v2Pools);
+                return currentPools;
+            });
 
             // Update V2 pools with reserve data (from v2Details which is correct since no V2 pools in GAUGE_LIST)
             const v2ReservesMap = new Map<string, { reserve0: bigint; reserve1: bigint }>();
