@@ -64,6 +64,28 @@ export function useCLPositions() {
             const results = await Promise.all(positionPromises);
             const validPositions = results.filter((p): p is CLPosition => p !== null);
             setPositions(validPositions);
+
+            // If we didn't get all positions, retry missing ones after a delay
+            if (validPositions.length < count) {
+                console.log(`[usePositions] Got ${validPositions.length}/${count} positions, retrying missing...`);
+                const fetchedIds = new Set(validPositions.map(p => p.tokenId.toString()));
+
+                // Retry after 3 seconds
+                setTimeout(async () => {
+                    const retryPromises: Promise<CLPosition | null>[] = [];
+                    for (let i = 0; i < count; i++) {
+                        retryPromises.push(fetchPositionByIndex(address, i));
+                    }
+                    const retryResults = await Promise.all(retryPromises);
+                    const newPositions = retryResults.filter((p): p is CLPosition =>
+                        p !== null && !fetchedIds.has(p.tokenId.toString())
+                    );
+                    if (newPositions.length > 0) {
+                        console.log(`[usePositions] ✅ Recovered ${newPositions.length} more positions`);
+                        setPositions(prev => [...prev, ...newPositions]);
+                    }
+                }, 3000);
+            }
         } catch (err) {
             console.error('Error fetching CL positions:', err);
             setPositions([]);
@@ -89,63 +111,72 @@ export function useCLPositions() {
     };
 }
 
-// Fetch a single position by owner index
-async function fetchPositionByIndex(owner: string, index: number): Promise<CLPosition | null> {
+// Fetch a single position by owner index (with retry logic)
+async function fetchPositionByIndex(owner: string, index: number, retries = 3): Promise<CLPosition | null> {
     const rpcUrl = 'https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8';
 
-    try {
-        // 1. Get tokenId at index using tokenOfOwnerByIndex
-        const tokenIdResponse = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'eth_call',
-                params: [{
-                    to: CL_CONTRACTS.NonfungiblePositionManager,
-                    data: encodeTokenOfOwnerByIndex(owner, index),
-                }, 'latest'],
-                id: 1,
-            }),
-        });
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            // 1. Get tokenId at index using tokenOfOwnerByIndex
+            const tokenIdResponse = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{
+                        to: CL_CONTRACTS.NonfungiblePositionManager,
+                        data: encodeTokenOfOwnerByIndex(owner, index),
+                    }, 'latest'],
+                    id: 1,
+                }),
+            });
 
-        const tokenIdResult = await tokenIdResponse.json();
-        if (!tokenIdResult.result || tokenIdResult.result === '0x') {
+            const tokenIdResult = await tokenIdResponse.json();
+            if (!tokenIdResult.result || tokenIdResult.result === '0x') {
+                return null;
+            }
+
+            const tokenId = BigInt(tokenIdResult.result);
+
+            // 2. Get position data using positions(tokenId)
+            const positionResponse = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_call',
+                    params: [{
+                        to: CL_CONTRACTS.NonfungiblePositionManager,
+                        data: encodePositions(tokenId),
+                    }, 'latest'],
+                    id: 2,
+                }),
+            });
+
+            const positionResult = await positionResponse.json();
+            if (!positionResult.result || positionResult.result === '0x') {
+                return null;
+            }
+
+            const decoded = decodePositionResult(positionResult.result);
+
+            return {
+                tokenId,
+                ...decoded,
+            };
+        } catch (err) {
+            if (attempt < retries) {
+                // Wait before retry with exponential backoff
+                await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
+                console.log(`[usePositions] Retrying position ${index} (attempt ${attempt + 2}/${retries + 1})`);
+                continue;
+            }
+            console.error(`Error fetching position at index ${index} after ${retries + 1} attempts:`, err);
             return null;
         }
-
-        const tokenId = BigInt(tokenIdResult.result);
-
-        // 2. Get position data using positions(tokenId)
-        const positionResponse = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'eth_call',
-                params: [{
-                    to: CL_CONTRACTS.NonfungiblePositionManager,
-                    data: encodePositions(tokenId),
-                }, 'latest'],
-                id: 2,
-            }),
-        });
-
-        const positionResult = await positionResponse.json();
-        if (!positionResult.result || positionResult.result === '0x') {
-            return null;
-        }
-
-        const decoded = decodePositionResult(positionResult.result);
-
-        return {
-            tokenId,
-            ...decoded,
-        };
-    } catch (err) {
-        console.error(`Error fetching position at index ${index}:`, err);
-        return null;
     }
+    return null;
 }
 
 // Encode tokenOfOwnerByIndex(address,uint256)
