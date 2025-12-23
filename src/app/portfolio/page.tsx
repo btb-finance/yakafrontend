@@ -113,14 +113,23 @@ const getTokenLogo = (addr: string): string | undefined => {
 export default function PortfolioPage() {
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'staked' | 'locks' | 'rewards'>('overview');
-    const [veNFTs, setVeNFTs] = useState<VeNFT[]>([]);
-    const [stakedPositions, setStakedPositions] = useState<StakedPosition[]>([]);
-    const [loadingVeNFTs, setLoadingVeNFTs] = useState(true);
-    const [loadingStaked, setLoadingStaked] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
 
-    // Use global pool data for token info (instant!)
-    const { getTokenInfo: getGlobalTokenInfo, isLoading: globalLoading } = usePoolData();
+    // Use global pool data for token info, staked positions, AND veNFTs (all prefetched!)
+    const {
+        getTokenInfo: getGlobalTokenInfo,
+        isLoading: globalLoading,
+        stakedPositions: prefetchedStakedPositions,
+        stakedLoading: loadingStaked,
+        refetchStaked,
+        veNFTs: prefetchedVeNFTs,
+        veNFTsLoading: loadingVeNFTs,
+        refetchVeNFTs
+    } = usePoolData();
+
+    // Use prefetched data from provider
+    const stakedPositions = prefetchedStakedPositions;
+    const veNFTs = prefetchedVeNFTs;
 
     // Shadow outer getTokenInfo - uses global data first, then fallback to token list
     const getTokenInfo = (addr: string) => {
@@ -376,325 +385,17 @@ export default function PortfolioPage() {
         if (calculated) setAmount0ToAdd(calculated);
     };
 
-    // Fetch veNFT data
-    useEffect(() => {
-        const fetchVeNFTs = async () => {
-            if (!address) {
-                setVeNFTs([]);
-                setLoadingVeNFTs(false);
-                return;
-            }
+    // NOTE: VeNFTs are now prefetched by PoolDataProvider - no need to fetch here!
+    // Use refetchVeNFTs from usePoolData to refresh veNFT data if needed.
 
-            setLoadingVeNFTs(true);
-            const nfts: VeNFT[] = [];
-
-            try {
-                // Get veNFT count
-                const countResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: V2_CONTRACTS.VotingEscrow,
-                            data: `0x70a08231${address.slice(2).toLowerCase().padStart(64, '0')}`
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
-
-                const count = countResult.result ? parseInt(countResult.result, 16) : 0;
-
-                for (let i = 0; i < count; i++) {
-                    // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
-                    const tokenIdResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: V2_CONTRACTS.VotingEscrow,
-                                data: `0x8bf9d84c${address.slice(2).toLowerCase().padStart(64, '0')}${i.toString(16).padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    if (!tokenIdResult.result) continue;
-                    const tokenId = BigInt(tokenIdResult.result);
-
-                    // Get locked data using locked(uint256) - selector 0xb45a3c0e
-                    const lockedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: V2_CONTRACTS.VotingEscrow,
-                                data: `0xb45a3c0e${tokenId.toString(16).padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    // Get voting power using balanceOfNFT(uint256) - selector 0xe7e242d4
-                    const vpResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: V2_CONTRACTS.VotingEscrow,
-                                data: `0xe7e242d4${tokenId.toString(16).padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    if (lockedResult.result) {
-                        const data = lockedResult.result.slice(2);
-                        const lockedAmount = BigInt('0x' + data.slice(0, 64));
-                        const lockEnd = BigInt('0x' + data.slice(64, 128));
-                        const votingPower = vpResult.result ? BigInt(vpResult.result) : BigInt(0);
-
-                        nfts.push({ tokenId, lockedAmount, lockEnd, votingPower });
-                    }
-                }
-            } catch (err) {
-                console.error('Error fetching veNFTs:', err);
-            }
-
-            setVeNFTs(nfts);
-            setLoadingVeNFTs(false);
-        };
-
-        fetchVeNFTs();
-    }, [address]);
-
-    // Fetch staked positions and pending rewards
-    useEffect(() => {
-        const fetchStakedPositions = async () => {
-            if (!address) {
-                setStakedPositions([]);
-                setLoadingStaked(false);
-                return;
-            }
-
-            setLoadingStaked(true);
-            const positions: StakedPosition[] = [];
-
-            try {
-                // Step 1: Get all CL pools from CLFactory
-                const poolCountResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0', id: 1,
-                        method: 'eth_call',
-                        params: [{
-                            to: CL_CONTRACTS.CLFactory,
-                            data: '0xefde4e64' // allPoolsLength()
-                        }, 'latest']
-                    })
-                }).then(r => r.json());
-
-                const poolCount = poolCountResult.result ? parseInt(poolCountResult.result, 16) : 0;
-                console.log('[Portfolio] Total CL pools:', poolCount);
-
-                // Step 2: Get all pool addresses
-                const clPools: string[] = [];
-                for (let i = 0; i < Math.min(poolCount, 50); i++) {
-                    const poolResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: CL_CONTRACTS.CLFactory,
-                                data: `0x41d1de97${i.toString(16).padStart(64, '0')}` // allPools(uint256)
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    if (poolResult.result) {
-                        const poolAddr = '0x' + poolResult.result.slice(26);
-                        if (poolAddr !== '0x0000000000000000000000000000000000000000') {
-                            clPools.push(poolAddr);
-                        }
-                    }
-                }
-                console.log('[Portfolio] CL pools found:', clPools);
-
-                // Step 3: Check each pool for a gauge and staked positions
-                for (const poolAddress of clPools) {
-                    // Get gauge address for pool from Voter
-                    const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: V2_CONTRACTS.Voter,
-                                data: `0xb9a09fd5${poolAddress.slice(2).toLowerCase().padStart(64, '0')}` // gauges(address)
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    const gaugeAddr = '0x' + gaugeResult.result?.slice(26);
-                    if (!gaugeAddr || gaugeAddr === '0x0000000000000000000000000000000000000000') {
-                        continue;
-                    }
-
-                    console.log('[Portfolio] Found gauge for pool:', poolAddress, '->', gaugeAddr);
-
-                    // Get staked token IDs for this user
-                    const stakedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: gaugeAddr,
-                                data: `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
-
-                    if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) {
-                        continue;
-                    }
-
-                    // Parse the array of token IDs
-                    const data = stakedResult.result.slice(2);
-                    const offset = parseInt(data.slice(0, 64), 16);
-                    const length = parseInt(data.slice(64, 128), 16);
-
-                    console.log('[Portfolio] User has', length, 'staked positions in gauge', gaugeAddr);
-
-                    for (let j = 0; j < length; j++) {
-                        const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
-                        const tokenId = BigInt('0x' + tokenIdHex);
-
-                        // Get pending rewards using earned(address,uint256) which simulates reward growth
-                        // Selector: 0x3e491d47 = earned(address,uint256)
-                        const rewardsResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: gaugeAddr,
-                                    data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
-                                }, 'latest']
-                            })
-                        }).then(r => r.json());
-
-                        // Get reward rate
-                        const rateResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: gaugeAddr,
-                                    data: '0x7b0a47ee' // rewardRate()
-                                }, 'latest']
-                            })
-                        }).then(r => r.json());
-
-                        // Get position data from NFT manager
-                        const positionResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                jsonrpc: '2.0', id: 1,
-                                method: 'eth_call',
-                                params: [{
-                                    to: CL_CONTRACTS.NonfungiblePositionManager,
-                                    data: `0x99fbab88${tokenId.toString(16).padStart(64, '0')}`
-                                }, 'latest']
-                            })
-                        }).then(r => r.json());
-
-                        let token0 = '', token1 = '', tickSpacing = 0, liquidity = BigInt(0);
-                        let token0Symbol = 'Token0', token1Symbol = 'Token1';
-                        let token0Decimals = 18, token1Decimals = 18;
-
-                        if (positionResult.result && positionResult.result.length > 130) {
-                            const posData = positionResult.result.slice(2);
-                            // positions() returns:
-                            // Slot 0 (0-64): nonce (uint96)
-                            // Slot 1 (64-128): operator (address) - last 40 chars
-                            // Slot 2 (128-192): token0 (address) - last 40 chars
-                            // Slot 3 (192-256): token1 (address) - last 40 chars
-                            // Slot 4 (256-320): tickSpacing (int24)
-                            // Slot 5 (320-384): tickLower (int24)
-                            // Slot 6 (384-448): tickUpper (int24)
-                            // Slot 7 (448-512): liquidity (uint128)
-                            token0 = '0x' + posData.slice(128 + 24, 192); // slot 2, last 40 chars
-                            token1 = '0x' + posData.slice(192 + 24, 256); // slot 3, last 40 chars
-
-                            // Parse tickSpacing (int24) - needs to handle signed integers
-                            const tickSpacingRaw = BigInt('0x' + posData.slice(256, 320));
-                            tickSpacing = tickSpacingRaw > BigInt(8388607)
-                                ? Number(tickSpacingRaw - BigInt(2) ** BigInt(256))
-                                : Number(tickSpacingRaw);
-
-                            liquidity = BigInt('0x' + posData.slice(448, 512)); // slot 7
-
-                            // Get token symbols
-                            const t0Info = getTokenInfo(token0);
-                            const t1Info = getTokenInfo(token1);
-                            token0Symbol = t0Info.symbol;
-                            token1Symbol = t1Info.symbol;
-                            token0Decimals = t0Info.decimals;
-                            token1Decimals = t1Info.decimals;
-                        }
-
-                        positions.push({
-                            tokenId,
-                            gaugeAddress: gaugeAddr,
-                            poolAddress: poolAddress,
-                            token0,
-                            token1,
-                            token0Symbol,
-                            token1Symbol,
-                            token0Decimals,
-                            token1Decimals,
-                            tickSpacing,
-                            liquidity,
-                            pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
-                            rewardRate: rateResult.result ? BigInt(rateResult.result) : BigInt(0),
-                        });
-                    }
-                }
-            } catch (err) {
-                console.error('Error fetching staked positions:', err);
-            }
-
-            setStakedPositions(positions);
-            setLoadingStaked(false);
-        };
-
-        fetchStakedPositions();
-    }, [address]);
+    // NOTE: Staked positions are now prefetched by PoolDataProvider - no need to fetch here!
+    // Use refetchStaked from usePoolData to refresh staked positions if needed.
 
     // Calculate totals
     const totalLockedYaka = veNFTs.reduce((sum, nft) => sum + nft.lockedAmount, BigInt(0));
     const totalVotingPower = veNFTs.reduce((sum, nft) => sum + nft.votingPower, BigInt(0));
     const totalPendingRewards = stakedPositions.reduce((sum, pos) => sum + pos.pendingRewards, BigInt(0));
     const totalUncollectedFees = clPositions.reduce((sum, pos) => sum + pos.tokensOwed0 + pos.tokensOwed1, BigInt(0));
-
-    // Refetch staked positions
-    const refetchStakedPositions = () => {
-        // Trigger re-fetch by resetting loading state (useEffect will handle it)
-        setLoadingStaked(true);
-    };
 
     // Collect fees from CL position
     const handleCollectFees = async (position: typeof clPositions[0]) => {
@@ -854,7 +555,7 @@ export default function PortfolioPage() {
             });
 
             alert('Position unstaked successfully!');
-            setStakedPositions(prev => prev.filter(p => p.tokenId !== pos.tokenId));
+            refetchStaked(); // Refresh staked positions from provider
             refetchCL();
         } catch (err) {
             console.error('Unstake position error:', err);
@@ -876,10 +577,8 @@ export default function PortfolioPage() {
             });
 
             alert('Rewards claimed successfully!');
-            // Update pending rewards to 0 for this position
-            setStakedPositions(prev => prev.map(p =>
-                p.tokenId === pos.tokenId ? { ...p, pendingRewards: BigInt(0) } : p
-            ));
+            // Refresh staked positions to show updated rewards
+            refetchStaked();
         } catch (err) {
             console.error('Claim rewards error:', err);
             alert('Failed to claim rewards. Check console for details.');
@@ -903,7 +602,7 @@ export default function PortfolioPage() {
                 }
             }
             alert('All rewards claimed successfully!');
-            setStakedPositions(prev => prev.map(p => ({ ...p, pendingRewards: BigInt(0) })));
+            refetchStaked(); // Refresh staked positions
         } catch (err) {
             console.error('Claim all rewards error:', err);
             alert('Failed to claim all rewards. Check console for details.');

@@ -10,6 +10,7 @@ import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
 
 type PoolType = 'all' | 'v2' | 'cl';
+type Category = 'all' | 'stable' | 'wind' | 'btc' | 'eth' | 'other';
 type SortBy = 'default' | 'tvl' | 'apr';
 
 // Fee tier mapping for CL pools (from CLFactory contract)
@@ -41,6 +42,7 @@ const findTokenByAddress = (addr: string): Token | undefined => {
 
 export default function PoolsPage() {
     const [poolType, setPoolType] = useState<PoolType>('all');
+    const [category, setCategory] = useState<Category>('all');
     const [sortBy, setSortBy] = useState<SortBy>('default');
     const [search, setSearch] = useState('');
 
@@ -87,10 +89,32 @@ export default function PoolsPage() {
         return weeklyFloat.toFixed(2);
     };
 
+    // Helper to check if pool is in a category
+    const isStablePool = (pool: typeof allPools[0]) => {
+        const symbols = [pool.token0.symbol, pool.token1.symbol].map(s => s.toUpperCase());
+        return symbols.includes('USDC') && (symbols.includes('USDT') || symbols.includes('USDC.N'));
+    };
+    const isWindPool = (pool: typeof allPools[0]) => {
+        return pool.token0.symbol.toUpperCase() === 'WIND' || pool.token1.symbol.toUpperCase() === 'WIND';
+    };
+    const isBtcPool = (pool: typeof allPools[0]) => {
+        return pool.token0.symbol.toUpperCase().includes('BTC') || pool.token1.symbol.toUpperCase().includes('BTC');
+    };
+    const isEthPool = (pool: typeof allPools[0]) => {
+        return pool.token0.symbol.toUpperCase().includes('ETH') || pool.token1.symbol.toUpperCase().includes('ETH');
+    };
+
     // Filter pools
     const filteredPools = allPools.filter((pool) => {
         if (poolType === 'v2' && pool.poolType !== 'V2') return false;
         if (poolType === 'cl' && pool.poolType !== 'CL') return false;
+
+        // Category filter
+        if (category === 'stable' && !isStablePool(pool)) return false;
+        if (category === 'wind' && !isWindPool(pool)) return false;
+        if (category === 'btc' && !isBtcPool(pool)) return false;
+        if (category === 'eth' && !isEthPool(pool)) return false;
+        if (category === 'other' && (isStablePool(pool) || isWindPool(pool) || isBtcPool(pool) || isEthPool(pool))) return false;
 
         if (search) {
             const searchLower = search.toLowerCase();
@@ -182,14 +206,32 @@ export default function PoolsPage() {
                         ))}
                     </div>
 
-                    {/* Sort - hidden on mobile */}
+                    {/* Sort & Category - Combined Dropdown */}
                     <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as SortBy)}
-                        className="hidden sm:block px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm outline-none focus:border-primary cursor-pointer"
+                        value={category === 'all' ? sortBy : `cat_${category}`}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            if (val.startsWith('cat_')) {
+                                setCategory(val.replace('cat_', '') as Category);
+                                setSortBy('default');
+                            } else {
+                                setCategory('all');
+                                setSortBy(val as SortBy);
+                            }
+                        }}
+                        className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl bg-white/5 border border-white/10 text-xs sm:text-sm outline-none focus:border-primary cursor-pointer"
                     >
-                        <option value="default">Default Order</option>
-                        <option value="tvl">Sort by TVL</option>
+                        <optgroup label="Sort">
+                            <option value="default">Default Order</option>
+                            <option value="tvl">Sort by TVL</option>
+                        </optgroup>
+                        <optgroup label="Category">
+                            <option value="cat_stable">💎 Stable Pairs</option>
+                            <option value="cat_wind">🌀 WIND Pairs</option>
+                            <option value="cat_btc">₿ BTC Pairs</option>
+                            <option value="cat_eth">Ξ ETH Pairs</option>
+                            <option value="cat_other">Other Pairs</option>
+                        </optgroup>
                     </select>
                 </div>
 
