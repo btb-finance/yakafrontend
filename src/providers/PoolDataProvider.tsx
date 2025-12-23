@@ -830,8 +830,11 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
             // Only check gauges that have gauge addresses
             const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge !== '');
+            console.log('[PoolDataProvider] Checking staked positions for', gaugesWithAddress.length, 'gauges, user:', address);
 
             for (const g of gaugesWithAddress) {
+                console.log('[PoolDataProvider] Checking gauge:', g.gauge, 'for pool:', g.symbol0 + '/' + g.symbol1);
+
                 // Get staked token IDs for this user
                 const stakedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
                     method: 'POST',
@@ -846,13 +849,32 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     })
                 }).then(r => r.json());
 
-                if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) {
+                console.log('[PoolDataProvider] stakedValues full result:', stakedResult.result);
+                console.log('[PoolDataProvider] Result length:', stakedResult.result?.length || 0);
+
+                // Empty array returns 0x + offset(64) + length(64) = 130 chars
+                // result '0x' means error or no data
+                if (!stakedResult.result || stakedResult.result === '0x') {
+                    console.log('[PoolDataProvider] No staked positions - empty result');
                     continue;
+                }
+
+                // Check if result is an empty array (offset + length of 0)
+                if (stakedResult.result.length <= 130) {
+                    const data = stakedResult.result.slice(2);
+                    const length = parseInt(data.slice(64, 128), 16) || 0;
+                    if (length === 0) {
+                        console.log('[PoolDataProvider] No staked positions - array is empty');
+                        continue;
+                    }
                 }
 
                 // Parse the array of token IDs
                 const data = stakedResult.result.slice(2);
+                // First 64 chars = offset to array data (should be 0x20 = 32 bytes)
+                // Next 64 chars = length of array
                 const length = parseInt(data.slice(64, 128), 16);
+                console.log('[PoolDataProvider] Staked positions count:', length);
 
                 for (let j = 0; j < length; j++) {
                     const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
@@ -890,12 +912,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
                         rewardRate: BigInt(0),
                     });
+                    console.log('[PoolDataProvider] Found staked position tokenId:', tokenId.toString());
                 }
             }
         } catch (err) {
             console.error('[PoolDataProvider] Error fetching staked positions:', err);
         }
 
+        console.log('[PoolDataProvider] Total staked positions found:', positions.length);
         setStakedPositions(positions);
         setStakedLoading(false);
     }, [address]);
