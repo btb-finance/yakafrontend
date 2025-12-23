@@ -56,7 +56,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
         symbol0: 'USDC.n',
         symbol1: 'USDC',
         type: 'CL',
-        tickSpacing: 1,
+        tickSpacing: 50,
         isAlive: true,
     },
     {
