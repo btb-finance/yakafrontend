@@ -18,7 +18,7 @@ export const LOCK_DURATIONS = {
     '4Y': 1460 * 24 * 60 * 60, // Max lock
 } as const;
 
-export interface VeYAKAPosition {
+export interface VeWINDPosition {
     tokenId: bigint;
     amount: bigint;
     end: bigint;
@@ -27,7 +27,7 @@ export interface VeYAKAPosition {
     claimable: bigint;
 }
 
-export function useVeYAKA() {
+export function useVeWIND() {
     const { address } = useAccount();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -35,8 +35,8 @@ export function useVeYAKA() {
     // Use prefetched veNFT data from global provider instead of fetching locally
     const { veNFTs, veNFTsLoading, refetchVeNFTs } = usePoolData();
 
-    // Map provider VeNFT data to VeYAKAPosition format
-    const positions: VeYAKAPosition[] = veNFTs.map(nft => ({
+    // Map provider VeNFT data to VeWINDPosition format
+    const positions: VeWINDPosition[] = veNFTs.map(nft => ({
         tokenId: nft.tokenId,
         amount: nft.amount,
         end: nft.end,

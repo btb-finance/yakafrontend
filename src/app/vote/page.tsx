@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { useAccount, useReadContract, useWriteContract } from 'wagmi';
 import { formatUnits, Address } from 'viem';
 import Link from 'next/link';
-import { useVeYAKA, LOCK_DURATIONS } from '@/hooks/useVeYAKA';
+import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
@@ -90,7 +90,7 @@ export default function VotePage() {
         isLoading,
         error,
         refetch,
-    } = useVeYAKA();
+    } = useVeWIND();
 
 
     const {
