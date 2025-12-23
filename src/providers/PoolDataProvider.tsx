@@ -656,6 +656,110 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         fetchAllData();
     }, [fetchAllData]);
 
+    // Focused retry for failed pools only - runs every 5 seconds until all pools loaded
+    useEffect(() => {
+        let retryCount = 0;
+        const MAX_RETRIES = 12; // 60 seconds of retrying
+
+        const retryFailedPools = async () => {
+            // Check current state via callback to avoid stale closure
+            let failedPoolAddresses: string[] = [];
+            setClPools(currentPools => {
+                // A pool is "failed" if both reserves are 0 (either '0' or '0.00')
+                failedPoolAddresses = currentPools
+                    .filter(p => {
+                        const r0 = parseFloat(p.reserve0) || 0;
+                        const r1 = parseFloat(p.reserve1) || 0;
+                        return r0 === 0 && r1 === 0;
+                    })
+                    .map(p => p.address.toLowerCase());
+                return currentPools; // Return unchanged
+            });
+
+            if (failedPoolAddresses.length === 0) {
+                console.log('[PoolDataProvider] ✅ All pools loaded!');
+                return;
+            }
+
+            if (retryCount >= MAX_RETRIES) {
+                console.log(`[PoolDataProvider] ⚠️ Max retries, ${failedPoolAddresses.length} pools still failed`);
+                return;
+            }
+
+            retryCount++;
+            console.log(`[PoolDataProvider] 🔄 Retry ${retryCount}/${MAX_RETRIES} for ${failedPoolAddresses.length} failed pools`);
+
+            try {
+                const { GAUGE_LIST } = await import('@/config/gauges');
+                const poolsToRetry = GAUGE_LIST.filter(g => failedPoolAddresses.includes(g.pool.toLowerCase()));
+
+                // Retry each failed pool
+                for (const poolInfo of poolsToRetry) {
+                    try {
+                        const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
+                        const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify([
+                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token0, data: `0x70a08231${poolPadded}` }, 'latest'], id: 1 },
+                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token1, data: `0x70a08231${poolPadded}` }, 'latest'], id: 2 }
+                            ])
+                        });
+
+                        const results = await response.json();
+                        if (Array.isArray(results) && results.length >= 2) {
+                            const balance0 = results[0]?.result && results[0].result !== '0x' ? BigInt(results[0].result) : BigInt(0);
+                            const balance1 = results[1]?.result && results[1].result !== '0x' ? BigInt(results[1].result) : BigInt(0);
+
+                            const decimals0 = KNOWN_TOKENS[poolInfo.token0.toLowerCase()]?.decimals || 18;
+                            const decimals1 = KNOWN_TOKENS[poolInfo.token1.toLowerCase()]?.decimals || 18;
+
+                            const val0 = Number(balance0) / Math.pow(10, decimals0);
+                            const val1 = Number(balance1) / Math.pow(10, decimals1);
+
+                            const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
+                            const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
+                            const tvl = (val0 + val1).toFixed(2);
+
+                            setClPools(prev => {
+                                const updated = prev.map(pool =>
+                                    pool.address.toLowerCase() === poolInfo.pool.toLowerCase()
+                                        ? { ...pool, reserve0, reserve1, tvl }
+                                        : pool
+                                );
+                                // Save to cache after each successful update
+                                saveCachePools(updated, []);
+                                return updated;
+                            });
+                            console.log(`[PoolDataProvider] ✅ ${poolInfo.pool.slice(0, 10)}...`);
+                        }
+                    } catch (err) {
+                        // Continue to next pool
+                    }
+                    // Small delay between requests to avoid rate limiting
+                    await new Promise(r => setTimeout(r, 100));
+                }
+            } catch (e) {
+                console.warn('[PoolDataProvider] Retry failed');
+            }
+        };
+
+        // Start retry after 3 seconds, then every 5 seconds
+        const timeout = setTimeout(() => {
+            retryFailedPools();
+            const interval = setInterval(retryFailedPools, 5000);
+            // Store interval for cleanup
+            (window as any).__poolRetryInterval = interval;
+        }, 3000);
+
+        return () => {
+            clearTimeout(timeout);
+            if ((window as any).__poolRetryInterval) {
+                clearInterval((window as any).__poolRetryInterval);
+            }
+        };
+    }, []);
+
     // Auto-refresh every 10 minutes (only if page is still open)
     useEffect(() => {
         const TEN_MINUTES = 10 * 60 * 1000;
