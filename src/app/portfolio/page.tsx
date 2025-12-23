@@ -10,6 +10,7 @@ import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 // VotingEscrow ABI for veNFT data
 const VOTING_ESCROW_ABI = [
@@ -112,6 +113,91 @@ const getTokenLogo = (addr: string): string | undefined => {
     return token?.logoURI;
 };
 
+// Calculate token amounts from CL position liquidity and tick range
+// This uses the Uniswap V3 math formulas
+const calculateTokenAmounts = (
+    liquidity: bigint,
+    tickLower: number,
+    tickUpper: number,
+    currentTick: number,
+    token0Decimals: number,
+    token1Decimals: number
+): { amount0: number; amount1: number } => {
+    if (liquidity === BigInt(0)) {
+        return { amount0: 0, amount1: 0 };
+    }
+
+    // Calculate sqrt prices from ticks
+    const sqrtPriceLower = Math.pow(1.0001, tickLower / 2);
+    const sqrtPriceUpper = Math.pow(1.0001, tickUpper / 2);
+    const sqrtPriceCurrent = Math.pow(1.0001, currentTick / 2);
+
+    const L = Number(liquidity);
+    let amount0 = 0;
+    let amount1 = 0;
+
+    if (currentTick < tickLower) {
+        // Position is below the range, only token0
+        amount0 = L * (1 / sqrtPriceLower - 1 / sqrtPriceUpper);
+        amount1 = 0;
+    } else if (currentTick >= tickUpper) {
+        // Position is above the range, only token1
+        amount0 = 0;
+        amount1 = L * (sqrtPriceUpper - sqrtPriceLower);
+    } else {
+        // Position is in range
+        amount0 = L * (1 / sqrtPriceCurrent - 1 / sqrtPriceUpper);
+        amount1 = L * (sqrtPriceCurrent - sqrtPriceLower);
+    }
+
+    // Adjust for decimals
+    amount0 = amount0 / Math.pow(10, token0Decimals);
+    amount1 = amount1 / Math.pow(10, token1Decimals);
+
+    return { amount0, amount1 };
+};
+
+// CL tick constants - positions using these are "full range"
+const MIN_TICK = -887272;
+const MAX_TICK = 887272;
+
+// Threshold for considering a position as "full range" (within 10% of min/max ticks)
+const isFullRangePosition = (tickLower: number, tickUpper: number): boolean => {
+    const tickRange = MAX_TICK - MIN_TICK;
+    const positionRange = tickUpper - tickLower;
+    // If the position covers more than 90% of the tick range, consider it "full range"
+    return positionRange > tickRange * 0.9;
+};
+
+// Check if tick values are at or near the extremes (for display purposes)
+const isExtremeTickRange = (tickLower: number, tickUpper: number): boolean => {
+    // Consider extreme if lower tick is below -800000 or upper tick is above 800000
+    return tickLower < -800000 || tickUpper > 800000;
+};
+
+// Convert tick to price (token1/token0)
+const tickToPrice = (tick: number, token0Decimals: number, token1Decimals: number): number => {
+    const rawPrice = Math.pow(1.0001, tick);
+    // Adjust for decimals: actualPrice = rawPrice * 10^(token0Decimals - token1Decimals)
+    return rawPrice * Math.pow(10, token0Decimals - token1Decimals);
+};
+
+// Format price for display with appropriate precision
+const formatPrice = (price: number): string => {
+    if (price === 0) return '0';
+    if (price < 0.0001) return price.toExponential(2);
+    if (price < 0.01) return price.toFixed(6);
+    if (price < 1) return price.toFixed(4);
+    if (price < 100) return price.toFixed(3);
+    if (price < 10000) return price.toFixed(2);
+    return price.toLocaleString(undefined, { maximumFractionDigits: 0 });
+};
+
+// Check if position is in range based on current tick
+const isPositionInRange = (currentTick: number, tickLower: number, tickUpper: number): boolean => {
+    return currentTick >= tickLower && currentTick < tickUpper;
+};
+
 export default function PortfolioPage() {
     const { isConnected, address } = useAccount();
     const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'staked' | 'locks' | 'rewards'>('overview');
@@ -159,6 +245,90 @@ export default function PortfolioPage() {
     const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
     const { positions: v2Positions } = useV2Positions();
 
+    // State to store current ticks for each position (keyed by tokenId)
+    const [positionTicks, setPositionTicks] = useState<Record<string, number>>({});
+    const [ticksLoading, setTicksLoading] = useState(false);
+
+    // Fetch current ticks for all CL positions
+    useEffect(() => {
+        const fetchCurrentTicks = async () => {
+            if (clPositions.length === 0) {
+                setPositionTicks({});
+                return;
+            }
+
+            setTicksLoading(true);
+            const newTicks: Record<string, number> = {};
+
+            try {
+                // Fetch all ticks in parallel
+                await Promise.all(clPositions.map(async (pos) => {
+                    try {
+                        // Get pool address from CLFactory
+                        const t0 = pos.token0.toLowerCase();
+                        const t1 = pos.token1.toLowerCase();
+                        const [token0, token1] = t0 < t1 ? [t0, t1] : [t1, t0];
+
+                        const getPoolSelector = '0x28af8d0b';
+                        const token0Padded = token0.slice(2).padStart(64, '0');
+                        const token1Padded = token1.slice(2).padStart(64, '0');
+                        const tickSpacing = pos.tickSpacing >= 0
+                            ? pos.tickSpacing.toString(16).padStart(64, '0')
+                            : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(pos.tickSpacing) + BigInt(1)).toString(16);
+
+                        const poolRes = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'eth_call',
+                                params: [{ to: CL_CONTRACTS.CLFactory, data: `${getPoolSelector}${token0Padded}${token1Padded}${tickSpacing}` }, 'latest'],
+                                id: 1,
+                            }),
+                        }).then(r => r.json());
+
+                        if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
+                            const poolAddress = '0x' + poolRes.result.slice(-40);
+
+                            // Get slot0 for current tick
+                            const slot0Selector = '0x3850c7bd';
+                            const slot0Res = await fetch(getPrimaryRpc(), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    jsonrpc: '2.0',
+                                    method: 'eth_call',
+                                    params: [{ to: poolAddress, data: slot0Selector }, 'latest'],
+                                    id: 2,
+                                }),
+                            }).then(r => r.json());
+
+                            if (slot0Res.result && slot0Res.result.length >= 130) {
+                                // slot0 returns: sqrtPriceX96 (32 bytes), tick (32 bytes), ...
+                                // tick is in the 2nd 32-byte slot (bytes 32-64)
+                                const tickSlot = slot0Res.result.slice(66, 130);
+                                const tickHex = tickSlot.slice(-6);
+                                const tickBigInt = BigInt('0x' + tickHex);
+                                const tick = tickBigInt > BigInt(0x7FFFFF) ? Number(tickBigInt) - 0x1000000 : Number(tickBigInt);
+                                newTicks[pos.tokenId.toString()] = tick;
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching tick for position ${pos.tokenId}:`, err);
+                    }
+                }));
+
+                setPositionTicks(newTicks);
+            } catch (err) {
+                console.error('Error fetching position ticks:', err);
+            } finally {
+                setTicksLoading(false);
+            }
+        };
+
+        fetchCurrentTicks();
+    }, [clPositions]);
+
     // Fetch balances and pool price when modal opens
     const [currentTick, setCurrentTick] = useState<number | null>(null);
 
@@ -183,7 +353,7 @@ export default function PortfolioPage() {
                 console.log('Fetching for position tokens:', selectedPosition.token0, selectedPosition.token1);
 
                 const [bal0Response, bal1Response, slot0Response] = await Promise.all([
-                    fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -193,7 +363,7 @@ export default function PortfolioPage() {
                             id: 1,
                         }),
                     }).then(r => r.json()),
-                    fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -216,7 +386,7 @@ export default function PortfolioPage() {
                         const token1Padded = token1.slice(2).padStart(64, '0');
                         const tickPadded = tickSpacing.toString(16).padStart(64, '0');
 
-                        const poolRes = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                        const poolRes = await fetch(getPrimaryRpc(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -229,7 +399,7 @@ export default function PortfolioPage() {
 
                         if (poolRes.result && poolRes.result !== '0x' + '0'.repeat(64)) {
                             const poolAddress = '0x' + poolRes.result.slice(-40);
-                            const slot0Res = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                            const slot0Res = await fetch(getPrimaryRpc(), {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -255,7 +425,7 @@ export default function PortfolioPage() {
 
                 // For WSEI, fetch native SEI balance instead
                 if (isToken0WSEI) {
-                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    const nativeBal = await fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -275,7 +445,7 @@ export default function PortfolioPage() {
                 }
 
                 if (isToken1WSEI) {
-                    const nativeBal = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    const nativeBal = await fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -482,7 +652,7 @@ export default function PortfolioPage() {
                 ? position.tickSpacing.toString(16).padStart(64, '0')
                 : (BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') + BigInt(position.tickSpacing) + BigInt(1)).toString(16);
 
-            const poolResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const poolResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -501,7 +671,7 @@ export default function PortfolioPage() {
             const poolAddress = '0x' + poolResult.result.slice(-40);
 
             // Get gauge address from Voter
-            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const gaugeResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -651,7 +821,7 @@ export default function PortfolioPage() {
 
             // Helper to check allowance
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
-                const result = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const result = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -917,45 +1087,128 @@ export default function PortfolioPage() {
                                                     </div>
                                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">CL</span>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                                    <div>
-                                                        <div className="text-xs text-gray-400">Status</div>
-                                                        <div className="font-medium text-green-400">✓ Active</div>
+
+                                                {/* Stake to Earn Banner - for unstaked positions */}
+                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 mb-2">
+                                                    <span className="text-lg">💰</span>
+                                                    <div className="flex-1">
+                                                        <div className="text-xs font-medium text-yellow-400">Not earning rewards</div>
+                                                        <div className="text-[10px] text-gray-400">Stake this position to earn WIND emissions</div>
                                                     </div>
-                                                    <div>
-                                                        <div className="text-xs text-gray-400">Uncollected Fees</div>
-                                                        <div className="font-medium text-green-400">
-                                                            {parseFloat(formatUnits(pos.tokensOwed0, t0.decimals)).toFixed(6)} {t0.symbol}
-                                                        </div>
-                                                    </div>
+                                                    <button
+                                                        onClick={() => handleStakePosition(pos)}
+                                                        disabled={actionLoading}
+                                                        className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 transition disabled:opacity-50"
+                                                    >
+                                                        Stake Now
+                                                    </button>
                                                 </div>
-                                                {/* Action Buttons */}
-                                                <div className="flex gap-2 mt-4 pt-3 border-t border-white/10">
+                                                {/* Token Balances */}
+                                                {(() => {
+                                                    const currentPoolTick = positionTicks[pos.tokenId.toString()];
+                                                    const hasTickData = currentPoolTick !== undefined;
+                                                    const inRange = hasTickData && isPositionInRange(currentPoolTick, pos.tickLower, pos.tickUpper);
+                                                    const amounts = hasTickData
+                                                        ? calculateTokenAmounts(pos.liquidity, pos.tickLower, pos.tickUpper, currentPoolTick, t0.decimals, t1.decimals)
+                                                        : { amount0: 0, amount1: 0 };
+
+                                                    // Calculate prices from ticks
+                                                    const priceLower = tickToPrice(pos.tickLower, t0.decimals, t1.decimals);
+                                                    const priceUpper = tickToPrice(pos.tickUpper, t0.decimals, t1.decimals);
+                                                    const currentPrice = hasTickData ? tickToPrice(currentPoolTick, t0.decimals, t1.decimals) : null;
+
+                                                    return (
+                                                        <>
+                                                            <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+                                                                <div className="p-2 rounded-lg bg-white/5">
+                                                                    <div className="text-[10px] text-gray-400 mb-0.5">{t0.symbol} Balance</div>
+                                                                    <div className="font-medium text-sm">
+                                                                        {hasTickData ? amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 6 : 4) : <span className="text-gray-500">Loading...</span>}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="p-2 rounded-lg bg-white/5">
+                                                                    <div className="text-[10px] text-gray-400 mb-0.5">{t1.symbol} Balance</div>
+                                                                    <div className="font-medium text-sm">
+                                                                        {hasTickData ? amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 6 : 4) : <span className="text-gray-500">Loading...</span>}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Price Range */}
+                                                            <div className="p-2 rounded-lg bg-white/5 mb-2">
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className="text-[10px] text-gray-400">Price Range ({t1.symbol}/{t0.symbol})</span>
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isExtremeTickRange(pos.tickLower, pos.tickUpper) ? 'bg-purple-500/20 text-purple-400' :
+                                                                        !hasTickData ? 'bg-gray-500/20 text-gray-400' :
+                                                                            inRange ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                                                                        }`}>
+                                                                        {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? '∞ Full Range' :
+                                                                            !hasTickData ? 'Loading' : inRange ? '✓ In Range' : '⚠ Out of Range'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-sm">
+                                                                    {isExtremeTickRange(pos.tickLower, pos.tickUpper) ? (
+                                                                        <span className="font-medium text-purple-300">0 → ∞ (covers all prices)</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="font-medium">{formatPrice(priceLower)}</span>
+                                                                            <span className="text-gray-500">→</span>
+                                                                            <span className="font-medium">{formatPrice(priceUpper)}</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                {currentPrice !== null && !isExtremeTickRange(pos.tickLower, pos.tickUpper) && (
+                                                                    <div className="text-[10px] text-gray-400 mt-1">
+                                                                        Current: {formatPrice(currentPrice)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Uncollected Fees */}
+                                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                                                <div>
+                                                                    <div className="text-[10px] text-gray-400">Uncollected {t0.symbol}</div>
+                                                                    <div className="font-medium text-green-400">
+                                                                        {parseFloat(formatUnits(pos.tokensOwed0, t0.decimals)).toFixed(6)}
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-[10px] text-gray-400">Uncollected {t1.symbol}</div>
+                                                                    <div className="font-medium text-green-400">
+                                                                        {parseFloat(formatUnits(pos.tokensOwed1, t1.decimals)).toFixed(6)}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    );
+                                                })()}
+                                                {/* Action Buttons - 2x2 grid on mobile, row on larger screens */}
+                                                <div className="grid grid-cols-2 sm:flex gap-2 mt-4 pt-3 border-t border-white/10">
                                                     <button
                                                         onClick={() => openIncreaseLiquidityModal(pos)}
                                                         disabled={actionLoading}
-                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
+                                                        className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition disabled:opacity-50"
                                                     >
-                                                        {actionLoading ? '...' : '+ Increase'}
+                                                        {actionLoading ? '...' : 'Increase'}
                                                     </button>
                                                     <button
                                                         onClick={() => handleCollectFees(pos)}
                                                         disabled={actionLoading || (pos.tokensOwed0 <= BigInt(0) && pos.tokensOwed1 <= BigInt(0))}
-                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition disabled:opacity-50"
+                                                        className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition disabled:opacity-50"
                                                     >
                                                         {actionLoading ? '...' : 'Collect'}
                                                     </button>
                                                     <button
                                                         onClick={() => handleRemoveLiquidity(pos)}
                                                         disabled={actionLoading || pos.liquidity <= BigInt(0)}
-                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                        className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
                                                     >
                                                         {actionLoading ? '...' : 'Remove'}
                                                     </button>
                                                     <button
                                                         onClick={() => handleStakePosition(pos)}
                                                         disabled={actionLoading}
-                                                        className="flex-1 py-2 px-3 text-xs rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-50"
+                                                        className="sm:flex-1 py-2.5 px-3 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition disabled:opacity-50"
                                                     >
                                                         {actionLoading ? '...' : 'Stake'}
                                                     </button>

@@ -46,7 +46,7 @@ export const GAUGE_LIST: GaugeConfig[] = [
     // ============================================
     {
         pool: '0xc7035A2Ef7C685Fc853475744623A0F164541b69',
-        gauge: '0x3af1789536d88D3dCf2e200aB0fF1B48F8012E41', // WIND/WSEI gauge
+        gauge: '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb', // WIND/WSEI gauge (fixed)
         token0: '0x80B56cF09c18e642DC04d94b8AD25Bb5605c1421',
         token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
         symbol0: 'WIND',

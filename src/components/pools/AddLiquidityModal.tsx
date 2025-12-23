@@ -10,6 +10,7 @@ import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity } from '@/hooks/useLiquidity';
 import { useTokenBalance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 type PoolType = 'v2' | 'cl';
 type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'done' | 'error';
@@ -137,7 +138,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 const tickHex = tickSpacing.toString(16).padStart(64, '0');
                 const getPoolData = `0x${getPoolSelector}${token0Padded}${token1Padded}${tickHex}`;
 
-                const poolResponse = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const poolResponse = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -160,7 +161,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                 // Step 2: Fetch slot0 for price - now immediately after getting pool address
                 const slot0Selector = '3850c7bd';
-                const slot0Response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const slot0Response = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -377,7 +378,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
             let poolExists = false;
             try {
-                const poolResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const poolResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -418,7 +419,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
             // Approve tokens
             const checkAllowance = async (tokenAddr: string, amount: bigint): Promise<boolean> => {
-                const result = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const result = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

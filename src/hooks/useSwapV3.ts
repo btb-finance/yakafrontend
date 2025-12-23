@@ -1,4 +1,5 @@
 'use client';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 import { useState, useCallback } from 'react';
 import { useAccount, useWriteContract } from 'wagmi';
@@ -43,7 +44,7 @@ export function useSwapV3() {
                 : [tokenOut, tokenIn];
 
             // Call CLFactory.getPool
-            const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const response = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -82,7 +83,7 @@ export function useSwapV3() {
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
 
             // Call quoter directly - it will fail if pool doesn't exist (faster than checking first)
-            const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const response = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

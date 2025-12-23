@@ -5,6 +5,7 @@ import { Address, formatUnits } from 'viem';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, POOL_FACTORY_ABI, POOL_ABI } from '@/config/abis';
 import { useState, useEffect, useCallback } from 'react';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 export interface CLPosition {
     tokenId: bigint;
@@ -113,7 +114,7 @@ export function useCLPositions() {
 
 // Fetch a single position by owner index (with retry logic)
 async function fetchPositionByIndex(owner: string, index: number, retries = 3): Promise<CLPosition | null> {
-    const rpcUrl = 'https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8';
+    const rpcUrl = getPrimaryRpc();
 
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {

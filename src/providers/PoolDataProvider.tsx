@@ -5,6 +5,7 @@ import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
+import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
 
 // ============================================
 // Types
@@ -145,9 +146,13 @@ async function batchRpcCall(calls: { to: string; data: string }[], retries = 2):
         id: i + 1
     }));
 
+    // Use secondary RPC for batch calls, fallback to primary on retry
+    const rpcs = [getSecondaryRpc(), getPrimaryRpc()];
+
     for (let attempt = 0; attempt <= retries; attempt++) {
+        const rpcUrl = rpcs[Math.min(attempt, rpcs.length - 1)];
         try {
-            const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const response = await fetch(rpcUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(batch)
@@ -159,12 +164,11 @@ async function batchRpcCall(calls: { to: string; data: string }[], retries = 2):
                 : [results.result || '0x'];
         } catch (err) {
             if (attempt < retries) {
-                // Wait before retry (100ms * attempt)
                 await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
                 continue;
             }
             console.warn('[batchRpcCall] All retries failed:', err);
-            return calls.map(() => '0x'); // Return empty results on complete failure
+            return calls.map(() => '0x');
         }
     }
     return calls.map(() => '0x');
@@ -466,7 +470,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 for (let attempt = 0; attempt <= retries; attempt++) {
                     try {
                         const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
-                        const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                        const response = await fetch(getPrimaryRpc(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify([
@@ -740,7 +744,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 for (const poolInfo of poolsToRetry) {
                     try {
                         const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
-                        const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                        const response = await fetch(getPrimaryRpc(), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify([
@@ -833,7 +837,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
             for (const g of gaugesWithAddress) {
                 // Get staked token IDs for this user
-                const stakedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const stakedResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -846,8 +850,13 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     })
                 }).then(r => r.json());
 
-                if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) {
-                    continue;
+                if (!stakedResult.result || stakedResult.result === '0x') continue;
+
+                // Check if result is an empty array
+                if (stakedResult.result.length <= 130) {
+                    const data = stakedResult.result.slice(2);
+                    const length = parseInt(data.slice(64, 128), 16) || 0;
+                    if (length === 0) continue;
                 }
 
                 // Parse the array of token IDs
@@ -859,7 +868,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const tokenId = BigInt('0x' + tokenIdHex);
 
                     // Get pending rewards
-                    const rewardsResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    const rewardsResult = await fetch(getPrimaryRpc(), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -886,7 +895,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         token0Decimals: known0?.decimals || 18,
                         token1Decimals: known1?.decimals || 18,
                         tickSpacing: g.tickSpacing || 0,
-                        liquidity: BigInt(0), // Not needed for display
+                        liquidity: BigInt(0),
                         pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
                         rewardRate: BigInt(0),
                     });
@@ -918,7 +927,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
         try {
             // Get veNFT count
-            const countResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const countResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -935,7 +944,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
             for (let i = 0; i < count; i++) {
                 // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
-                const tokenIdResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const tokenIdResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -952,7 +961,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const tokenId = BigInt(tokenIdResult.result);
 
                 // Get locked data using locked(uint256) - selector 0xb45a3c0e
-                const lockedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const lockedResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -966,7 +975,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 }).then(r => r.json());
 
                 // Get voting power using balanceOfNFT(uint256) - selector 0xe7e242d4
-                const vpResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const vpResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -980,7 +989,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 }).then(r => r.json());
 
                 // Get claimable rebases - claimable(uint256) selector 0xd1d58b25
-                const claimableResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                const claimableResult = await fetch(getPrimaryRpc(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

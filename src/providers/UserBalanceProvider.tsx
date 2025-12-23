@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { formatUnits, Address } from 'viem';
 import { useAccount } from 'wagmi';
 import { DEFAULT_TOKEN_LIST, Token } from '@/config/tokens';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 // ============================================
 // Types
@@ -37,7 +38,7 @@ async function batchRpcCall(calls: { to: string; data: string }[]): Promise<stri
         id: i + 1
     }));
 
-    const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+    const response = await fetch(getPrimaryRpc(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch)
@@ -70,7 +71,7 @@ export function UserBalanceProvider({ children }: { children: ReactNode }) {
             const addressPadded = address.slice(2).toLowerCase().padStart(64, '0');
 
             // Get native SEI balance
-            const nativeBalanceRes = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const nativeBalanceRes = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

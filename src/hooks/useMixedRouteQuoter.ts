@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { parseUnits, formatUnits } from 'viem';
 import { Token, WSEI, USDC } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 // Common intermediate tokens for routing
 const INTERMEDIATE_TOKENS = [WSEI, USDC];
@@ -75,7 +76,7 @@ export function useMixedRouteQuoter() {
         }));
 
         try {
-            const response = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const response = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(batchBody)

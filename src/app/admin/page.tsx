@@ -6,6 +6,7 @@ import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { Address } from 'viem';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, Token } from '@/config/tokens';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 // Admin ABIs
 const VOTER_ABI = [
@@ -420,7 +421,7 @@ export default function AdminPage() {
         try {
             // Auto-detect the pool's factory by calling pool.factory()
             // This ensures we use the correct factory (CLFactory vs PoolFactory)
-            const factoryResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const factoryResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -456,7 +457,7 @@ export default function AdminPage() {
         if (!poolAddress) return;
         setError(null);
         try {
-            const gaugeResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            const gaugeResult = await fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

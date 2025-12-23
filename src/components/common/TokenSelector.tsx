@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { useUserBalances } from '@/providers/UserBalanceProvider';
+import { getPrimaryRpc } from '@/utils/rpc';
 
 interface TokenSelectorProps {
     isOpen: boolean;
@@ -27,7 +28,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
         const decimalsSelector = '0x313ce567';
 
         const [symbolResult, nameResult, decimalsResult] = await Promise.all([
-            fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -37,7 +38,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
                     id: 1,
                 }),
             }).then(r => r.json()),
-            fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -47,7 +48,7 @@ async function fetchTokenInfo(address: string): Promise<Token | null> {
                     id: 2,
                 }),
             }).then(r => r.json()),
-            fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+            fetch(getPrimaryRpc(), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
