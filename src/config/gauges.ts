@@ -52,11 +52,11 @@ export const GAUGE_LIST: GaugeConfig[] = [
         pool: '0x0aeb4016e61987c48F63e9e03Df79f0f0b54eb5c',
         gauge: '', // No gauge created yet
         token0: '0x3894085Ef7Ff0f0aeDf52E2A2704928d1Ec074F1',
-        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        token1: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
         symbol0: 'USDC.n',
-        symbol1: 'WSEI',
+        symbol1: 'USDC',
         type: 'CL',
-        tickSpacing: 50,
+        tickSpacing: 1,
         isAlive: true,
     },
     {
