@@ -9,7 +9,7 @@ import { POOL_FACTORY_ABI } from '@/config/abis';
 import { FeatureCard } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
-import { useVeYAKA } from '@/hooks/useVeYAKA';
+import { useVeWIND } from '@/hooks/useVeWIND';
 
 // Voter ABI for getting gauge count
 const VOTER_ABI = [
@@ -58,7 +58,7 @@ export default function Home() {
   // Portfolio data hooks (only useful when connected)
   const { positions: clPositions, positionCount: clCount } = useCLPositions();
   const { positions: v2Positions } = useV2Positions();
-  const { positions: vePositions, veNFTCount } = useVeYAKA();
+  const { positions: vePositions, veNFTCount } = useVeWIND();
 
   // Format veSupply
   const formattedVeSupply = veSupply

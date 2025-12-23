@@ -73,30 +73,44 @@ export function SwapInterface() {
         ? parseUnits(amountIn, actualTokenIn.decimals)
         : BigInt(0);
 
-    // Determine which router to check based on route type
-    const routerToApprove = bestRoute?.type === 'v2'
-        ? V2_CONTRACTS.Router
-        : CL_CONTRACTS.SwapRouter;
-
-    // ===== Pre-check allowance for the correct router =====
-    const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    // ===== Pre-check allowance for BOTH routers =====
+    const { data: allowanceV2, refetch: refetchAllowanceV2 } = useReadContract({
         address: actualTokenIn?.address as Address,
         abi: ERC20_ABI,
         functionName: 'allowance',
-        args: address && actualTokenIn ? [address, routerToApprove as Address] : undefined,
+        args: address && actualTokenIn ? [address, V2_CONTRACTS.Router as Address] : undefined,
         query: {
             enabled: !!address && !!actualTokenIn && !tokenIn?.isNative,
         },
     });
 
-    // Check if approval is needed
+    const { data: allowanceV3, refetch: refetchAllowanceV3 } = useReadContract({
+        address: actualTokenIn?.address as Address,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: address && actualTokenIn ? [address, CL_CONTRACTS.SwapRouter as Address] : undefined,
+        query: {
+            enabled: !!address && !!actualTokenIn && !tokenIn?.isNative,
+        },
+    });
+
+    // Determine which router to use based on best route type
+    const routerToApprove = bestRoute?.type === 'v2'
+        ? V2_CONTRACTS.Router
+        : CL_CONTRACTS.SwapRouter;
+
+    // Get the relevant allowance based on best route
+    const currentAllowance = bestRoute?.type === 'v2' ? allowanceV2 : allowanceV3;
+
+    // Check if approval is needed for the CURRENT best route
     const needsApproval = !tokenIn?.isNative &&
         amountInWei > BigInt(0) &&
-        (allowance === undefined || (allowance as bigint) < amountInWei);
+        bestRoute !== null && // Only check approval when we have a route
+        (currentAllowance === undefined || (currentAllowance as bigint) < amountInWei);
 
-    // Handle approve
+    // Handle approve and then swap
     const handleApprove = async () => {
-        if (!actualTokenIn || !address) return;
+        if (!actualTokenIn || !address || !bestRoute) return;
 
         setIsApproving(true);
         try {
@@ -106,7 +120,17 @@ export function SwapInterface() {
                 functionName: 'approve',
                 args: [routerToApprove as Address, maxUint256],
             });
-            await refetchAllowance();
+
+            // Wait a bit for the chain to process, then refetch the correct allowance
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Refetch the appropriate allowance based on route type
+            if (bestRoute.type === 'v2') {
+                await refetchAllowanceV2();
+            } else {
+                await refetchAllowanceV3();
+            }
+
         } catch (err) {
             console.error('Approve error:', err);
         }

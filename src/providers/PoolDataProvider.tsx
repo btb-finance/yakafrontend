@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { formatUnits, Address } from 'viem';
+import { useAccount } from 'wagmi';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 
@@ -53,6 +54,31 @@ export interface GaugeInfo {
     rewardTokens: RewardToken[];
 }
 
+export interface StakedPosition {
+    tokenId: bigint;
+    gaugeAddress: string;
+    poolAddress: string;
+    token0: string;
+    token1: string;
+    token0Symbol: string;
+    token1Symbol: string;
+    token0Decimals: number;
+    token1Decimals: number;
+    tickSpacing: number;
+    liquidity: bigint;
+    pendingRewards: bigint;
+    rewardRate: bigint;
+}
+
+export interface VeNFT {
+    tokenId: bigint;
+    amount: bigint;          // locked amount (renamed from lockedAmount for consistency)
+    end: bigint;             // lock end timestamp
+    isPermanent: boolean;    // permanent lock flag
+    votingPower: bigint;
+    claimable: bigint;       // claimable rebases
+}
+
 interface PoolDataContextType {
     v2Pools: PoolData[];
     clPools: PoolData[];
@@ -63,6 +89,14 @@ interface PoolDataContextType {
     gauges: GaugeInfo[];
     totalVoteWeight: bigint;
     gaugesLoading: boolean;
+    // Staked positions (prefetched for portfolio)
+    stakedPositions: StakedPosition[];
+    stakedLoading: boolean;
+    refetchStaked: () => void;
+    // VeNFT data (prefetched for portfolio and vote)
+    veNFTs: VeNFT[];
+    veNFTsLoading: boolean;
+    refetchVeNFTs: () => void;
     isLoading: boolean;
     refetch: () => void;
     getTokenInfo: (address: string) => TokenInfo | undefined;
@@ -177,6 +211,7 @@ function saveCachePools(clPools: PoolData[], v2Pools: PoolData[]) {
 }
 
 export function PoolDataProvider({ children }: { children: ReactNode }) {
+    const { address } = useAccount();
     const [v2Pools, setV2Pools] = useState<PoolData[]>([]);
     const [clPools, setClPools] = useState<PoolData[]>([]);
     const [tokenInfoMap, setTokenInfoMap] = useState<Map<string, TokenInfo>>(new Map());
@@ -187,6 +222,14 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [gauges, setGauges] = useState<GaugeInfo[]>([]);
     const [totalVoteWeight, setTotalVoteWeight] = useState<bigint>(BigInt(0));
     const [gaugesLoading, setGaugesLoading] = useState(true);
+
+    // Staked positions state (prefetched for portfolio)
+    const [stakedPositions, setStakedPositions] = useState<StakedPosition[]>([]);
+    const [stakedLoading, setStakedLoading] = useState(true);
+
+    // VeNFT state (prefetched for portfolio and vote)
+    const [veNFTs, setVeNFTs] = useState<VeNFT[]>([]);
+    const [veNFTsLoading, setVeNFTsLoading] = useState(true);
 
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
@@ -771,6 +814,209 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         return tokenInfoMap.get(address.toLowerCase());
     }, [tokenInfoMap]);
 
+    // Fetch staked positions for current user
+    const fetchStakedPositions = useCallback(async () => {
+        if (!address) {
+            setStakedPositions([]);
+            setStakedLoading(false);
+            return;
+        }
+
+        setStakedLoading(true);
+        const positions: StakedPosition[] = [];
+
+        try {
+            const { GAUGE_LIST } = await import('@/config/gauges');
+
+            // Only check gauges that have gauge addresses
+            const gaugesWithAddress = GAUGE_LIST.filter(g => g.gauge && g.gauge !== '');
+
+            for (const g of gaugesWithAddress) {
+                // Get staked token IDs for this user
+                const stakedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: g.gauge,
+                            data: `0x4b937763${address.slice(2).toLowerCase().padStart(64, '0')}` // stakedValues(address)
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                if (!stakedResult.result || stakedResult.result === '0x' || stakedResult.result.length < 130) {
+                    continue;
+                }
+
+                // Parse the array of token IDs
+                const data = stakedResult.result.slice(2);
+                const length = parseInt(data.slice(64, 128), 16);
+
+                for (let j = 0; j < length; j++) {
+                    const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
+                    const tokenId = BigInt('0x' + tokenIdHex);
+
+                    // Get pending rewards
+                    const rewardsResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', id: 1,
+                            method: 'eth_call',
+                            params: [{
+                                to: g.gauge,
+                                data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
+                            }, 'latest']
+                        })
+                    }).then(r => r.json());
+
+                    const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
+                    const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
+
+                    positions.push({
+                        tokenId,
+                        gaugeAddress: g.gauge,
+                        poolAddress: g.pool,
+                        token0: g.token0,
+                        token1: g.token1,
+                        token0Symbol: known0?.symbol || g.symbol0,
+                        token1Symbol: known1?.symbol || g.symbol1,
+                        token0Decimals: known0?.decimals || 18,
+                        token1Decimals: known1?.decimals || 18,
+                        tickSpacing: g.tickSpacing || 0,
+                        liquidity: BigInt(0), // Not needed for display
+                        pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
+                        rewardRate: BigInt(0),
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('[PoolDataProvider] Error fetching staked positions:', err);
+        }
+
+        setStakedPositions(positions);
+        setStakedLoading(false);
+    }, [address]);
+
+    // Fetch staked positions when address changes
+    useEffect(() => {
+        fetchStakedPositions();
+    }, [fetchStakedPositions]);
+
+    // Fetch veNFT data for current user
+    const fetchVeNFTs = useCallback(async () => {
+        if (!address) {
+            setVeNFTs([]);
+            setVeNFTsLoading(false);
+            return;
+        }
+
+        setVeNFTsLoading(true);
+        const nfts: VeNFT[] = [];
+
+        try {
+            // Get veNFT count
+            const countResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0', id: 1,
+                    method: 'eth_call',
+                    params: [{
+                        to: V2_CONTRACTS.VotingEscrow,
+                        data: `0x70a08231${address.slice(2).toLowerCase().padStart(64, '0')}`
+                    }, 'latest']
+                })
+            }).then(r => r.json());
+
+            const count = countResult.result ? parseInt(countResult.result, 16) : 0;
+
+            for (let i = 0; i < count; i++) {
+                // Get tokenId at index using ownerToNFTokenIdList (0x8bf9d84c)
+                const tokenIdResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: V2_CONTRACTS.VotingEscrow,
+                            data: `0x8bf9d84c${address.slice(2).toLowerCase().padStart(64, '0')}${i.toString(16).padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                if (!tokenIdResult.result) continue;
+                const tokenId = BigInt(tokenIdResult.result);
+
+                // Get locked data using locked(uint256) - selector 0xb45a3c0e
+                const lockedResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: V2_CONTRACTS.VotingEscrow,
+                            data: `0xb45a3c0e${tokenId.toString(16).padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                // Get voting power using balanceOfNFT(uint256) - selector 0xe7e242d4
+                const vpResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: V2_CONTRACTS.VotingEscrow,
+                            data: `0xe7e242d4${tokenId.toString(16).padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                // Get claimable rebases - claimable(uint256) selector 0xd1d58b25
+                const claimableResult = await fetch('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: V2_CONTRACTS.RewardsDistributor,
+                            data: `0xd1d58b25${tokenId.toString(16).padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
+                if (lockedResult.result) {
+                    const data = lockedResult.result.slice(2);
+                    const amount = BigInt('0x' + data.slice(0, 64));
+                    const end = BigInt('0x' + data.slice(64, 128));
+                    const isPermanent = (data.slice(128, 192) || '0') !== '0'.repeat(64);
+                    const votingPower = vpResult.result ? BigInt(vpResult.result) : BigInt(0);
+                    const claimable = claimableResult.result ? BigInt(claimableResult.result) : BigInt(0);
+
+                    nfts.push({ tokenId, amount, end, isPermanent, votingPower, claimable });
+                }
+            }
+        } catch (err) {
+            console.error('[PoolDataProvider] Error fetching veNFTs:', err);
+        }
+
+        setVeNFTs(nfts);
+        setVeNFTsLoading(false);
+    }, [address]);
+
+    // Fetch veNFTs when address changes
+    useEffect(() => {
+        fetchVeNFTs();
+    }, [fetchVeNFTs]);
+
     const value: PoolDataContextType = {
         v2Pools,
         clPools,
@@ -780,6 +1026,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         gauges,
         totalVoteWeight,
         gaugesLoading,
+        stakedPositions,
+        stakedLoading,
+        refetchStaked: fetchStakedPositions,
+        veNFTs,
+        veNFTsLoading,
+        refetchVeNFTs: fetchVeNFTs,
         isLoading,
         refetch: fetchAllData,
         getTokenInfo,

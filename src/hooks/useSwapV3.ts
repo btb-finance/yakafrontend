@@ -188,9 +188,8 @@ export function useSwapV3() {
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
-            const minOut = parseUnits(amountOutMin, actualTokenOut.decimals);
-            const slippageAmount = (minOut * BigInt(Math.floor(slippage * 100))) / BigInt(10000);
-            const amountOutMinimum = minOut - slippageAmount;
+            // amountOutMin is already slippage-adjusted from SwapInterface
+            const amountOutMinimum = parseUnits(amountOutMin, actualTokenOut.decimals);
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
@@ -256,9 +255,13 @@ export function useSwapV3() {
             const actualTokenOut = tokenOut.isNative ? WSEI : tokenOut;
 
             const amountInWei = parseUnits(amountIn, actualTokenIn.decimals);
+
+            // amountOutMin is already slippage-adjusted from SwapInterface, but for multi-hop
+            // we add a small additional buffer (0.5%) since prices can move between the two swaps
             const minOut = parseUnits(amountOutMin, actualTokenOut.decimals);
-            const slippageAmount = (minOut * BigInt(Math.floor(slippage * 100))) / BigInt(10000);
-            const amountOutMinimum = minOut - slippageAmount;
+            // Apply a small additional buffer for multi-hop (0.5% more tolerance)
+            const multiHopBuffer = (minOut * BigInt(50)) / BigInt(10000); // 0.5%
+            const amountOutMinimum = minOut - multiHopBuffer;
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
