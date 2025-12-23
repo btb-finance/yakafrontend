@@ -749,7 +749,16 @@ export default function VotePage() {
 
                                 {/* Pools - Compact Mobile Layout */}
                                 <div className="divide-y divide-white/5">
-                                    {gauges.map((gauge) => (
+                                    {/* Sort: Active gauges (with gauge address) first, then by isAlive */}
+                                    {[...gauges].sort((a, b) => {
+                                        // First priority: has gauge address
+                                        if (a.gauge && !b.gauge) return -1;
+                                        if (!a.gauge && b.gauge) return 1;
+                                        // Second priority: isAlive
+                                        if (a.isAlive && !b.isAlive) return -1;
+                                        if (!a.isAlive && b.isAlive) return 1;
+                                        return 0;
+                                    }).map((gauge) => (
                                         <div key={gauge.pool} className="p-2 sm:p-3">
                                             {/* Row 1: Pool info + share */}
                                             <div className="flex items-center justify-between gap-2 mb-2">
