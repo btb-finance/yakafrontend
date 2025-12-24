@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
-import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
+import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
 
@@ -243,7 +243,11 @@ export default function PortfolioPage() {
 
     // Get CL and V2 positions
     const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
-    const { positions: v2Positions } = useV2Positions();
+    const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
+
+    // V2 position management state
+    const [expandedV2Position, setExpandedV2Position] = useState<string | null>(null);
+    const [v2RemovePercent, setV2RemovePercent] = useState<number>(100);
 
     // State to store current ticks for each position (keyed by tokenId)
     const [positionTicks, setPositionTicks] = useState<Record<string, number>>({});
@@ -782,6 +786,50 @@ export default function PortfolioPage() {
         setActionLoading(false);
     };
 
+    // Remove V2 liquidity with percentage support
+    const handleRemoveV2Liquidity = async (pos: typeof v2Positions[0], percent: number) => {
+        if (!address || pos.lpBalance <= BigInt(0)) return;
+        setActionLoading(true);
+        try {
+            // Calculate amount to remove based on percentage
+            const liquidityToRemove = (pos.lpBalance * BigInt(percent)) / BigInt(100);
+            const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
+
+            // First approve the router to spend LP tokens
+            await writeContractAsync({
+                address: pos.poolAddress as Address,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
+            });
+
+            // Then remove liquidity
+            await writeContractAsync({
+                address: V2_CONTRACTS.Router as Address,
+                abi: ROUTER_ABI,
+                functionName: 'removeLiquidity',
+                args: [
+                    pos.token0 as Address,
+                    pos.token1 as Address,
+                    pos.stable,
+                    liquidityToRemove,
+                    BigInt(0), // amountAMin - use 0 for simplicity (user accepts slippage)
+                    BigInt(0), // amountBMin
+                    address,
+                    deadline,
+                ],
+            });
+
+            alert(`Successfully removed ${percent}% liquidity!`);
+            refetchV2();
+            setExpandedV2Position(null);
+        } catch (err) {
+            console.error('Remove V2 liquidity error:', err);
+            alert('Failed to remove liquidity. Check console for details.');
+        }
+        setActionLoading(false);
+    };
+
     // Open increase liquidity modal
     const openIncreaseLiquidityModal = (position: typeof clPositions[0]) => {
         setSelectedPosition(position);
@@ -1089,11 +1137,11 @@ export default function PortfolioPage() {
                                                 </div>
 
                                                 {/* Stake to Earn Banner - for unstaked positions */}
-                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 mb-2">
-                                                    <span className="text-lg">💰</span>
+                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-cyan-500/10 border border-green-500/30 mb-2">
+                                                    <span className="text-lg">✨</span>
                                                     <div className="flex-1">
-                                                        <div className="text-xs font-medium text-yellow-400">Not earning rewards</div>
-                                                        <div className="text-[10px] text-gray-400">Stake this position to earn WIND emissions</div>
+                                                        <div className="text-xs font-medium text-green-400">Earning trading fees!</div>
+                                                        <div className="text-[10px] text-gray-400">Higher APR than DragonSwap • Stake for extra WIND rewards</div>
                                                     </div>
                                                     <button
                                                         onClick={() => handleStakePosition(pos)}
@@ -1225,20 +1273,100 @@ export default function PortfolioPage() {
                             <div>
                                 <h4 className="text-sm text-gray-400 mb-3">V2 Pools</h4>
                                 <div className="space-y-3">
-                                    {v2Positions.map((pos, i) => (
-                                        <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="font-semibold">{pos.stable ? 'Stable' : 'Volatile'} Pool</div>
-                                                    <div className="text-xs text-gray-400">{pos.poolAddress.slice(0, 10)}...</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-medium">{parseFloat(formatUnits(pos.lpBalance, 18)).toFixed(8)} LP</div>
-                                                    <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">V2</span>
-                                                </div>
+                                    {v2Positions.map((pos, i) => {
+                                        const t0 = getTokenInfo(pos.token0);
+                                        const t1 = getTokenInfo(pos.token1);
+                                        const logo0 = getTokenLogo(pos.token0);
+                                        const logo1 = getTokenLogo(pos.token1);
+                                        const isExpanded = expandedV2Position === pos.poolAddress;
+
+                                        return (
+                                            <div key={i} className="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
+                                                {/* Clickable Header */}
+                                                <button
+                                                    onClick={() => setExpandedV2Position(isExpanded ? null : pos.poolAddress)}
+                                                    className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        {/* Token pair logos */}
+                                                        <div className="relative w-12 h-7 flex-shrink-0">
+                                                            {logo0 ? (
+                                                                <img src={logo0} alt={t0.symbol} className="absolute left-0 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                            ) : (
+                                                                <div className="absolute left-0 w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                    {t0.symbol.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                            {logo1 ? (
+                                                                <img src={logo1} alt={t1.symbol} className="absolute left-4 w-7 h-7 rounded-full border border-[var(--bg-primary)]" />
+                                                            ) : (
+                                                                <div className="absolute left-4 w-7 h-7 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                    {t1.symbol.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <div className="font-semibold">{t0.symbol}/{t1.symbol}</div>
+                                                            <div className="text-xs text-gray-400">
+                                                                {pos.stable ? 'Stable' : 'Volatile'} • {parseFloat(formatUnits(pos.lpBalance, 18)).toFixed(6)} LP
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs px-2 py-1 rounded-full bg-primary/20 text-primary">V2</span>
+                                                        <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                        </svg>
+                                                    </div>
+                                                </button>
+
+                                                {/* Expanded Actions */}
+                                                {isExpanded && (
+                                                    <div className="px-4 pb-4 border-t border-white/10">
+                                                        {/* Remove Liquidity Section */}
+                                                        <div className="mt-3">
+                                                            <div className="text-xs text-gray-400 mb-2">Withdraw Liquidity</div>
+                                                            <div className="grid grid-cols-4 gap-2">
+                                                                <button
+                                                                    onClick={() => handleRemoveV2Liquidity(pos, 25)}
+                                                                    disabled={actionLoading}
+                                                                    className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                                >
+                                                                    {actionLoading ? '...' : '25%'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRemoveV2Liquidity(pos, 50)}
+                                                                    disabled={actionLoading}
+                                                                    className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                                >
+                                                                    {actionLoading ? '...' : '50%'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRemoveV2Liquidity(pos, 75)}
+                                                                    disabled={actionLoading}
+                                                                    className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                                >
+                                                                    {actionLoading ? '...' : '75%'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRemoveV2Liquidity(pos, 100)}
+                                                                    disabled={actionLoading}
+                                                                    className="py-2.5 px-2 text-xs font-medium rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+                                                                >
+                                                                    {actionLoading ? '...' : 'MAX'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Info note */}
+                                                        <div className="mt-3 text-xs text-gray-500 text-center">
+                                                            V2 pools are deprecated unless you're trading tax tokens.
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

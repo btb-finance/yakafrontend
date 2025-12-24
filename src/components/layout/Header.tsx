@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { WalletConnect } from '@/components/wallet/WalletConnect';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAutoSwitchToSei } from '@/hooks/useAutoSwitchToSei';
 
 const navLinks = [
     { href: '/swap', label: 'Swap' },
@@ -17,6 +18,9 @@ const navLinks = [
 export function Header() {
     const pathname = usePathname();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    // Auto-switch back to Sei when leaving the bridge page
+    useAutoSwitchToSei();
 
     return (
         <header className="fixed top-0 left-0 right-0 z-50">
