@@ -72,7 +72,7 @@ export const cbBTC: Token = {
     symbol: 'cbBTC',
     name: 'Coinbase Wrapped BTC',
     decimals: 8,
-    logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbBTC.jpg',
+    logoURI: '/logo/cbbtc.png',
 };
 
 // Coinbase Wrapped ADA (Hyperlane bridged from Base)
@@ -81,7 +81,7 @@ export const cbADA: Token = {
     symbol: 'cbADA',
     name: 'Coinbase Wrapped ADA',
     decimals: 6,
-    logoURI: 'https://assets.coingecko.com/coins/images/975/standard/cardano.png',
+    logoURI: '/logo/cbada_32.png',
 };
 
 // Solana (Hyperlane bridged from Base)
@@ -90,7 +90,7 @@ export const SOL: Token = {
     symbol: 'SOL',
     name: 'Solana',
     decimals: 9,
-    logoURI: 'https://assets.coingecko.com/coins/images/4128/standard/solana.png',
+    logoURI: '/logo/solana_64.png',
 };
 
 // Coinbase Wrapped XRP (Hyperlane bridged from Base)
@@ -99,7 +99,7 @@ export const cbXRP: Token = {
     symbol: 'cbXRP',
     name: 'Coinbase Wrapped XRP',
     decimals: 6,
-    logoURI: 'https://assets.coingecko.com/coins/images/44/standard/xrp-symbol-white-128.png',
+    logoURI: '/logo/cbxrp_32.png',
 };
 
 // Sui Universal (Hyperlane bridged from Base)
@@ -108,7 +108,7 @@ export const uSUI: Token = {
     symbol: 'uSUI',
     name: 'Sui (Universal)',
     decimals: 18,
-    logoURI: 'https://assets.coingecko.com/coins/images/26375/standard/sui_asset.jpeg',
+    logoURI: '/logo/usui_32.png',
 };
 
 // ChainLink Token (Hyperlane bridged from Base)
@@ -117,7 +117,7 @@ export const LINK: Token = {
     symbol: 'LINK',
     name: 'ChainLink Token',
     decimals: 18,
-    logoURI: 'https://assets.coingecko.com/coins/images/877/standard/chainlink-new-logo.png',
+    logoURI: '/logo/chainlink_ofc_32.svg',
 };
 
 export const USDCT: Token = {
@@ -234,6 +234,12 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     USDT,
     WBTC,
     WETH,
+    cbBTC,
+    cbADA,
+    SOL,
+    cbXRP,
+    uSUI,
+    LINK,
     USDCT,
     USDCN,
     DRG,
@@ -259,6 +265,12 @@ export const TOKEN_ADDRESSES = {
     USDT: USDT.address,
     WBTC: WBTC.address,
     WETH: WETH.address,
+    cbBTC: cbBTC.address,
+    cbADA: cbADA.address,
+    SOL: SOL.address,
+    cbXRP: cbXRP.address,
+    uSUI: uSUI.address,
+    LINK: LINK.address,
     USDCT: USDCT.address,
     USDCN: USDCN.address,
     DRG: DRG.address,
