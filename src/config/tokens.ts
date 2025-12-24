@@ -66,6 +66,15 @@ export const WBTC: Token = {
     logoURI: '/logo/wbtc.jpg',
 };
 
+// Coinbase Wrapped BTC (Hyperlane bridged from Base)
+export const cbBTC: Token = {
+    address: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+    symbol: 'cbBTC',
+    name: 'Coinbase Wrapped BTC',
+    decimals: 8,
+    logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbBTC.jpg',
+};
+
 export const USDCT: Token = {
     address: '0x9151434b16b9763660705744891fA906F660EcC5',
     symbol: 'USDT',
