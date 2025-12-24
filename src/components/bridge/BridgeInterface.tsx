@@ -17,7 +17,7 @@ export function BridgeInterface() {
         destChain,
         balance,
         gasQuote,
-        needsApproval,
+        checkNeedsApproval,
         isLoading,
         isApproving,
         isBridging,
@@ -40,11 +40,13 @@ export function BridgeInterface() {
         setAmount(balance);
     };
 
+    const needsApproval = checkNeedsApproval(amount);
+
     const handleBridge = async () => {
         if (!amount || parseFloat(amount) <= 0) return;
 
         if (needsApproval) {
-            await approve();
+            await approve(amount);
         } else {
             await bridge(amount);
             if (!error) {

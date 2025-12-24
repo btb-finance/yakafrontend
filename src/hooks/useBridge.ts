@@ -17,13 +17,13 @@ interface UseBridgeReturn {
     destChain: typeof BRIDGE_CHAINS.base | typeof BRIDGE_CHAINS.sei;
     balance: string;
     gasQuote: string;
-    needsApproval: boolean;
+    checkNeedsApproval: (amount: string) => boolean;
     isLoading: boolean;
     isApproving: boolean;
     isBridging: boolean;
     error: string | null;
     txHash: string | null;
-    approve: () => Promise<void>;
+    approve: (amount: string) => Promise<void>;
     bridge: (amount: string) => Promise<void>;
     refetch: () => Promise<void>;
 }
@@ -138,7 +138,7 @@ export function useBridge(): UseBridgeReturn {
         doSwitch();
     }, [direction, sourceChain.chainId, chainId, switchChain]);
 
-    const approve = useCallback(async () => {
+    const approve = useCallback(async (amount: string) => {
         if (!walletClient || !address) return;
 
         if (chainId !== sourceChain.chainId) {
@@ -159,6 +159,7 @@ export function useBridge(): UseBridgeReturn {
 
             const sourceClientChain = direction === 'base-to-sei' ? base : sei;
             const { collateral, warpRoute } = getTokenAddresses();
+            const amountWei = parseUnits(amount, selectedToken.decimals);
 
             const hash = await walletClient.writeContract({
                 chain: sourceClientChain,
@@ -167,7 +168,7 @@ export function useBridge(): UseBridgeReturn {
                 functionName: 'approve',
                 args: [
                     warpRoute as `0x${string}`,
-                    BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
+                    amountWei,
                 ],
             });
 
@@ -184,7 +185,7 @@ export function useBridge(): UseBridgeReturn {
         } finally {
             setIsApproving(false);
         }
-    }, [walletClient, address, chainId, sourceChain, direction, switchChain, fetchData, getTokenAddresses]);
+    }, [walletClient, address, chainId, sourceChain, direction, switchChain, fetchData, getTokenAddresses, selectedToken.decimals]);
 
     const bridge = useCallback(async (amount: string) => {
         if (!walletClient || !address) return;
@@ -239,15 +240,15 @@ export function useBridge(): UseBridgeReturn {
         }
     }, [walletClient, address, chainId, sourceChain, destDomainId, gasQuote, direction, switchChain, fetchData, getTokenAddresses, selectedToken.decimals]);
 
-    const hasEnoughAllowance = (amount: string) => {
-        if (!needsApprovalCheck) return true;
+    const checkNeedsApproval = useCallback((amount: string) => {
+        if (!needsApprovalCheck) return false;
         try {
             const amountWei = parseUnits(amount || '0', selectedToken.decimals);
-            return allowance >= amountWei;
+            return amountWei > BigInt(0) && allowance < amountWei;
         } catch {
             return false;
         }
-    };
+    }, [needsApprovalCheck, selectedToken.decimals, allowance]);
 
     return {
         direction,
@@ -259,7 +260,7 @@ export function useBridge(): UseBridgeReturn {
         destChain,
         balance,
         gasQuote,
-        needsApproval: needsApprovalCheck && !hasEnoughAllowance(balance),
+        checkNeedsApproval,
         isLoading,
         isApproving,
         isBridging,

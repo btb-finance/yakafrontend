@@ -19,6 +19,7 @@ import {
     rainbowWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import { sei } from '@/config/chains';
+import { base } from 'viem/chains';
 import { PoolDataProvider } from '@/providers/PoolDataProvider';
 import { UserBalanceProvider } from '@/providers/UserBalanceProvider';
 import '@rainbow-me/rainbowkit/styles.css';
@@ -28,9 +29,10 @@ const projectId = 'ecd20f8c23408a4397afc0f5466eb6b6';
 const config = getDefaultConfig({
     appName: 'Wind Swap',
     projectId,
-    chains: [sei],
+    chains: [sei, base],
     transports: {
         [sei.id]: http('https://evm-rpc.sei-apis.com/?x-apikey=f9e3e8c8'),
+        [base.id]: http('https://mainnet.base.org'),
     },
     ssr: true,
     // EIP-6963: Enable multi-injected provider discovery for better wallet detection
