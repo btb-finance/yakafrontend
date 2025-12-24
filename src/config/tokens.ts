@@ -49,14 +49,6 @@ export const USDC: Token = {
     logoURI: '/logo/USDCoin.svg',
 };
 
-export const USDT: Token = {
-    address: '0xB75D0B03c06A926e488e2659DF1A861F860bD3d1',
-    symbol: 'USDT',
-    name: 'Tether USD',
-    decimals: 6,
-    logoURI: '/logo/usdt0.png',
-};
-
 // New Tokens
 export const WBTC: Token = {
     address: '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c',
@@ -66,10 +58,64 @@ export const WBTC: Token = {
     logoURI: '/logo/wbtc.jpg',
 };
 
-export const USDCT: Token = {
+// Coinbase Wrapped BTC (Hyperlane bridged from Base)
+export const cbBTC: Token = {
+    address: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+    symbol: 'cbBTC',
+    name: 'Coinbase Wrapped BTC',
+    decimals: 8,
+    logoURI: '/logo/cbbtc.png',
+};
+
+// Coinbase Wrapped ADA (Hyperlane bridged from Base)
+export const cbADA: Token = {
+    address: '0x8f7EF7758Db151450a3134d406Ad2D80F3D956f6',
+    symbol: 'cbADA',
+    name: 'Coinbase Wrapped ADA',
+    decimals: 6,
+    logoURI: '/logo/cbada_32.png',
+};
+
+// Solana (Hyperlane bridged from Base)
+export const SOL: Token = {
+    address: '0x1Ab9D96a351c56e408f5478AC664E76AE9B71B93',
+    symbol: 'SOL',
+    name: 'Solana',
+    decimals: 9,
+    logoURI: '/logo/solana_64.png',
+};
+
+// Coinbase Wrapped XRP (Hyperlane bridged from Base)
+export const cbXRP: Token = {
+    address: '0xBc57Df70D982587F3134317b128e4C88ABE1C7A7',
+    symbol: 'cbXRP',
+    name: 'Coinbase Wrapped XRP',
+    decimals: 6,
+    logoURI: '/logo/cbxrp_32.png',
+};
+
+// Sui Universal (Hyperlane bridged from Base)
+export const uSUI: Token = {
+    address: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
+    symbol: 'uSUI',
+    name: 'Sui (Universal)',
+    decimals: 18,
+    logoURI: '/logo/usui_32.png',
+};
+
+// ChainLink Token (Hyperlane bridged from Base)
+export const LINK: Token = {
+    address: '0xB2E37Ecb157d41C114a0656979b4f2aFD9671263',
+    symbol: 'LINK',
+    name: 'ChainLink Token',
+    decimals: 18,
+    logoURI: '/logo/chainlink_ofc_32.svg',
+};
+
+export const USDT0: Token = {
     address: '0x9151434b16b9763660705744891fA906F660EcC5',
-    symbol: 'USDT',
-    name: 'Tether USD (Bridged)',
+    symbol: 'USDT0',
+    name: 'USDT0 (Stargate)',
     decimals: 6,
     logoURI: '/logo/usdt0.png',
 };
@@ -177,10 +223,15 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     WSEI,
     WIND,
     USDC,
-    USDT,
     WBTC,
     WETH,
-    USDCT,
+    cbBTC,
+    cbADA,
+    SOL,
+    cbXRP,
+    uSUI,
+    LINK,
+    USDT0,
     USDCN,
     DRG,
     MILLI,
@@ -202,10 +253,15 @@ export const TOKEN_ADDRESSES = {
     WIND: WIND.address,
     YAKA: WIND.address, // Legacy alias
     USDC: USDC.address,
-    USDT: USDT.address,
     WBTC: WBTC.address,
     WETH: WETH.address,
-    USDCT: USDCT.address,
+    cbBTC: cbBTC.address,
+    cbADA: cbADA.address,
+    SOL: SOL.address,
+    cbXRP: cbXRP.address,
+    uSUI: uSUI.address,
+    LINK: LINK.address,
+    USDT0: USDT0.address,
     USDCN: USDCN.address,
     DRG: DRG.address,
     MILLI: MILLI.address,

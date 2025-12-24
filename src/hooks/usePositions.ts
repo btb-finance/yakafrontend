@@ -63,12 +63,15 @@ export function useCLPositions() {
             }
 
             const results = await Promise.all(positionPromises);
-            const validPositions = results.filter((p): p is CLPosition => p !== null);
+            // Filter out null positions AND positions with 0 liquidity (dead/empty positions)
+            const validPositions = results.filter((p): p is CLPosition =>
+                p !== null && p.liquidity > BigInt(0)
+            );
             setPositions(validPositions);
 
             // If we didn't get all positions, retry missing ones after a delay
             if (validPositions.length < count) {
-                console.log(`[usePositions] Got ${validPositions.length}/${count} positions, retrying missing...`);
+                console.log(`[usePositions] Got ${validPositions.length}/${count} positions (some may have 0 liquidity), retrying missing...`);
                 const fetchedIds = new Set(validPositions.map(p => p.tokenId.toString()));
 
                 // Retry after 3 seconds
@@ -78,8 +81,9 @@ export function useCLPositions() {
                         retryPromises.push(fetchPositionByIndex(address, i));
                     }
                     const retryResults = await Promise.all(retryPromises);
+                    // Also filter for liquidity > 0 on retry
                     const newPositions = retryResults.filter((p): p is CLPosition =>
-                        p !== null && !fetchedIds.has(p.tokenId.toString())
+                        p !== null && p.liquidity > BigInt(0) && !fetchedIds.has(p.tokenId.toString())
                     );
                     if (newPositions.length > 0) {
                         console.log(`[usePositions] ✅ Recovered ${newPositions.length} more positions`);
@@ -110,6 +114,32 @@ export function useCLPositions() {
         isLoading,
         refetch,
     };
+}
+
+// Encode collect(CollectParams) call - used to simulate fee collection
+// CollectParams: { tokenId, recipient, amount0Max, amount1Max }
+function encodeCollect(tokenId: bigint, recipient: string): string {
+    // collect((uint256,address,uint128,uint128))
+    const selector = 'fc6f7865'; // cast sig "collect((uint256,address,uint128,uint128))"
+    const tokenIdHex = tokenId.toString(16).padStart(64, '0');
+    const recipientPadded = recipient.slice(2).toLowerCase().padStart(64, '0');
+    // MAX_UINT128 for both amount0Max and amount1Max
+    const maxUint128 = 'ffffffffffffffffffffffffffffffff'.padStart(64, '0');
+
+    // The struct is encoded as: offset (32 bytes) + tokenId + recipient + amount0Max + amount1Max
+    // But for a simple tuple param, we encode inline
+    return `0x${selector}${tokenIdHex}${recipientPadded}${maxUint128}${maxUint128}`;
+}
+
+// Decode collect() result - returns (uint256 amount0, uint256 amount1)
+function decodeCollectResult(data: string): { amount0: bigint; amount1: bigint } {
+    const hex = data.slice(2);
+    if (hex.length < 128) {
+        return { amount0: BigInt(0), amount1: BigInt(0) };
+    }
+    const amount0 = BigInt('0x' + hex.slice(0, 64));
+    const amount1 = BigInt('0x' + hex.slice(64, 128));
+    return { amount0, amount1 };
 }
 
 // Fetch a single position by owner index (with retry logic)
@@ -162,9 +192,53 @@ async function fetchPositionByIndex(owner: string, index: number, retries = 3): 
 
             const decoded = decodePositionResult(positionResult.result);
 
+            // Skip collect() simulation for positions with 0 liquidity (dead positions)
+            // These won't have any fees and we'll filter them out anyway
+            if (decoded.liquidity === BigInt(0)) {
+                return {
+                    tokenId,
+                    ...decoded,
+                };
+            }
+
+            // 3. Simulate collect() to get REAL uncollected fees
+            // The positions() call only returns tokensOwed that were credited at last interaction,
+            // NOT the fees that have accrued since then. We need to simulate collect() to get the real values.
+            let realTokensOwed0 = decoded.tokensOwed0;
+            let realTokensOwed1 = decoded.tokensOwed1;
+
+            try {
+                const collectResponse = await fetch(rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_call',
+                        params: [{
+                            to: CL_CONTRACTS.NonfungiblePositionManager,
+                            from: owner, // Simulate as the owner
+                            data: encodeCollect(tokenId, owner),
+                        }, 'latest'],
+                        id: 3,
+                    }),
+                });
+
+                const collectResult = await collectResponse.json();
+                if (collectResult.result && collectResult.result !== '0x' && collectResult.result.length >= 130) {
+                    const { amount0, amount1 } = decodeCollectResult(collectResult.result);
+                    realTokensOwed0 = amount0;
+                    realTokensOwed1 = amount1;
+                }
+            } catch (collectErr) {
+                // If collect simulation fails, fall back to positions() values
+                console.warn(`[usePositions] Could not simulate collect for position ${tokenId}:`, collectErr);
+            }
+
             return {
                 tokenId,
                 ...decoded,
+                tokensOwed0: realTokensOwed0,
+                tokensOwed1: realTokensOwed1,
             };
         } catch (err) {
             if (attempt < retries) {

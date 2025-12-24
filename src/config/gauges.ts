@@ -114,6 +114,17 @@ export const GAUGE_LIST: GaugeConfig[] = [
         tickSpacing: 200,
         isAlive: true,
     },
+    {
+        pool: '0xAF96Ad614322c6fc93295a639431ff5fe28d0582',
+        gauge: '', // No gauge created yet
+        token0: '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c',
+        token1: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+        symbol0: 'WBTC',
+        symbol1: 'cbBTC',
+        type: 'CL',
+        tickSpacing: 50, // 0.02% fee
+        isAlive: true,
+    },
 
     // ============================================
     // ETH PAIRS
@@ -133,6 +144,61 @@ export const GAUGE_LIST: GaugeConfig[] = [
     // ============================================
     // SEI / OTHER PAIRS
     // ============================================
+    {
+        pool: '0xcA6cC7db1f659EfdB09d97bFcA2620caa7ae7C08',
+        gauge: '', // No gauge created yet
+        token0: '0xBc57Df70D982587F3134317b128e4C88ABE1C7A7',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'cbXRP',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
+    {
+        pool: '0x84AFF1293553A5c926507cdc338715891f300ca3',
+        gauge: '', // No gauge created yet
+        token0: '0x8f7EF7758Db151450a3134d406Ad2D80F3D956f6',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'cbADA',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
+    {
+        pool: '0x14943d20cA81e488B978BFc06cD221260e128513',
+        gauge: '', // No gauge created yet
+        token0: '0x1Ab9D96a351c56e408f5478AC664E76AE9B71B93',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'SOL',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
+    {
+        pool: '0x44bbA208B4CecF6d35a4aDc00a2521B29Fd08c2D',
+        gauge: '', // No gauge created yet
+        token0: '0xB2E37Ecb157d41C114a0656979b4f2aFD9671263',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'LINK',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
+    {
+        pool: '0x653F1f36Ae5B8Ec61AD59e2f9a45ef04ff7876F5',
+        gauge: '', // No gauge created yet
+        token0: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'uSUI',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
     {
         pool: '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1',
         gauge: '', // No gauge created yet
@@ -159,9 +225,9 @@ export const GAUGE_LIST: GaugeConfig[] = [
         pool: '0xf7096967560799237D2Dd3C9d44921AAD1e6075f',
         gauge: '', // No gauge created yet
         token0: '0x0a526e425809aEA71eb279d24ae22Dee6C92A4Fe',
-        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        token1: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
         symbol0: 'DRG',
-        symbol1: 'WSEI',
+        symbol1: 'USDC',
         type: 'CL',
         tickSpacing: 200,
         isAlive: true,
