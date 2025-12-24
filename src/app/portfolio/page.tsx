@@ -1137,11 +1137,11 @@ export default function PortfolioPage() {
                                                 </div>
 
                                                 {/* Stake to Earn Banner - for unstaked positions */}
-                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 mb-2">
-                                                    <span className="text-lg">💰</span>
+                                                <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-cyan-500/10 border border-green-500/30 mb-2">
+                                                    <span className="text-lg">✨</span>
                                                     <div className="flex-1">
-                                                        <div className="text-xs font-medium text-yellow-400">Not earning rewards</div>
-                                                        <div className="text-[10px] text-gray-400">Stake this position to earn WIND emissions</div>
+                                                        <div className="text-xs font-medium text-green-400">Earning trading fees!</div>
+                                                        <div className="text-[10px] text-gray-400">Higher APR than DragonSwap • Stake for extra WIND rewards</div>
                                                     </div>
                                                     <button
                                                         onClick={() => handleStakePosition(pos)}
