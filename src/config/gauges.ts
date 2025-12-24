@@ -159,9 +159,9 @@ export const GAUGE_LIST: GaugeConfig[] = [
         pool: '0xf7096967560799237D2Dd3C9d44921AAD1e6075f',
         gauge: '', // No gauge created yet
         token0: '0x0a526e425809aEA71eb279d24ae22Dee6C92A4Fe',
-        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        token1: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
         symbol0: 'DRG',
-        symbol1: 'WSEI',
+        symbol1: 'USDC',
         type: 'CL',
         tickSpacing: 200,
         isAlive: true,
