@@ -49,14 +49,6 @@ export const USDC: Token = {
     logoURI: '/logo/USDCoin.svg',
 };
 
-export const USDT: Token = {
-    address: '0xB75D0B03c06A926e488e2659DF1A861F860bD3d1',
-    symbol: 'USDT',
-    name: 'Tether USD',
-    decimals: 6,
-    logoURI: '/logo/usdt0.png',
-};
-
 // New Tokens
 export const WBTC: Token = {
     address: '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c',
@@ -120,10 +112,10 @@ export const LINK: Token = {
     logoURI: '/logo/chainlink_ofc_32.svg',
 };
 
-export const USDCT: Token = {
+export const USDT0: Token = {
     address: '0x9151434b16b9763660705744891fA906F660EcC5',
-    symbol: 'USDT',
-    name: 'Tether USD (Bridged)',
+    symbol: 'USDT0',
+    name: 'USDT0 (Stargate)',
     decimals: 6,
     logoURI: '/logo/usdt0.png',
 };
@@ -231,7 +223,6 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     WSEI,
     WIND,
     USDC,
-    USDT,
     WBTC,
     WETH,
     cbBTC,
@@ -240,7 +231,7 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     cbXRP,
     uSUI,
     LINK,
-    USDCT,
+    USDT0,
     USDCN,
     DRG,
     MILLI,
@@ -262,7 +253,6 @@ export const TOKEN_ADDRESSES = {
     WIND: WIND.address,
     YAKA: WIND.address, // Legacy alias
     USDC: USDC.address,
-    USDT: USDT.address,
     WBTC: WBTC.address,
     WETH: WETH.address,
     cbBTC: cbBTC.address,
@@ -271,7 +261,7 @@ export const TOKEN_ADDRESSES = {
     cbXRP: cbXRP.address,
     uSUI: uSUI.address,
     LINK: LINK.address,
-    USDCT: USDCT.address,
+    USDT0: USDT0.address,
     USDCN: USDCN.address,
     DRG: DRG.address,
     MILLI: MILLI.address,
