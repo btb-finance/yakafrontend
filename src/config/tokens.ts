@@ -120,6 +120,14 @@ export const USDT0: Token = {
     logoURI: '/logo/usdt0.png',
 };
 
+export const WILSON: Token = {
+    address: '0x962aae191622498bca205c1c1b73e59ac7d295f2',
+    symbol: 'WILSON',
+    name: 'Wilson',
+    decimals: 6,
+    logoURI: '/logo/wilson.png',
+};
+
 export const USDCN: Token = {
     address: '0x3894085Ef7Ff0f0aeDf52E2A2704928d1Ec074F1',
     symbol: 'USDC.n',
@@ -244,6 +252,7 @@ export const DEFAULT_TOKEN_LIST: Token[] = [
     BAT,
     YKP,
     LARRY,
+    WILSON,
 ];
 
 // Token addresses for quick lookup
@@ -274,5 +283,6 @@ export const TOKEN_ADDRESSES = {
     BAT: BAT.address,
     YKP: YKP.address,
     LARRY: LARRY.address,
+    WILSON: WILSON.address,
 } as const;
 
