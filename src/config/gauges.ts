@@ -254,4 +254,26 @@ export const GAUGE_LIST: GaugeConfig[] = [
         tickSpacing: 200,
         isAlive: true,
     },
+    {
+        pool: '0x273B12F21b98bD4AA8a5F3B8308680AE4F33bccB',
+        gauge: '', // No gauge created yet
+        token0: '0x962aae191622498bca205c1c1b73e59ac7d295f2',
+        token1: '0xe15fC38F6D8c56aF07bbCBe3BAf5708A2Bf42392',
+        symbol0: 'WILSON',
+        symbol1: 'USDC',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
+    {
+        pool: '0xff12A64F6146C5C7928891f2399b5f5a704C871F',
+        gauge: '', // No gauge created yet
+        token0: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+        token1: '0xE30feDd158A2e3b13e9badaeABaFc5516e95e8C7',
+        symbol0: 'cbBTC',
+        symbol1: 'WSEI',
+        type: 'CL',
+        tickSpacing: 200, // 0.25% fee
+        isAlive: true,
+    },
 ];
