@@ -7,7 +7,8 @@ import { usePoolData } from '@/providers/PoolDataProvider';
 import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
 import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
-import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
+import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
+import { useWindPrice, calculatePoolAPR } from '@/hooks/useWindPrice';
 
 type PoolType = 'all' | 'v2' | 'cl';
 type Category = 'all' | 'stable' | 'wind' | 'btc' | 'eth' | 'other';
@@ -52,6 +53,38 @@ export default function PoolsPage() {
 
     // Use globally prefetched pool data - instant load!
     const { v2Pools, clPools, allPools, poolRewards, isLoading } = usePoolData();
+
+    // Get WIND and SEI prices for APR calculation
+    const { windPrice, seiPrice } = useWindPrice();
+
+    // Calculate APR for a pool
+    const getPoolAPR = (pool: typeof allPools[0]): number | null => {
+        const rewardRate = poolRewards.get(pool.address.toLowerCase());
+        if (!rewardRate || rewardRate === BigInt(0)) return null;
+
+        // Estimate TVL in USD using real prices from DEX
+        const r0 = parseFloat(pool.reserve0) || 0;
+        const r1 = parseFloat(pool.reserve1) || 0;
+
+        let tvlUsd = 0;
+        const s0 = pool.token0.symbol.toUpperCase();
+        const s1 = pool.token1.symbol.toUpperCase();
+
+        // Calculate value of each token
+        const getTokenValue = (symbol: string, amount: number): number => {
+            if (symbol === 'USDC' || symbol === 'USDT' || symbol === 'USDT0' || symbol === 'USDC.N') return amount;
+            if (symbol === 'WSEI' || symbol === 'SEI') return amount * seiPrice;
+            if (symbol === 'WIND') return amount * windPrice;
+            if (symbol.includes('BTC') || symbol.includes('WBTC')) return amount * 95000;
+            if (symbol.includes('ETH') || symbol.includes('WETH')) return amount * 3500;
+            return amount * seiPrice; // Fallback to SEI price
+        };
+
+        tvlUsd = getTokenValue(s0, r0) + getTokenValue(s1, r1);
+        if (tvlUsd <= 0) return 0;
+
+        return calculatePoolAPR(rewardRate, windPrice, tvlUsd);
+    };
 
     // Open modal for a specific pool
     const openAddLiquidityModal = (pool: typeof allPools[0]) => {
@@ -336,7 +369,17 @@ export default function PoolsPage() {
 
                             {/* Desktop: APR */}
                             <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                <span className="text-sm font-medium text-gray-500">—</span>
+                                {(() => {
+                                    const apr = getPoolAPR(pool);
+                                    if (apr !== null && apr > 0) {
+                                        return (
+                                            <span className="text-sm font-semibold text-green-400">
+                                                {apr >= 1000 ? `${(apr / 1000).toFixed(1)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : `${apr.toFixed(1)}%`}
+                                            </span>
+                                        );
+                                    }
+                                    return <span className="text-sm font-medium text-gray-500">—</span>;
+                                })()}
                             </div>
 
                             {/* Desktop: 24h Volume */}
@@ -369,7 +412,13 @@ export default function PoolsPage() {
                                 </div>
                                 {/* APR & Vol badges */}
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">APR —</span>
+                                    {(() => {
+                                        const apr = getPoolAPR(pool);
+                                        const aprText = apr !== null && apr > 0
+                                            ? apr >= 1000 ? `${(apr / 1000).toFixed(0)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : `${apr.toFixed(0)}%`
+                                            : '—';
+                                        return <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">APR {aprText}</span>;
+                                    })()}
                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Vol —</span>
                                 </div>
                                 <button
