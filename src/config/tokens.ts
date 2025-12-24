@@ -102,6 +102,15 @@ export const cbXRP: Token = {
     logoURI: 'https://assets.coingecko.com/coins/images/44/standard/xrp-symbol-white-128.png',
 };
 
+// Sui Universal (Hyperlane bridged from Base)
+export const uSUI: Token = {
+    address: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
+    symbol: 'uSUI',
+    name: 'Sui (Universal)',
+    decimals: 18,
+    logoURI: 'https://assets.coingecko.com/coins/images/26375/standard/sui_asset.jpeg',
+};
+
 export const USDCT: Token = {
     address: '0x9151434b16b9763660705744891fA906F660EcC5',
     symbol: 'USDT',

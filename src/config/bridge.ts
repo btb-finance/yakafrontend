@@ -73,6 +73,20 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
             warpRoute: '0xBc57Df70D982587F3134317b128e4C88ABE1C7A7',
         },
     },
+    {
+        symbol: 'uSUI',
+        name: 'Sui (Universal)',
+        decimals: 18,
+        logoURI: 'https://assets.coingecko.com/coins/images/26375/standard/sui_asset.jpeg',
+        base: {
+            collateral: '0xb0505e5a99abd03d94a1169e638B78EDfEd26ea4',
+            warpRoute: '0x94176F99F6E46fE36687dBd072B7aFAf8465bDa6',
+        },
+        sei: {
+            synthetic: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
+            warpRoute: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
+        },
+    },
 ];
 
 export const BRIDGE_CHAINS = {
