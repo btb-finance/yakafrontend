@@ -1,5 +1,79 @@
-// Bridge Configuration for cbBTC Hyperlane Warp Route
+// Bridge Configuration for Hyperlane Warp Routes
 // Base <-> Sei
+
+export interface BridgeToken {
+    symbol: string;
+    name: string;
+    decimals: number;
+    logoURI: string;
+    base: {
+        collateral: string; // Native token on Base
+        warpRoute: string;  // Warp route contract on Base
+    };
+    sei: {
+        synthetic: string;  // Synthetic token on Sei (same as warpRoute)
+        warpRoute: string;  // Warp route contract on Sei
+    };
+}
+
+export const BRIDGE_TOKENS: BridgeToken[] = [
+    {
+        symbol: 'cbBTC',
+        name: 'Coinbase Wrapped BTC',
+        decimals: 8,
+        logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbBTC.jpg',
+        base: {
+            collateral: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+            warpRoute: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+        },
+        sei: {
+            synthetic: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+            warpRoute: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
+        },
+    },
+    {
+        symbol: 'cbADA',
+        name: 'Coinbase Wrapped ADA',
+        decimals: 6,
+        logoURI: 'https://assets.coingecko.com/coins/images/975/standard/cardano.png',
+        base: {
+            collateral: '0xcbADA732173e39521CDBE8bf59a6Dc85A9fc7b8c',
+            warpRoute: '0x7fFccBA2804Eaa808B0CC6aDd250b17505154114',
+        },
+        sei: {
+            synthetic: '0x8f7EF7758Db151450a3134d406Ad2D80F3D956f6',
+            warpRoute: '0x8f7EF7758Db151450a3134d406Ad2D80F3D956f6',
+        },
+    },
+    {
+        symbol: 'SOL',
+        name: 'Solana',
+        decimals: 9,
+        logoURI: 'https://assets.coingecko.com/coins/images/4128/standard/solana.png',
+        base: {
+            collateral: '0x311935Cd80B76769bF2ecC9D8Ab7635b2139cf82',
+            warpRoute: '0x6EE42B185fD26f673Ca5A10d88AdC4a584e2F008',
+        },
+        sei: {
+            synthetic: '0x1Ab9D96a351c56e408f5478AC664E76AE9B71B93',
+            warpRoute: '0x1Ab9D96a351c56e408f5478AC664E76AE9B71B93',
+        },
+    },
+    {
+        symbol: 'cbXRP',
+        name: 'Coinbase Wrapped XRP',
+        decimals: 6,
+        logoURI: 'https://assets.coingecko.com/coins/images/44/standard/xrp-symbol-white-128.png',
+        base: {
+            collateral: '0xcb585250f852C6c6bf90434AB21A00f02833a4af',
+            warpRoute: '0xda78C9FB120cbDcB9B00b39e3eA904466966D243',
+        },
+        sei: {
+            synthetic: '0xBc57Df70D982587F3134317b128e4C88ABE1C7A7',
+            warpRoute: '0xBc57Df70D982587F3134317b128e4C88ABE1C7A7',
+        },
+    },
+];
 
 export const BRIDGE_CHAINS = {
     base: {
@@ -7,20 +81,18 @@ export const BRIDGE_CHAINS = {
         name: 'Base',
         rpcUrl: 'https://mainnet.base.org',
         hyperlaneMailbox: '0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D',
-        warpRoute: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
-        cbBTC: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', // Native cbBTC on Base
         explorer: 'https://basescan.org',
         logoURI: '/logo/base.png',
+        nativeCurrency: 'ETH',
     },
     sei: {
         chainId: 1329,
         name: 'Sei',
         rpcUrl: 'https://evm-rpc.sei-apis.com',
         hyperlaneMailbox: '0x2f2aFaE1139Ce54feFC03593FeE8AB2aDF4a85A7',
-        warpRoute: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12',
-        cbBTC: '0xd581C49dA047d9c33DCEfA345de629c84DE28B12', // Synthetic cbBTC on Sei
         explorer: 'https://seiscan.io',
         logoURI: '/logo/WSEI.png',
+        nativeCurrency: 'SEI',
     },
 } as const;
 

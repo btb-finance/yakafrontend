@@ -75,6 +75,33 @@ export const cbBTC: Token = {
     logoURI: 'https://assets.coingecko.com/coins/images/40143/standard/cbBTC.jpg',
 };
 
+// Coinbase Wrapped ADA (Hyperlane bridged from Base)
+export const cbADA: Token = {
+    address: '0x8f7EF7758Db151450a3134d406Ad2D80F3D956f6',
+    symbol: 'cbADA',
+    name: 'Coinbase Wrapped ADA',
+    decimals: 6,
+    logoURI: 'https://assets.coingecko.com/coins/images/975/standard/cardano.png',
+};
+
+// Solana (Hyperlane bridged from Base)
+export const SOL: Token = {
+    address: '0x1Ab9D96a351c56e408f5478AC664E76AE9B71B93',
+    symbol: 'SOL',
+    name: 'Solana',
+    decimals: 9,
+    logoURI: 'https://assets.coingecko.com/coins/images/4128/standard/solana.png',
+};
+
+// Coinbase Wrapped XRP (Hyperlane bridged from Base)
+export const cbXRP: Token = {
+    address: '0xBc57Df70D982587F3134317b128e4C88ABE1C7A7',
+    symbol: 'cbXRP',
+    name: 'Coinbase Wrapped XRP',
+    decimals: 6,
+    logoURI: 'https://assets.coingecko.com/coins/images/44/standard/xrp-symbol-white-128.png',
+};
+
 export const USDCT: Token = {
     address: '0x9151434b16b9763660705744891fA906F660EcC5',
     symbol: 'USDT',
