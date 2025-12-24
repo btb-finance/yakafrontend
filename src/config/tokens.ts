@@ -111,6 +111,15 @@ export const uSUI: Token = {
     logoURI: 'https://assets.coingecko.com/coins/images/26375/standard/sui_asset.jpeg',
 };
 
+// ChainLink Token (Hyperlane bridged from Base)
+export const LINK: Token = {
+    address: '0xB2E37Ecb157d41C114a0656979b4f2aFD9671263',
+    symbol: 'LINK',
+    name: 'ChainLink Token',
+    decimals: 18,
+    logoURI: 'https://assets.coingecko.com/coins/images/877/standard/chainlink-new-logo.png',
+};
+
 export const USDCT: Token = {
     address: '0x9151434b16b9763660705744891fA906F660EcC5',
     symbol: 'USDT',

@@ -87,6 +87,20 @@ export const BRIDGE_TOKENS: BridgeToken[] = [
             warpRoute: '0x78465cffcc7335937d48cCd9A0Ad6bCe2dfDAfD1',
         },
     },
+    {
+        symbol: 'LINK',
+        name: 'ChainLink Token',
+        decimals: 18,
+        logoURI: 'https://assets.coingecko.com/coins/images/877/standard/chainlink-new-logo.png',
+        base: {
+            collateral: '0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196',
+            warpRoute: '0x5a8e5d7CC5C4685c948a88356e4dEF833e495E3D',
+        },
+        sei: {
+            synthetic: '0xB2E37Ecb157d41C114a0656979b4f2aFD9671263',
+            warpRoute: '0xB2E37Ecb157d41C114a0656979b4f2aFD9671263',
+        },
+    },
 ];
 
 export const BRIDGE_CHAINS = {
