@@ -243,6 +243,45 @@ export function useVeWIND() {
         }
     }, [address, writeContractAsync, refetchVeNFTs]);
 
+    // Delegate veNFT for ProtocolGovernor voting
+    // This delegates the veNFT's voting power to itself so it can vote on governance proposals
+    const delegateForGovernance = useCallback(async (tokenId: bigint) => {
+        if (!address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            // delegate(delegator, delegatee) - delegating to self for governance voting
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.VotingEscrow as Address,
+                abi: [...VOTING_ESCROW_ABI, {
+                    name: 'delegate',
+                    type: 'function',
+                    stateMutability: 'nonpayable',
+                    inputs: [
+                        { name: 'delegator', type: 'uint256' },
+                        { name: 'delegatee', type: 'uint256' },
+                    ],
+                    outputs: [],
+                }],
+                functionName: 'delegate',
+                args: [tokenId, tokenId], // Delegate to self
+            });
+
+            setIsLoading(false);
+            return { hash };
+        } catch (err: any) {
+            console.error('Delegate error:', err);
+            setError(err.message || 'Failed to delegate for governance');
+            setIsLoading(false);
+            return null;
+        }
+    }, [address, writeContractAsync]);
+
     return {
         positions,
         veNFTCount: veNFTs.length,
@@ -252,6 +291,7 @@ export function useVeWIND() {
         withdraw,
         claimRebases,
         merge,
+        delegateForGovernance,
         isLoading: isLoading || veNFTsLoading,
         error,
         refetch: refetchVeNFTs,
