@@ -144,9 +144,7 @@ export function useSwap() {
                             factory: V2_CONTRACTS.PoolFactory as Address,
                         },
                     ];
-
-                    // First approve
-                    await approveToken(tokenIn, amountInWei, V2_CONTRACTS.Router as Address);
+                    // NOTE: Approval is handled by SwapInterface before calling this function
 
                     hash = await writeContractAsync({
                         address: V2_CONTRACTS.Router as Address,
@@ -155,9 +153,7 @@ export function useSwap() {
                         args: [amountInWei, amountOutMinWei, wethRoute as readonly { from: Address; to: Address; stable: boolean; factory: Address; }[], address, deadlineTimestamp],
                     });
                 } else {
-                    // Token to Token swap
-                    // First approve
-                    await approveToken(tokenIn, amountInWei, V2_CONTRACTS.Router as Address);
+                    // NOTE: Approval is handled by SwapInterface before calling this function
 
                     hash = await writeContractAsync({
                         address: V2_CONTRACTS.Router as Address,

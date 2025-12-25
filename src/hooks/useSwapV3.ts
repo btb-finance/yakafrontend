@@ -194,15 +194,7 @@ export function useSwapV3() {
 
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
-            // Approve if not native
-            if (!tokenIn.isNative) {
-                await writeContractAsync({
-                    address: actualTokenIn.address as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.SwapRouter as Address, amountInWei],
-                });
-            }
+            // NOTE: Approval is handled by SwapInterface before calling this function
 
             // Execute swap
             const hash = await writeContractAsync({
@@ -307,15 +299,7 @@ export function useSwapV3() {
                 encodeTickSpacing(tickSpacing2) +
                 actualTokenOut.address.slice(2).toLowerCase();
 
-            // Approve if not native
-            if (!tokenIn.isNative) {
-                await writeContractAsync({
-                    address: actualTokenIn.address as Address,
-                    abi: ERC20_ABI,
-                    functionName: 'approve',
-                    args: [CL_CONTRACTS.SwapRouter as Address, amountInWei],
-                });
-            }
+            // NOTE: Approval is handled by SwapInterface before calling this function
 
             // Execute multi-hop swap using exactInput
             const hash = await writeContractAsync({
