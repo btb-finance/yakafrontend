@@ -159,8 +159,17 @@ export default function PoolsPage() {
         return true;
     });
 
-    // Sort pools
+    // Sort pools - WIND/WSEI always first!
     const sortedPools = [...filteredPools].sort((a, b) => {
+        // Helper to check if pool is WIND/WSEI
+        const isWindWsei = (pool: typeof allPools[0]) =>
+            (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
+            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
+
+        // WIND/WSEI always first
+        if (isWindWsei(a) && !isWindWsei(b)) return -1;
+        if (!isWindWsei(a) && isWindWsei(b)) return 1;
+
         if (sortBy === 'tvl') return parseFloat(b.tvl) - parseFloat(a.tvl);
         // Default: preserve order from gauges.ts (already sorted by category)
         return 0;
@@ -283,32 +292,6 @@ export default function PoolsPage() {
                 </div>
             </motion.div>
 
-            {/* WIND Rewards Mining Live Banner */}
-            <motion.div
-                className="mb-4 p-3 sm:p-4 rounded-xl bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 border border-cyan-500/30"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.18 }}
-            >
-                <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                        <span className="text-xl sm:text-2xl">🌀</span>
-                        <div>
-                            <div className="text-sm sm:text-base font-bold text-white">
-                                WIND/WSEI Rewards Mining is Live!
-                            </div>
-                            <div className="text-[10px] sm:text-xs text-gray-300">
-                                Provide liquidity to earn WIND rewards • Higher APR than other DEXs
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                        <span className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-full bg-green-500/30 text-green-400 text-[10px] sm:text-xs font-bold animate-pulse">
-                            ● LIVE
-                        </span>
-                    </div>
-                </div>
-            </motion.div>
 
             {/* Pools Table */}
             <motion.div
@@ -343,139 +326,154 @@ export default function PoolsPage() {
                         )}
                     </div>
                 ) : (
-                    sortedPools.map((pool, index) => (
-                        <motion.div
-                            key={pool.address}
-                            className="flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b border-white/5 hover:bg-white/5 transition"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 + index * 0.02 }}
-                        >
-                            {/* Pool Info */}
-                            <div className="md:col-span-4 flex items-center gap-2">
-                                <div className="relative flex-shrink-0">
-                                    {pool.token0.logoURI ? (
-                                        <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full" />
-                                    ) : (
-                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
-                                            ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
-                                            : 'bg-gradient-to-br from-primary to-secondary'
-                                            }`}>
-                                            {pool.token0.symbol[0]}
-                                        </div>
-                                    )}
-                                    {pool.token1.logoURI ? (
-                                        <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)]" />
-                                    ) : (
-                                        <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
-                                            ? 'bg-gradient-to-br from-blue-500 to-purple-500'
-                                            : 'bg-gradient-to-br from-secondary to-accent'
-                                            }`}>
-                                            {pool.token1.symbol[0]}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="ml-4 md:ml-4 flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-sm md:text-lg truncate">
-                                            {pool.token0.symbol}/{pool.token1.symbol}
-                                        </span>
-                                        {/* Mobile APR inline with pool name */}
-                                        {(() => {
-                                            const apr = getPoolAPR(pool);
-                                            if (apr !== null && apr > 0) {
-                                                const aprText = apr >= 1000 ? `${(apr / 1000).toFixed(0)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : apr >= 1 ? `${apr.toFixed(1)}%` : `${apr.toFixed(2)}%`;
-                                                return <span className="md:hidden text-xs font-bold px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]">🔥 APR {aprText}</span>;
-                                            }
-                                            return null;
-                                        })()}
-                                    </div>
-                                    <div className="flex items-center gap-1 text-[10px] md:text-xs">
-                                        {pool.poolType === 'CL' && pool.tickSpacing && (
-                                            <span className="text-cyan-400">
-                                                {getFeeTier(pool.tickSpacing)}
-                                            </span>
+                    sortedPools.map((pool, index) => {
+                        // Check if this is the featured WIND/WSEI pool
+                        const isWindWsei = (pool.token0.symbol.toUpperCase() === 'WIND' && pool.token1.symbol.toUpperCase() === 'WSEI') ||
+                            (pool.token0.symbol.toUpperCase() === 'WSEI' && pool.token1.symbol.toUpperCase() === 'WIND');
+
+                        return (
+                            <motion.div
+                                key={pool.address}
+                                className={`flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 p-3 md:p-5 border-b transition ${isWindWsei
+                                    ? 'border-2 border-green-500/50 bg-gradient-to-r from-green-500/10 via-emerald-500/5 to-transparent rounded-xl my-1'
+                                    : 'border-white/5 hover:bg-white/5'
+                                    }`}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.1 + index * 0.02 }}
+                            >
+                                {/* Pool Info */}
+                                <div className="md:col-span-4 flex items-center gap-2">
+                                    <div className="relative flex-shrink-0">
+                                        {pool.token0.logoURI ? (
+                                            <img src={pool.token0.logoURI} alt={pool.token0.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full" />
+                                        ) : (
+                                            <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold ${pool.poolType === 'CL'
+                                                ? 'bg-gradient-to-br from-cyan-500 to-blue-500'
+                                                : 'bg-gradient-to-br from-primary to-secondary'
+                                                }`}>
+                                                {pool.token0.symbol[0]}
+                                            </div>
                                         )}
-                                        {pool.poolType === 'V2' && (
-                                            <span className="text-gray-500">
-                                                {pool.stable ? 'Stable' : 'Volatile'}
-                                            </span>
+                                        {pool.token1.logoURI ? (
+                                            <img src={pool.token1.logoURI} alt={pool.token1.symbol} className="w-7 h-7 md:w-10 md:h-10 rounded-full absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)]" />
+                                        ) : (
+                                            <div className={`w-7 h-7 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-bold absolute left-4 md:left-6 top-0 border-2 border-[var(--bg-primary)] ${pool.poolType === 'CL'
+                                                ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                                                : 'bg-gradient-to-br from-secondary to-accent'
+                                                }`}>
+                                                {pool.token1.symbol[0]}
+                                            </div>
                                         )}
                                     </div>
-                                </div>
-                            </div>
-
-                            {/* Desktop: APR */}
-                            <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                {(() => {
-                                    const apr = getPoolAPR(pool);
-                                    if (apr !== null && apr > 0) {
-                                        return (
-                                            <span className="text-sm font-semibold text-green-400">
-                                                {apr >= 1000 ? `${(apr / 1000).toFixed(1)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : `${apr.toFixed(1)}%`}
+                                    <div className="ml-4 md:ml-4 flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-semibold text-sm md:text-lg truncate">
+                                                {pool.token0.symbol}/{pool.token1.symbol}
                                             </span>
-                                        );
-                                    }
-                                    return <span className="text-sm font-medium text-gray-500">—</span>;
-                                })()}
-                            </div>
-
-                            {/* Desktop: 24h Volume */}
-                            <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                <span className="text-sm font-medium text-gray-500">—</span>
-                            </div>
-
-                            {/* Desktop: TVL (Token Amounts) */}
-                            <div className="hidden md:flex md:col-span-2 items-center justify-end">
-                                <div className="text-right text-sm">
-                                    {parseFloat(pool.reserve0) > 0 || parseFloat(pool.reserve1) > 0 ? (
-                                        <>
-                                            <div className="font-semibold">{pool.reserve0} {pool.token0.symbol}</div>
-                                            <div className="text-gray-400">{pool.reserve1} {pool.token1.symbol}</div>
-                                        </>
-                                    ) : (
-                                        <span className="text-gray-500">New Pool</span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Mobile: Stats + Action Row */}
-                            <div className="flex md:hidden items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 text-[10px] min-w-0 flex-1">
-                                    {/* TVL */}
-                                    <div className="min-w-0">
-                                        <div className="font-medium truncate">{pool.reserve0} {pool.token0.symbol}</div>
-                                        <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
+                                            {/* Mobile APR inline with pool name */}
+                                            {(() => {
+                                                const apr = getPoolAPR(pool);
+                                                if (apr !== null && apr > 0) {
+                                                    const aprText = apr >= 1000 ? `${(apr / 1000).toFixed(0)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : apr >= 1 ? `${apr.toFixed(1)}%` : `${apr.toFixed(2)}%`;
+                                                    return <span className="md:hidden text-xs font-bold px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]">🔥 APR {aprText}</span>;
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
+                                        <div className="flex items-center gap-1 text-[10px] md:text-xs">
+                                            {pool.poolType === 'CL' && pool.tickSpacing && (
+                                                <span className="text-cyan-400">
+                                                    {getFeeTier(pool.tickSpacing)}
+                                                </span>
+                                            )}
+                                            {pool.poolType === 'V2' && (
+                                                <span className="text-gray-500">
+                                                    {pool.stable ? 'Stable' : 'Volatile'}
+                                                </span>
+                                            )}
+                                            {/* Rewards badge for WIND/WSEI */}
+                                            {isWindWsei && (
+                                                <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-bold animate-pulse">
+                                                    ⭐ Rewards Live
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                                {/* Vol badge */}
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Vol —</span>
-                                </div>
-                                <button
-                                    onClick={() => openAddLiquidityModal(pool)}
-                                    className="px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
-                                >
-                                    +LP
-                                </button>
-                            </div>
 
-                            {/* Desktop: Action */}
-                            <div className="hidden md:flex md:col-span-2 items-center justify-center">
-                                <motion.button
-                                    onClick={() => openAddLiquidityModal(pool)}
-                                    className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
-                                        ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
-                                        : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
-                                        }`}
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                >
-                                    + Add LP
-                                </motion.button>
-                            </div>
-                        </motion.div>
-                    ))
+                                {/* Desktop: APR */}
+                                <div className="hidden md:flex md:col-span-2 items-center justify-center">
+                                    {(() => {
+                                        const apr = getPoolAPR(pool);
+                                        if (apr !== null && apr > 0) {
+                                            return (
+                                                <span className="text-sm font-semibold text-green-400">
+                                                    {apr >= 1000 ? `${(apr / 1000).toFixed(1)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : `${apr.toFixed(1)}%`}
+                                                </span>
+                                            );
+                                        }
+                                        return <span className="text-sm font-medium text-gray-500">—</span>;
+                                    })()}
+                                </div>
+
+                                {/* Desktop: 24h Volume */}
+                                <div className="hidden md:flex md:col-span-2 items-center justify-center">
+                                    <span className="text-sm font-medium text-gray-500">—</span>
+                                </div>
+
+                                {/* Desktop: TVL (Token Amounts) */}
+                                <div className="hidden md:flex md:col-span-2 items-center justify-end">
+                                    <div className="text-right text-sm">
+                                        {parseFloat(pool.reserve0) > 0 || parseFloat(pool.reserve1) > 0 ? (
+                                            <>
+                                                <div className="font-semibold">{pool.reserve0} {pool.token0.symbol}</div>
+                                                <div className="text-gray-400">{pool.reserve1} {pool.token1.symbol}</div>
+                                            </>
+                                        ) : (
+                                            <span className="text-gray-500">New Pool</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Mobile: Stats + Action Row */}
+                                <div className="flex md:hidden items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 text-[10px] min-w-0 flex-1">
+                                        {/* TVL */}
+                                        <div className="min-w-0">
+                                            <div className="font-medium truncate">{pool.reserve0} {pool.token0.symbol}</div>
+                                            <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
+                                        </div>
+                                    </div>
+                                    {/* Vol badge */}
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Vol —</span>
+                                    </div>
+                                    <button
+                                        onClick={() => openAddLiquidityModal(pool)}
+                                        className="px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+                                    >
+                                        +LP
+                                    </button>
+                                </div>
+
+                                {/* Desktop: Action */}
+                                <div className="hidden md:flex md:col-span-2 items-center justify-center">
+                                    <motion.button
+                                        onClick={() => openAddLiquidityModal(pool)}
+                                        className={`px-4 py-2 rounded-xl font-medium text-sm transition-all ${pool.poolType === 'CL'
+                                            ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 hover:from-cyan-500/30 hover:to-blue-500/30'
+                                            : 'bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30'
+                                            }`}
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        + Add LP
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                        );
+                    })
                 )}
             </motion.div>
 

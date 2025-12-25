@@ -789,6 +789,22 @@ export default function VotePage() {
                                                                 <span className="text-[8px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Off</span>
                                                             )}
                                                         </div>
+                                                        {/* Pool Fees Display */}
+                                                        <div className="text-[10px] flex items-center gap-1 mt-0.5">
+                                                            <span className="text-gray-400">💰 Fees:</span>
+                                                            {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
+                                                                <span className="text-green-400">
+                                                                    {gauge.rewardTokens.map((reward, idx) => (
+                                                                        <span key={reward.address}>
+                                                                            {parseFloat(formatUnits(reward.amount, reward.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {reward.symbol}
+                                                                            {idx < gauge.rewardTokens.length - 1 && ' + '}
+                                                                        </span>
+                                                                    ))}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-500">No fees yet this epoch</span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="text-right flex-shrink-0">
