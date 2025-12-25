@@ -188,9 +188,9 @@ export function useGovernance() {
 
         setIsLoading(true);
         try {
-            // Get current block and scan from first governance block to now
+            // Scan from first proposal block to current block
             const currentBlock = await publicClient.getBlockNumber();
-            const PROPOSAL_START_BLOCK = BigInt(185318000); // First governance proposals
+            const PROPOSAL_START_BLOCK = BigInt(185781300);
             const PROPOSAL_END_BLOCK = currentBlock;
 
             // Batch getLogs requests to avoid RPC limits (25k block max per request)

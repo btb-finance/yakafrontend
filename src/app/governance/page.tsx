@@ -455,7 +455,7 @@ export default function GovernancePage() {
 
                                     {/* Quick Select */}
                                     <div className="flex flex-wrap gap-1 mb-2">
-                                        {DEFAULT_TOKEN_LIST.slice(0, 8).map((token) => (
+                                        {DEFAULT_TOKEN_LIST.map((token) => (
                                             <button
                                                 key={token.symbol}
                                                 onClick={() => selectToken(token.address)}
