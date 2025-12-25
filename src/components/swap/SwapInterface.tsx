@@ -52,6 +52,7 @@ export function SwapInterface() {
     // UI state
     const [txHash, setTxHash] = useState<string | null>(null);
     const [isApproving, setIsApproving] = useState(false);
+    const [routeLocked, setRouteLocked] = useState(false); // Lock route during approval/swap
 
     // Hooks
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
@@ -124,6 +125,7 @@ export function SwapInterface() {
             refetchAllowanceV3();
             setPendingApprovalHash(undefined);
             setIsApproving(false);
+            // Keep route locked - user will click swap next, no need to re-fetch route
         }
     }, [approvalConfirmed, pendingApprovalHash, refetchAllowanceV2, refetchAllowanceV3]);
 
@@ -131,6 +133,7 @@ export function SwapInterface() {
     const handleApprove = async () => {
         if (!actualTokenIn || !address || !bestRoute) return;
 
+        setRouteLocked(true); // Lock route to prevent changes
         setIsApproving(true);
         try {
             const hash = await writeContractAsync({
@@ -146,6 +149,7 @@ export function SwapInterface() {
         } catch (err) {
             console.error('Approve error:', err);
             setIsApproving(false);
+            setRouteLocked(false); // Unlock on error
         }
     };
 
@@ -192,6 +196,9 @@ export function SwapInterface() {
     // ===== Find Best Route (V2 + V3) =====
     useEffect(() => {
         const findBestRoute = async () => {
+            // Don't update route while user is approving/swapping
+            if (routeLocked) return;
+
             if (!tokenIn || !tokenOut || !amountIn || parseFloat(amountIn) <= 0 || !actualTokenOut) {
                 setBestRoute(null);
                 setAmountOut('');
@@ -277,7 +284,7 @@ export function SwapInterface() {
 
         const debounce = setTimeout(findBestRoute, 300);
         return () => clearTimeout(debounce);
-    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute]);
+    }, [tokenIn, tokenOut, amountIn, actualTokenOut, v2VolatileQuote, v2StableQuote, findMultiHopRoute, routeLocked]);
 
     // Swap tokens
     const handleSwapTokens = useCallback(() => {
@@ -309,6 +316,8 @@ export function SwapInterface() {
 
     const handleSwap = async () => {
         if (!canSwap || !tokenIn || !tokenOut || !bestRoute) return;
+
+        setRouteLocked(true); // Lock route during swap
 
         let result;
         if (bestRoute.type === 'v2') {
@@ -352,6 +361,7 @@ export function SwapInterface() {
             setAmountOut('');
             setBestRoute(null);
         }
+        setRouteLocked(false); // Unlock after swap completes or fails
     };
 
     return (
