@@ -191,10 +191,11 @@ export function useGovernance() {
             // Scan from first proposal block to current block
             const currentBlock = await publicClient.getBlockNumber();
             const PROPOSAL_START_BLOCK = BigInt(185781300);
-            const PROPOSAL_END_BLOCK = currentBlock;
+            // Use block 50 behind current to avoid RPC sync issues
+            const PROPOSAL_END_BLOCK = currentBlock - BigInt(50);
 
-            // Batch getLogs requests to avoid RPC limits (25k block max per request)
-            const BATCH_SIZE = BigInt(25000);
+            // Batch getLogs requests - use 2k blocks to stay under RPC limits
+            const BATCH_SIZE = BigInt(2000);
             const allLogs: any[] = [];
 
             for (let from = PROPOSAL_START_BLOCK; from <= PROPOSAL_END_BLOCK; from += BATCH_SIZE) {
