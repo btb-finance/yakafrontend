@@ -35,6 +35,7 @@ export default function GovernancePage() {
         proposeCreateGauge,
         proposeSetGovernor,
         castVote,
+        executeProposal,
     } = useGovernance();
 
     const { positions, delegateForGovernance, isLoading: veLoading } = useVeWIND();
@@ -356,6 +357,21 @@ export default function GovernancePage() {
                                                     🤷 Abstain
                                                 </button>
                                             </div>
+                                        )}
+
+                                        {/* Execute Button - only for Succeeded proposals */}
+                                        {proposal.state === ProposalState.Succeeded && (
+                                            <button
+                                                onClick={() => executeProposal(
+                                                    proposal.targets,
+                                                    proposal.values,
+                                                    proposal.calldatas,
+                                                    proposal.description
+                                                )}
+                                                className="w-full py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-400 hover:to-emerald-400 transition"
+                                            >
+                                                ✅ Execute Proposal
+                                            </button>
                                         )}
 
                                         {/* Proposer info */}
