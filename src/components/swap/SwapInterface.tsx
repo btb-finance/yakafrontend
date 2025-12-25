@@ -3,16 +3,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseUnits, formatUnits, Address, maxUint256 } from 'viem';
+import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData } from 'viem';
 import { Token, SEI, USDC, WSEI } from '@/config/tokens';
-import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
-import { ROUTER_ABI, ERC20_ABI } from '@/config/abis';
+import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
+import { ROUTER_ABI, ERC20_ABI, SWAP_ROUTER_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
 import { SwapSettings } from './SwapSettings';
 import { useSwap } from '@/hooks/useSwap';
 import { useSwapV3 } from '@/hooks/useSwapV3';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 
 interface Route {
     from: Address;
@@ -61,8 +62,9 @@ export function SwapInterface() {
     const { raw: rawBalanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
     const { writeContractAsync } = useWriteContract();
+    const { executeBatch, encodeApproveCall, encodeContractCall, isLoading: isBatching } = useBatchTransactions();
 
-    const isLoading = isLoadingV2 || isLoadingV3;
+    const isLoading = isLoadingV2 || isLoadingV3 || isBatching;
     const error = errorV2 || errorV3;
 
     // Get actual token addresses (use WSEI for native SEI)
@@ -144,29 +146,113 @@ export function SwapInterface() {
     // Swap trigger state - increment to trigger swap
     const [swapTrigger, setSwapTrigger] = useState(0);
 
-    // Handle approve and then auto-swap
+    // Handle approve and then auto-swap (tries EIP-5792 batch first)
     const handleApproveAndSwap = async () => {
-        if (!actualTokenIn || !address || !bestRoute) return;
+        if (!actualTokenIn || !actualTokenOut || !address || !bestRoute) return;
 
-        setRouteLocked(true); // Lock route to prevent changes
+        setRouteLocked(true);
         setIsApproving(true);
-        setAutoSwapAfterApproval(true); // Will auto-trigger swap after approval
+
+        // Calculate amounts for swap
+        const amountOutMinWei = actualTokenOut
+            ? parseUnits((parseFloat(amountOut) * (1 - slippage / 100)).toFixed(6), actualTokenOut.decimals)
+            : BigInt(0);
+        const deadlineTimestamp = BigInt(Math.floor(Date.now() / 1000) + deadline * 60);
 
         try {
+            // Build the swap call based on route type
+            let swapCall;
+
+            if (bestRoute.type === 'v2') {
+                // V2 swap
+                const route = [{
+                    from: (tokenIn?.isNative ? COMMON.WSEI : actualTokenIn.address) as Address,
+                    to: (tokenOut?.isNative ? COMMON.WSEI : actualTokenOut.address) as Address,
+                    stable: bestRoute.stable || false,
+                    factory: V2_CONTRACTS.PoolFactory as Address,
+                }];
+
+                if (tokenIn?.isNative) {
+                    // Native SEI to token - no approval needed, can't batch
+                    setIsApproving(false);
+                    setAutoSwapAfterApproval(false);
+                    await handleSwap();
+                    return;
+                }
+
+                swapCall = encodeContractCall(
+                    V2_CONTRACTS.Router as Address,
+                    ROUTER_ABI,
+                    tokenOut?.isNative ? 'swapExactTokensForETH' : 'swapExactTokensForTokens',
+                    [amountInWei, amountOutMinWei, route, address, deadlineTimestamp],
+                );
+
+            } else if (bestRoute.type === 'v3' && bestRoute.tickSpacing) {
+                // V3 swap
+                swapCall = encodeContractCall(
+                    CL_CONTRACTS.SwapRouter as Address,
+                    SWAP_ROUTER_ABI,
+                    'exactInputSingle',
+                    [{
+                        tokenIn: actualTokenIn.address as Address,
+                        tokenOut: actualTokenOut.address as Address,
+                        tickSpacing: bestRoute.tickSpacing,
+                        recipient: address,
+                        deadline: deadlineTimestamp,
+                        amountIn: amountInWei,
+                        amountOutMinimum: amountOutMinWei,
+                        sqrtPriceLimitX96: BigInt(0),
+                    }],
+                    tokenIn?.isNative ? amountInWei : undefined,
+                );
+            } else {
+                // Multi-hop or unsupported - fall back to sequential
+                setAutoSwapAfterApproval(true);
+                const hash = await writeContractAsync({
+                    address: actualTokenIn.address as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [routerToApprove as Address, amountInWei],
+                });
+                setPendingApprovalHash(hash);
+                return;
+            }
+
+            // Try EIP-5792 batch (approve + swap in one popup)
+            const approveCall = encodeApproveCall(
+                actualTokenIn.address as Address,
+                routerToApprove as Address,
+                amountInWei
+            );
+
+            const batchResult = await executeBatch([approveCall, swapCall]);
+
+            if (batchResult.usedBatching && batchResult.success) {
+                // Single popup worked!
+                setTxHash(batchResult.hash || null);
+                setAmountIn('');
+                setAmountOut('');
+                setBestRoute(null);
+                setIsApproving(false);
+                setRouteLocked(false);
+                return;
+            }
+
+            // Batch not supported - fall back to sequential approach
+            console.log('Batch not available, using sequential approve + swap');
+            setAutoSwapAfterApproval(true);
             const hash = await writeContractAsync({
                 address: actualTokenIn.address as Address,
                 abi: ERC20_ABI,
                 functionName: 'approve',
                 args: [routerToApprove as Address, amountInWei],
             });
-
-            // Set pending hash - the useEffect will handle the rest when confirmed
             setPendingApprovalHash(hash);
 
         } catch (err) {
-            console.error('Approve error:', err);
+            console.error('Approve/swap error:', err);
             setIsApproving(false);
-            setRouteLocked(false); // Unlock on error
+            setRouteLocked(false);
             setAutoSwapAfterApproval(false);
         }
     };
