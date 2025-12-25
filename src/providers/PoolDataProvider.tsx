@@ -595,16 +595,27 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
             const totalWeight = weightResults[0] !== '0x' ? BigInt(weightResults[0]) : BigInt(0);
             setTotalVoteWeight(totalWeight);
 
-            // Step 2: Get FeesVotingReward addresses for each gauge
-            const feeRewardCalls = GAUGE_LIST.map(g => ({
-                to: V2_CONTRACTS.Voter,
-                data: `0xc4f08165${g.gauge.slice(2).padStart(64, '0')}` // gaugeToFees(address)
+            // Step 2: Get FeesVotingReward addresses directly from each gauge
+            // Works for both V2 and CL gauges - they have feesVotingReward() getter
+            // Skip pools without gauges
+            const gaugesWithAddress = GAUGE_LIST.map((g, i) => ({ ...g, idx: i })).filter(g => g.gauge && g.gauge.length > 0);
+
+            const feeRewardCalls = gaugesWithAddress.map(g => ({
+                to: g.gauge,
+                data: '0x0fe2f711', // feesVotingReward() selector
+                idx: g.idx
             }));
 
-            const feeRewardResults = await batchRpcCall(feeRewardCalls);
-            const feeRewardAddresses = feeRewardResults.map(r =>
-                r !== '0x' && r !== '0x' + '0'.repeat(64) ? `0x${r.slice(-40)}` : null
-            );
+            let feeRewardAddresses: (string | null)[] = GAUGE_LIST.map(() => null);
+            if (feeRewardCalls.length > 0) {
+                const feeRewardResults = await batchRpcCall(feeRewardCalls.map(c => ({ to: c.to, data: c.data })));
+                feeRewardCalls.forEach((call, i) => {
+                    const result = feeRewardResults[i];
+                    feeRewardAddresses[call.idx] = result !== '0x' && result !== '0x' + '0'.repeat(64) ? `0x${result.slice(-40)}` : null;
+                });
+            }
+
+            console.log('[PoolDataProvider] Fee reward addresses:', feeRewardAddresses.filter(a => a !== null));
 
             // Step 3: Calculate current epoch start (Thursday 00:00 UTC)
             const EPOCH_DURATION = 604800; // 7 days in seconds
@@ -625,10 +636,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
                 const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
 
-                // tokenRewardsPerEpoch(token, epochStart) - selector: 0x51c4f989
+                // tokenRewardsPerEpoch(token, epochStart) - selector: 0x92777b29
                 feeAmountCalls.push({
                     to: feeRewardAddr,
-                    data: `0x51c4f989${token0Padded}${epochStartHex}`,
+                    data: `0x92777b29${token0Padded}${epochStartHex}`,
                     gaugeIdx: i,
                     tokenAddr: g.token0,
                     symbol: known0?.symbol || g.symbol0,
@@ -636,7 +647,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
                 feeAmountCalls.push({
                     to: feeRewardAddr,
-                    data: `0x51c4f989${token1Padded}${epochStartHex}`,
+                    data: `0x92777b29${token1Padded}${epochStartHex}`,
                     gaugeIdx: i,
                     tokenAddr: g.token1,
                     symbol: known1?.symbol || g.symbol1,
