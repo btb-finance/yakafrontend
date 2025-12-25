@@ -8,15 +8,16 @@ import {
     getDefaultConfig,
 } from '@rainbow-me/rainbowkit';
 import {
-    injectedWallet,
     metaMaskWallet,
     coinbaseWallet,
     walletConnectWallet,
     trustWallet,
-    safepalWallet,
     okxWallet,
     bitgetWallet,
     rainbowWallet,
+    rabbyWallet,
+    phantomWallet,
+    braveWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import { sei } from '@/config/chains';
 import { base } from 'viem/chains';
@@ -35,23 +36,24 @@ const config = getDefaultConfig({
         [base.id]: http('https://mainnet.base.org'),
     },
     ssr: true,
-    // EIP-6963: Enable multi-injected provider discovery for better wallet detection
-    multiInjectedProviderDiscovery: true,
+    // Disable auto-detection to prevent wallet conflicts
+    multiInjectedProviderDiscovery: false,
     wallets: [
         {
             groupName: 'Popular',
             wallets: [
-                injectedWallet,      // Auto-detects any injected wallet (in-app browsers)
-                metaMaskWallet,
-                trustWallet,
-                safepalWallet,
-                okxWallet,
+                rabbyWallet,         // Rabby first - explicit selection
+                metaMaskWallet,      // MetaMask explicit
                 coinbaseWallet,
+                trustWallet,
+                phantomWallet,
             ],
         },
         {
             groupName: 'More',
             wallets: [
+                okxWallet,
+                braveWallet,
                 walletConnectWallet,
                 rainbowWallet,
                 bitgetWallet,
