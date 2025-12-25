@@ -57,7 +57,7 @@ export function SwapInterface() {
     const { executeSwap, isLoading: isLoadingV2, error: errorV2 } = useSwap();
     const { getQuoteV3, executeSwapV3, executeMultiHopSwapV3, isLoading: isLoadingV3, error: errorV3 } = useSwapV3();
     const { findBestRoute: findMultiHopRoute, getIntermediateToken } = useMixedRouteQuoter();
-    const { formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
+    const { raw: rawBalanceIn, formatted: formattedBalanceIn } = useTokenBalance(tokenIn);
     const { formatted: formattedBalanceOut } = useTokenBalance(tokenOut);
     const { writeContractAsync } = useWriteContract();
 
@@ -409,6 +409,7 @@ export function SwapInterface() {
                 token={tokenIn}
                 amount={amountIn}
                 balance={formattedBalanceIn}
+                rawBalance={rawBalanceIn}
                 onAmountChange={setAmountIn}
                 onTokenSelect={setTokenIn}
                 showMaxButton

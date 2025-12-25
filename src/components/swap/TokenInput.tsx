@@ -15,6 +15,7 @@ interface TokenInputProps {
     disabled?: boolean;
     showMaxButton?: boolean;
     balance?: string;
+    rawBalance?: string; // Full precision for MAX button
     usdValue?: string;
 }
 
@@ -28,6 +29,7 @@ export function TokenInput({
     disabled = false,
     showMaxButton = false,
     balance = '--',
+    rawBalance,
     usdValue,
 }: TokenInputProps) {
     const [isSelectorOpen, setIsSelectorOpen] = useState(false);
@@ -41,8 +43,10 @@ export function TokenInput({
     };
 
     const handleMax = () => {
-        if (balance && balance !== '--') {
-            onAmountChange(balance);
+        // Use rawBalance (full precision) if available, fallback to balance
+        const maxValue = rawBalance || balance;
+        if (maxValue && maxValue !== '--' && maxValue !== '0') {
+            onAmountChange(maxValue);
         }
     };
 

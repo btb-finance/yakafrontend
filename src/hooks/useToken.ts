@@ -43,6 +43,7 @@ export function useTokenBalance(token: Token | undefined) {
 
     return {
         balance,
+        raw: balance || '0', // Full precision for MAX button
         formatted: balance ? parseFloat(balance).toFixed(4) : '--',
         refetch,
     };
