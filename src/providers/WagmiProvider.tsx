@@ -18,6 +18,7 @@ import {
     rabbyWallet,
     phantomWallet,
     braveWallet,
+    safeWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 import { sei } from '@/config/chains';
 import { base } from 'viem/chains';
@@ -57,6 +58,7 @@ const config = getDefaultConfig({
                 walletConnectWallet,
                 rainbowWallet,
                 bitgetWallet,
+                safeWallet,
             ],
         },
     ],
