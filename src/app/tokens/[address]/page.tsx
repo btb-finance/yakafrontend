@@ -56,6 +56,15 @@ export default function TokenPage() {
         }
     };
 
+    // Share token link
+    const [linkCopied, setLinkCopied] = useState(false);
+    const shareToken = () => {
+        const url = `${window.location.origin}/tokens/${token?.address}`;
+        navigator.clipboard.writeText(url);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+    };
+
     // Navigate to swap with token pre-selected
     const handleTrade = () => {
         if (token) {
@@ -196,36 +205,51 @@ export default function TokenPage() {
 
             {/* Action Buttons */}
             <motion.div
-                className="grid grid-cols-3 gap-2 sm:gap-4 mb-4"
+                className="grid grid-cols-4 gap-2 sm:gap-4 mb-4"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
             >
                 <button
                     onClick={handleTrade}
-                    className="glass-card p-4 sm:p-6 text-center hover:bg-white/10 transition group"
+                    className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-2xl sm:text-3xl mb-2 group-hover:scale-110 transition">🔄</div>
-                    <div className="font-semibold text-sm sm:text-base">Trade</div>
+                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">🔄</div>
+                    <div className="font-semibold text-xs sm:text-base">Trade</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Swap tokens</div>
                 </button>
 
                 <button
                     onClick={openAddLiquidityGeneral}
-                    className="glass-card p-4 sm:p-6 text-center hover:bg-white/10 transition group"
+                    className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-2xl sm:text-3xl mb-2 group-hover:scale-110 transition">💧</div>
-                    <div className="font-semibold text-sm sm:text-base">Add LP</div>
+                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">💧</div>
+                    <div className="font-semibold text-xs sm:text-base">Add LP</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Provide liquidity</div>
                 </button>
 
                 <button
                     onClick={handleVote}
-                    className="glass-card p-4 sm:p-6 text-center hover:bg-white/10 transition group"
+                    className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-2xl sm:text-3xl mb-2 group-hover:scale-110 transition">🗳️</div>
-                    <div className="font-semibold text-sm sm:text-base">Vote</div>
+                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">🗳️</div>
+                    <div className="font-semibold text-xs sm:text-base">Vote</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Vote on pools</div>
+                </button>
+
+                <button
+                    onClick={shareToken}
+                    className={`glass-card p-3 sm:p-6 text-center transition group ${linkCopied ? 'bg-green-500/20 border-green-500/30' : 'hover:bg-white/10'}`}
+                >
+                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">
+                        {linkCopied ? '✓' : '🔗'}
+                    </div>
+                    <div className="font-semibold text-xs sm:text-base">
+                        {linkCopied ? 'Copied!' : 'Share'}
+                    </div>
+                    <div className="text-[10px] text-gray-400 hidden sm:block">
+                        {linkCopied ? 'Link copied' : 'Copy link'}
+                    </div>
                 </button>
             </motion.div>
 
