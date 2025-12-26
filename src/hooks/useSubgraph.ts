@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-// Goldsky GraphQL endpoint
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/1.0.0/gn';
+// Goldsky GraphQL endpoint (v2.0.0 with user data)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
 
 // Types matching subgraph schema
 export interface SubgraphToken {

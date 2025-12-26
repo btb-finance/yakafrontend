@@ -7,8 +7,8 @@ import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
 
-// Goldsky Subgraph URL for pool data
-const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/1.0.0/gn';
+// Goldsky Subgraph URL for pool data (v2.0.0 with user data)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
 
 // Fetch pools from subgraph
 async function fetchPoolsFromSubgraph(): Promise<{
@@ -329,13 +329,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     };
                 });
 
-                // Set pools from subgraph
+                // Set pools from subgraph (for immediate display)
                 setClPools(subgraphPools);
                 setIsLoading(false);
-                saveCachePools(subgraphPools, []);
-                console.log(`[PoolDataProvider] 💾 Cached ${subgraphPools.length} pools from subgraph`);
+                console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph`);
 
-                // Build token map from subgraph data (for gauge fetching)
+                // Build token map from subgraph data
                 const newTokenMap = new Map<string, TokenInfo>();
                 subgraphPools.forEach(p => {
                     newTokenMap.set(p.token0.address.toLowerCase(), p.token0);
@@ -343,10 +342,65 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
                 setTokenInfoMap(newTokenMap);
 
-                // Fetch gauge data for voting (only RPC call we need)
+                // Fetch gauge data for voting
                 await fetchGaugeData(newTokenMap);
-                console.log('[PoolDataProvider] ✅ Complete - using subgraph data (no RPC for pool data!)');
-                return; // Skip all RPC pool fetching below!
+
+                // NOW fetch live balances via RPC for accurate TVL
+                console.log('[PoolDataProvider] 💰 Fetching live pool balances...');
+                const balanceCalls: { to: string; data: string }[] = [];
+                for (const pool of subgraphPools) {
+                    // Get pool liquidity (for CL pools)
+                    balanceCalls.push({ to: pool.address, data: '0x1a686502' }); // liquidity()
+                    // Also get token balances
+                    balanceCalls.push({
+                        to: pool.token0.address,
+                        data: `0x70a08231000000000000000000000000${pool.address.slice(2).toLowerCase()}` // balanceOf(pool)
+                    });
+                    balanceCalls.push({
+                        to: pool.token1.address,
+                        data: `0x70a08231000000000000000000000000${pool.address.slice(2).toLowerCase()}` // balanceOf(pool)
+                    });
+                }
+
+                try {
+                    const balanceResults = await batchRpcCall(balanceCalls);
+
+                    // Update pools with live balances
+                    const updatedPools = subgraphPools.map((pool, idx) => {
+                        const base = idx * 3;
+                        const liquidityHex = balanceResults[base] || '0x0';
+                        const balance0Hex = balanceResults[base + 1] || '0x0';
+                        const balance1Hex = balanceResults[base + 2] || '0x0';
+
+                        const balance0 = BigInt(balance0Hex || '0x0');
+                        const balance1 = BigInt(balance1Hex || '0x0');
+
+                        // Format to string with decimals
+                        const reserve0 = formatUnits(balance0, pool.token0.decimals);
+                        const reserve1 = formatUnits(balance1, pool.token1.decimals);
+
+                        // Calculate TVL (simple: assume both tokens at $1 for now, accurate pricing would need oracle)
+                        const tvl0 = parseFloat(reserve0);
+                        const tvl1 = parseFloat(reserve1);
+                        const tvl = (tvl0 + tvl1).toFixed(2);
+
+                        return {
+                            ...pool,
+                            reserve0,
+                            reserve1,
+                            tvl: parseFloat(tvl) > 0 ? tvl : pool.tvl, // Use RPC TVL if > 0, else keep subgraph
+                        };
+                    });
+
+                    setClPools(updatedPools);
+                    saveCachePools(updatedPools, []);
+                    console.log(`[PoolDataProvider] ✅ Updated ${updatedPools.length} pools with live balances`);
+                } catch (balanceErr) {
+                    console.warn('[PoolDataProvider] ⚠️ Could not fetch live balances, using subgraph TVL', balanceErr);
+                    saveCachePools(subgraphPools, []);
+                }
+
+                return; // Done!
             } else {
                 // Subgraph failed or empty - fall back to GAUGE_LIST
                 console.log('[PoolDataProvider] ⚠️ Subgraph empty/failed, using GAUGE_LIST');
