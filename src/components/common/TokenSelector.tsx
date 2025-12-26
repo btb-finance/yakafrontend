@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import { Token, DEFAULT_TOKEN_LIST } from '@/config/tokens';
 import { useUserBalances } from '@/providers/UserBalanceProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
@@ -98,6 +99,7 @@ export function TokenSelector({
     selectedToken,
     excludeToken,
 }: TokenSelectorProps) {
+    const router = useRouter();
     const [search, setSearch] = useState('');
     const [filteredTokens, setFilteredTokens] = useState(DEFAULT_TOKEN_LIST);
     const [customToken, setCustomToken] = useState<Token | null>(null);
@@ -106,6 +108,13 @@ export function TokenSelector({
 
     // Get global balances (sorted by balance)
     const { sortedTokens, getBalance } = useUserBalances();
+
+    // Open token page in new context
+    const openTokenPage = (e: React.MouseEvent, token: Token) => {
+        e.stopPropagation(); // Don't trigger token selection
+        onClose();
+        router.push(`/tokens/${token.address}`);
+    };
 
     // Fetch custom token when valid address is entered
     const fetchCustomToken = useCallback(async (addr: string) => {
@@ -320,6 +329,19 @@ export function TokenSelector({
                                                 <p className="text-sm text-gray-500">0</p>
                                             );
                                         })()}
+
+                                        {/* Share/Info Icon */}
+                                        {!token.isNative && (
+                                            <button
+                                                onClick={(e) => openTokenPage(e, token)}
+                                                className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-primary transition"
+                                                title={`View ${token.symbol} info & share`}
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                </svg>
+                                            </button>
+                                        )}
                                     </button>
                                 ))
                             )}

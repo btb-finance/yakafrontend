@@ -7,6 +7,49 @@ import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
 
+// Goldsky Subgraph URL for pool data (v2.0.0 with user data)
+const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
+
+// Fetch pools from subgraph
+async function fetchPoolsFromSubgraph(): Promise<{
+    pools: Array<{
+        id: string;
+        token0: { id: string; symbol: string; decimals: number };
+        token1: { id: string; symbol: string; decimals: number };
+        tickSpacing: number;
+        totalValueLockedUSD: string;
+        volumeUSD: string;
+    }>;
+} | null> {
+    try {
+        const response = await fetch(SUBGRAPH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `{
+                    pools(first: 100, orderBy: totalValueLockedUSD, orderDirection: desc) {
+                        id
+                        token0 { id symbol decimals }
+                        token1 { id symbol decimals }
+                        tickSpacing
+                        totalValueLockedUSD
+                        volumeUSD
+                    }
+                }`
+            }),
+        });
+        const json = await response.json();
+        if (json.errors) {
+            console.warn('[Subgraph] Query errors:', json.errors);
+            return null;
+        }
+        return json.data;
+    } catch (err) {
+        console.warn('[Subgraph] Fetch error:', err);
+        return null;
+    }
+}
+
 // ============================================
 // Types
 // ============================================
@@ -86,6 +129,9 @@ interface PoolDataContextType {
     allPools: PoolData[];
     tokenInfoMap: Map<string, TokenInfo>;
     poolRewards: Map<string, bigint>;
+    // Prices for APR calculation (loaded with priority pool)
+    windPrice: number;
+    seiPrice: number;
     // Gauge/Voting data
     gauges: GaugeInfo[];
     totalVoteWeight: bigint;
@@ -121,6 +167,24 @@ KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
     decimals: WSEI.decimals,
     logoURI: WSEI.logoURI,
 };
+
+// Priority pool address - WIND/WSEI pool loads first with its APR
+const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
+const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
+
+// Pool addresses for price discovery (same as useWindPrice)
+const WIND_USDC_POOL = '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0';
+const USDC_WSEI_POOL = '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1';
+
+// Helper to decode tick from slot0 response
+function decodeTickFromSlot0(result: string): number | null {
+    if (!result || result === '0x' || result.length < 130) return null;
+    const tickSlot = result.slice(66, 130);
+    const lastSix = tickSlot.slice(-6);
+    let tick = parseInt(lastSix, 16);
+    if (tick > 0x7fffff) tick = tick - 0x1000000; // Handle negative tick
+    return tick;
+}
 
 // ============================================
 // Batch RPC Helper with retry and chunking
@@ -220,6 +284,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [clPools, setClPools] = useState<PoolData[]>([]);
     const [tokenInfoMap, setTokenInfoMap] = useState<Map<string, TokenInfo>>(new Map());
     const [poolRewards, setPoolRewards] = useState<Map<string, bigint>>(new Map());
+    const [windPrice, setWindPrice] = useState<number>(0.005); // Default fallback
+    const [seiPrice, setSeiPrice] = useState<number>(0.35); // Default fallback
     const [isLoading, setIsLoading] = useState(true);
 
     // Gauge/Voting state
@@ -239,7 +305,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
         setGaugesLoading(true);
         try {
-            // Step 0a: Try loading from localStorage cache FIRST (instant!)
+            // Step 0: Try loading from localStorage cache FIRST (instant!)
             const cached = loadCachedPools();
             if (cached && cached.clPools.length > 0) {
                 setClPools(cached.clPools);
@@ -248,46 +314,235 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 console.log(`[PoolDataProvider] ⚡ Loaded ${cached.clPools.length} pools from cache`);
             }
 
-            // Step 0b: Fall back to static GAUGE_LIST if no cache
-            if (!cached || cached.clPools.length === 0) {
-                try {
-                    const { GAUGE_LIST } = await import('@/config/gauges');
+            // Step 1: Try fetching from SUBGRAPH (primary source - all pools!)
+            console.log('[PoolDataProvider] 🔍 Fetching pools from subgraph...');
+            const subgraphData = await fetchPoolsFromSubgraph();
 
-                    // Build quick pool list from gauges for instant display
-                    const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
-                        const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
-                        const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
+            if (subgraphData && subgraphData.pools.length > 0) {
+                console.log(`[PoolDataProvider] ✅ Got ${subgraphData.pools.length} pools from subgraph`);
+
+                // Convert subgraph pools to PoolData format
+                const subgraphPools: PoolData[] = subgraphData.pools.map(p => {
+                    const known0 = KNOWN_TOKENS[p.token0.id.toLowerCase()];
+                    const known1 = KNOWN_TOKENS[p.token1.id.toLowerCase()];
+
+                    // Parse TVL (subgraph gives us USD value directly)
+                    const tvl = parseFloat(p.totalValueLockedUSD || '0');
+
+                    return {
+                        address: p.id as Address,
+                        token0: {
+                            address: p.token0.id as Address,
+                            symbol: known0?.symbol || p.token0.symbol,
+                            decimals: known0?.decimals || p.token0.decimals,
+                            logoURI: known0?.logoURI,
+                        },
+                        token1: {
+                            address: p.token1.id as Address,
+                            symbol: known1?.symbol || p.token1.symbol,
+                            decimals: known1?.decimals || p.token1.decimals,
+                            logoURI: known1?.logoURI,
+                        },
+                        poolType: 'CL' as const,
+                        stable: false,
+                        tickSpacing: p.tickSpacing,
+                        reserve0: '0', // Subgraph doesn't give individual reserves
+                        reserve1: '0',
+                        tvl: tvl > 0 ? tvl.toFixed(2) : '0',
+                    };
+                });
+
+                // Sort pools to put priority pool FIRST for immediate display
+                subgraphPools.sort((a, b) => {
+                    const aIsPriority = a.address.toLowerCase() === PRIORITY_POOL;
+                    const bIsPriority = b.address.toLowerCase() === PRIORITY_POOL;
+                    if (aIsPriority && !bIsPriority) return -1;
+                    if (bIsPriority && !aIsPriority) return 1;
+                    return 0;
+                });
+
+                // Set pools from subgraph (for immediate display - priority pool first!)
+                setClPools(subgraphPools);
+                setIsLoading(false);
+                console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
+
+                // Build token map from subgraph data
+                const newTokenMap = new Map<string, TokenInfo>();
+                subgraphPools.forEach(p => {
+                    newTokenMap.set(p.token0.address.toLowerCase(), p.token0);
+                    newTokenMap.set(p.token1.address.toLowerCase(), p.token1);
+                });
+                setTokenInfoMap(newTokenMap);
+
+                // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
+                const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
+                const priorityFetchPromise = priorityPool ? (async () => {
+                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI pool + prices...');
+                    try {
+                        const poolPadded = priorityPool.address.slice(2).toLowerCase().padStart(64, '0');
+                        // Fetch balance + reward rate + prices ALL in one batch for max speed
+                        const priorityCalls = [
+                            { to: priorityPool.token0.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
+                            { to: priorityPool.token1.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
+                            { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
+                            { to: WIND_USDC_POOL, data: '0x3850c7bd' }, // slot0() for WIND price
+                            { to: USDC_WSEI_POOL, data: '0x3850c7bd' }, // slot0() for SEI price
+                        ];
+                        const [bal0Hex, bal1Hex, rewardRateHex, windSlot0Hex, seiSlot0Hex] = await batchRpcCall(priorityCalls);
+
+                        // Parse prices FIRST so APR can be calculated immediately
+                        const windTick = decodeTickFromSlot0(windSlot0Hex);
+                        if (windTick !== null) {
+                            const rawPrice = Math.pow(1.0001, windTick);
+                            const price = rawPrice * Math.pow(10, 12); // WIND/USDC: 18-6 decimal diff
+                            if (price > 0 && price < 1000) {
+                                setWindPrice(price);
+                                console.log(`[PoolDataProvider] ⚡ WIND price: $${price.toFixed(4)}`);
+                            }
+                        }
+
+                        const seiTick = decodeTickFromSlot0(seiSlot0Hex);
+                        if (seiTick !== null) {
+                            const rawPrice = Math.pow(1.0001, seiTick);
+                            const wseiPerUsdc = rawPrice * Math.pow(10, -12); // USDC/WSEI: 6-18 decimal diff
+                            const price = 1 / wseiPerUsdc;
+                            if (price > 0 && price < 100) {
+                                setSeiPrice(price);
+                                console.log(`[PoolDataProvider] ⚡ SEI price: $${price.toFixed(4)}`);
+                            }
+                        }
+
+                        const balance0 = BigInt(bal0Hex || '0x0');
+                        const balance1 = BigInt(bal1Hex || '0x0');
+                        const reserve0 = formatUnits(balance0, priorityPool.token0.decimals);
+                        const reserve1 = formatUnits(balance1, priorityPool.token1.decimals);
+                        const tvl = (parseFloat(reserve0) + parseFloat(reserve1)).toFixed(2);
+
+                        // Update priority pool immediately
+                        setClPools(prev => prev.map(pool =>
+                            pool.address.toLowerCase() === PRIORITY_POOL
+                                ? { ...pool, reserve0, reserve1, tvl }
+                                : pool
+                        ));
+
+                        // Update reward rate for priority pool
+                        const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
+                        if (rewardRate > BigInt(0)) {
+                            setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
+                            console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
+                        }
+                        console.log(`[PoolDataProvider] ⚡ Priority pool loaded! TVL: $${tvl}`);
+                    } catch (err) {
+                        console.warn('[PoolDataProvider] Priority pool fetch error:', err);
+                    }
+                })() : Promise.resolve();
+
+                // Start priority fetch immediately (non-blocking)
+                priorityFetchPromise.catch(() => { }); // Handle silently
+
+                // Fetch gauge data for voting (in parallel with priority fetch)
+                await fetchGaugeData(newTokenMap);
+
+                // NOW fetch live balances via RPC for accurate TVL
+                console.log('[PoolDataProvider] 💰 Fetching live pool balances...');
+                const balanceCalls: { to: string; data: string }[] = [];
+                for (const pool of subgraphPools) {
+                    // Get pool liquidity (for CL pools)
+                    balanceCalls.push({ to: pool.address, data: '0x1a686502' }); // liquidity()
+                    // Also get token balances
+                    balanceCalls.push({
+                        to: pool.token0.address,
+                        data: `0x70a08231000000000000000000000000${pool.address.slice(2).toLowerCase()}` // balanceOf(pool)
+                    });
+                    balanceCalls.push({
+                        to: pool.token1.address,
+                        data: `0x70a08231000000000000000000000000${pool.address.slice(2).toLowerCase()}` // balanceOf(pool)
+                    });
+                }
+
+                try {
+                    const balanceResults = await batchRpcCall(balanceCalls);
+
+                    // Update pools with live balances
+                    const updatedPools = subgraphPools.map((pool, idx) => {
+                        const base = idx * 3;
+                        const liquidityHex = balanceResults[base] || '0x0';
+                        const balance0Hex = balanceResults[base + 1] || '0x0';
+                        const balance1Hex = balanceResults[base + 2] || '0x0';
+
+                        const balance0 = BigInt(balance0Hex || '0x0');
+                        const balance1 = BigInt(balance1Hex || '0x0');
+
+                        // Format to string with decimals
+                        const reserve0 = formatUnits(balance0, pool.token0.decimals);
+                        const reserve1 = formatUnits(balance1, pool.token1.decimals);
+
+                        // Calculate TVL (simple: assume both tokens at $1 for now, accurate pricing would need oracle)
+                        const tvl0 = parseFloat(reserve0);
+                        const tvl1 = parseFloat(reserve1);
+                        const tvl = (tvl0 + tvl1).toFixed(2);
+
                         return {
-                            address: g.pool as Address,
-                            token0: {
-                                address: g.token0 as Address,
-                                symbol: known0?.symbol || g.symbol0,
-                                decimals: known0?.decimals || 18,
-                                logoURI: known0?.logoURI,
-                            },
-                            token1: {
-                                address: g.token1 as Address,
-                                symbol: known1?.symbol || g.symbol1,
-                                decimals: known1?.decimals || 18,
-                                logoURI: known1?.logoURI,
-                            },
-                            poolType: g.type,
-                            stable: false,
-                            tickSpacing: g.tickSpacing,
-                            reserve0: '0',
-                            reserve1: '0',
-                            tvl: '0',
+                            ...pool,
+                            reserve0,
+                            reserve1,
+                            tvl: parseFloat(tvl) > 0 ? tvl : pool.tvl, // Use RPC TVL if > 0, else keep subgraph
                         };
                     });
 
-                    // Set pools immediately for fast display
-                    if (quickClPools.length > 0) {
-                        setClPools(quickClPools.filter(p => p.poolType === 'CL'));
-                        setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
-                        setIsLoading(false); // Show pools immediately!
+                    setClPools(updatedPools);
+                    saveCachePools(updatedPools, []);
+                    console.log(`[PoolDataProvider] ✅ Updated ${updatedPools.length} pools with live balances`);
+                } catch (balanceErr) {
+                    console.warn('[PoolDataProvider] ⚠️ Could not fetch live balances, using subgraph TVL', balanceErr);
+                    saveCachePools(subgraphPools, []);
+                }
+
+                return; // Done!
+            } else {
+                // Subgraph failed or empty - fall back to GAUGE_LIST
+                console.log('[PoolDataProvider] ⚠️ Subgraph empty/failed, using GAUGE_LIST');
+
+                if (!cached || cached.clPools.length === 0) {
+                    try {
+                        const { GAUGE_LIST } = await import('@/config/gauges');
+
+                        // Build quick pool list from gauges for instant display
+                        const quickClPools: PoolData[] = GAUGE_LIST.map(g => {
+                            const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
+                            const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
+                            return {
+                                address: g.pool as Address,
+                                token0: {
+                                    address: g.token0 as Address,
+                                    symbol: known0?.symbol || g.symbol0,
+                                    decimals: known0?.decimals || 18,
+                                    logoURI: known0?.logoURI,
+                                },
+                                token1: {
+                                    address: g.token1 as Address,
+                                    symbol: known1?.symbol || g.symbol1,
+                                    decimals: known1?.decimals || 18,
+                                    logoURI: known1?.logoURI,
+                                },
+                                poolType: g.type,
+                                stable: false,
+                                tickSpacing: g.tickSpacing,
+                                reserve0: '0',
+                                reserve1: '0',
+                                tvl: '0',
+                            };
+                        });
+
+                        // Set pools immediately for fast display
+                        if (quickClPools.length > 0) {
+                            setClPools(quickClPools.filter(p => p.poolType === 'CL'));
+                            setV2Pools(quickClPools.filter(p => p.poolType === 'V2'));
+                            setIsLoading(false); // Show pools immediately!
+                        }
+                    } catch (e) {
+                        console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
                     }
-                } catch (e) {
-                    console.warn('[PoolDataProvider] Could not load GAUGE_LIST for quick display');
                 }
             }
 
@@ -1043,6 +1298,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         allPools: [...v2Pools, ...clPools],
         tokenInfoMap,
         poolRewards,
+        windPrice,
+        seiPrice,
         gauges,
         totalVoteWeight,
         gaugesLoading,

@@ -8,7 +8,7 @@ import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
 import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
-import { useWindPrice, calculatePoolAPR } from '@/hooks/useWindPrice';
+import { calculatePoolAPR } from '@/hooks/useWindPrice';
 
 type PoolType = 'all' | 'v2' | 'cl';
 type Category = 'all' | 'stable' | 'wind' | 'btc' | 'eth' | 'other';
@@ -52,10 +52,7 @@ export default function PoolsPage() {
     const [selectedPool, setSelectedPool] = useState<PoolConfig | undefined>(undefined);
 
     // Use globally prefetched pool data - instant load!
-    const { v2Pools, clPools, allPools, poolRewards, isLoading } = usePoolData();
-
-    // Get WIND and SEI prices for APR calculation
-    const { windPrice, seiPrice } = useWindPrice();
+    const { v2Pools, clPools, allPools, poolRewards, windPrice, seiPrice, isLoading } = usePoolData();
 
     // Calculate APR for a pool
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
@@ -190,6 +187,17 @@ export default function PoolsPage() {
         if (num > 0) return `$${num.toFixed(4)}`;
         if (poolType === 'CL') return 'New Pool';
         return 'Low';
+    };
+
+    // Format token amount with proper decimals
+    const formatAmount = (amount: string, symbol: string): string => {
+        const num = parseFloat(amount);
+        if (isNaN(num) || num === 0) return '0';
+        if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
+        if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
+        if (num >= 1) return num.toFixed(2);
+        if (num >= 0.0001) return num.toFixed(4);
+        return num.toExponential(2);
     };
 
     const totalPoolCount = v2Pools.length + clPools.length;
@@ -427,8 +435,8 @@ export default function PoolsPage() {
                                     <div className="text-right text-sm">
                                         {parseFloat(pool.reserve0) > 0 || parseFloat(pool.reserve1) > 0 ? (
                                             <>
-                                                <div className="font-semibold">{pool.reserve0} {pool.token0.symbol}</div>
-                                                <div className="text-gray-400">{pool.reserve1} {pool.token1.symbol}</div>
+                                                <div className="font-semibold">{formatAmount(pool.reserve0, pool.token0.symbol)} {pool.token0.symbol}</div>
+                                                <div className="text-gray-400">{formatAmount(pool.reserve1, pool.token1.symbol)} {pool.token1.symbol}</div>
                                             </>
                                         ) : (
                                             <span className="text-gray-500">New Pool</span>
@@ -441,8 +449,8 @@ export default function PoolsPage() {
                                     <div className="flex items-center gap-2 text-[10px] min-w-0 flex-1">
                                         {/* TVL */}
                                         <div className="min-w-0">
-                                            <div className="font-medium truncate">{pool.reserve0} {pool.token0.symbol}</div>
-                                            <div className="text-gray-400 truncate">{pool.reserve1} {pool.token1.symbol}</div>
+                                            <div className="font-medium truncate">{formatAmount(pool.reserve0, pool.token0.symbol)} {pool.token0.symbol}</div>
+                                            <div className="text-gray-400 truncate">{formatAmount(pool.reserve1, pool.token1.symbol)} {pool.token1.symbol}</div>
                                         </div>
                                     </div>
                                     {/* Vol badge */}

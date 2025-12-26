@@ -35,6 +35,7 @@ export default function GovernancePage() {
         proposeCreateGauge,
         proposeSetGovernor,
         castVote,
+        executeProposal,
     } = useGovernance();
 
     const { positions, delegateForGovernance, isLoading: veLoading } = useVeWIND();
@@ -358,6 +359,21 @@ export default function GovernancePage() {
                                             </div>
                                         )}
 
+                                        {/* Execute Button - only for Succeeded proposals */}
+                                        {proposal.state === ProposalState.Succeeded && (
+                                            <button
+                                                onClick={() => executeProposal(
+                                                    proposal.targets,
+                                                    proposal.values,
+                                                    proposal.calldatas,
+                                                    proposal.description
+                                                )}
+                                                className="w-full py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:from-green-400 hover:to-emerald-400 transition"
+                                            >
+                                                ✅ Execute Proposal
+                                            </button>
+                                        )}
+
                                         {/* Proposer info */}
                                         <div className="mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-500">
                                             Proposed by: {proposal.proposer.slice(0, 6)}...{proposal.proposer.slice(-4)}
@@ -455,7 +471,7 @@ export default function GovernancePage() {
 
                                     {/* Quick Select */}
                                     <div className="flex flex-wrap gap-1 mb-2">
-                                        {DEFAULT_TOKEN_LIST.slice(0, 8).map((token) => (
+                                        {DEFAULT_TOKEN_LIST.map((token) => (
                                             <button
                                                 key={token.symbol}
                                                 onClick={() => selectToken(token.address)}
