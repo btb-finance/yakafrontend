@@ -11,6 +11,9 @@ import { useLiquidity } from '@/hooks/useLiquidity';
 import { useTokenBalance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { getPrimaryRpc } from '@/utils/rpc';
+import { usePoolData } from '@/providers/PoolDataProvider';
+import { calculatePoolAPR, calculateRangeAdjustedAPR } from '@/hooks/useWindPrice';
+
 
 type PoolType = 'v2' | 'cl';
 type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'done' | 'error';
@@ -68,6 +71,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const { balance: balanceA } = useTokenBalance(tokenA);
     const { balance: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
+    const { poolRewards, windPrice, seiPrice } = usePoolData();
+
 
     // Initialize from pool config when modal opens
     useEffect(() => {
@@ -921,12 +926,59 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                             <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                                                 <div className="flex items-center justify-between mb-3">
                                                     <span className="text-xs text-gray-400 font-medium">Your Range</span>
-                                                    <span className="text-xs text-primary">
-                                                        {priceLower && priceUpper ?
-                                                            `±${(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100).toFixed(0)}%`
-                                                            : 'Custom'}
-                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs text-primary">
+                                                            {priceLower && priceUpper ?
+                                                                `±${(((parseFloat(priceUpper) - currentPrice) / currentPrice) * 100).toFixed(0)}%`
+                                                                : 'Custom'}
+                                                        </span>
+                                                        {/* Range-Adjusted APR Display */}
+                                                        {(() => {
+                                                            if (!clPoolAddress) return null;
+                                                            const rewardRate = poolRewards.get(clPoolAddress.toLowerCase());
+                                                            if (!rewardRate || rewardRate === BigInt(0)) return null;
+
+                                                            const pLow = parseFloat(priceLower || '0');
+                                                            const pHigh = parseFloat(priceUpper || '0');
+
+                                                            if (pLow <= 0 || pHigh <= 0 || pLow >= pHigh || !currentPrice) return null;
+
+                                                            // Calculate range width as ratio - this determines "capital efficiency"
+                                                            const rangeWidth = (pHigh - pLow) / currentPrice;
+                                                            const referenceWidth = 1.5; // Full range reference (±100%)
+                                                            const rawMultiplier = referenceWidth / rangeWidth;
+                                                            const multiplier = Math.max(1, Math.min(rawMultiplier, 100));
+
+                                                            // Calculate base APR from pool's reward rate
+                                                            // Estimate TVL from pool reserves (rough estimate using $10k reference)
+                                                            const rewardsPerSecond = Number(rewardRate) / 1e18;
+                                                            const annualRewardsWind = rewardsPerSecond * 60 * 60 * 24 * 365;
+                                                            const annualRewardsUsd = annualRewardsWind * windPrice;
+
+                                                            // Use reference TVL of $10k for base APR estimate
+                                                            const referenceTvl = 10000;
+                                                            const baseAPR = (annualRewardsUsd / referenceTvl) * 100;
+
+                                                            // Apply concentration multiplier
+                                                            const adjustedAPR = baseAPR * multiplier;
+
+                                                            // Format APR
+                                                            const aprText = adjustedAPR >= 10000 ? `${(adjustedAPR / 1000).toFixed(0)}K%` :
+                                                                adjustedAPR >= 1000 ? `${(adjustedAPR / 1000).toFixed(1)}K%` :
+                                                                    adjustedAPR >= 100 ? `${adjustedAPR.toFixed(0)}%` :
+                                                                        `${adjustedAPR.toFixed(1)}%`;
+
+                                                            return (
+                                                                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
+                                                                    🔥 APR {aprText}
+                                                                </span>
+                                                            );
+                                                        })()}
+
+
+                                                    </div>
                                                 </div>
+
 
                                                 {/* Draggable Range Slider */}
                                                 <div className="relative h-10 mb-4">

@@ -1408,7 +1408,6 @@ export default function PortfolioPage() {
                             <div className="space-y-2">
                                 {stakedPositions.map((pos, i) => {
                                     const feeMap: Record<number, string> = { 1: '0.005%', 10: '0.05%', 50: '0.02%', 80: '0.30%', 100: '0.045%', 200: '0.25%', 2000: '1%' };
-                                    const dailyRewards = Number(formatUnits(pos.rewardRate, 18)) * 86400;
 
                                     return (
                                         <div key={i} className="p-3 rounded-xl bg-gradient-to-r from-yellow-500/5 to-orange-500/5 border border-yellow-500/20">
@@ -1442,15 +1441,13 @@ export default function PortfolioPage() {
                                                 </span>
                                             </div>
 
-                                            {/* Inline info */}
-                                            <div className="flex items-center justify-between text-xs mb-2 px-1">
+                                            {/* Pending rewards */}
+                                            <div className="text-xs mb-2 px-1">
                                                 <span className="text-green-400 font-medium">
-                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND
-                                                </span>
-                                                <span className="text-gray-400">
-                                                    ~{dailyRewards.toFixed(2)}/day
+                                                    {parseFloat(formatUnits(pos.pendingRewards, 18)).toFixed(4)} WIND pending
                                                 </span>
                                             </div>
+
 
                                             {/* Action Buttons - Compact */}
                                             <div className="flex gap-1.5">

@@ -54,7 +54,7 @@ export default function PoolsPage() {
     // Use globally prefetched pool data - instant load!
     const { v2Pools, clPools, allPools, poolRewards, windPrice, seiPrice, isLoading } = usePoolData();
 
-    // Calculate APR for a pool
+    // Calculate APR for a pool (shows ±10% range APR for CL pools)
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
         const rewardRate = poolRewards.get(pool.address.toLowerCase());
         if (!rewardRate || rewardRate === BigInt(0)) return null;
@@ -80,8 +80,19 @@ export default function PoolsPage() {
         tvlUsd = getTokenValue(s0, r0) + getTokenValue(s1, r1);
         if (tvlUsd <= 0) return 0;
 
-        return calculatePoolAPR(rewardRate, windPrice, tvlUsd);
+        const baseAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd);
+
+        // For CL pools, apply ±10% range concentration multiplier
+        // ±10% range width = 0.2 (20% of price), reference full range = 1.5
+        // Multiplier = 1.5 / 0.2 = 7.5x
+        if (pool.poolType === 'CL') {
+            const rangeMultiplier = 7.5; // ±10% range boost
+            return baseAPR * rangeMultiplier;
+        }
+
+        return baseAPR;
     };
+
 
     // Open modal for a specific pool
     const openAddLiquidityModal = (pool: typeof allPools[0]) => {

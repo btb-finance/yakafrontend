@@ -59,7 +59,7 @@ const VOTER_DISTRIBUTE_ABI = [
 export default function VotePage() {
 
     const { isConnected, address } = useAccount();
-    const [activeTab, setActiveTab] = useState<'lock' | 'vote' | 'rewards'>('lock');
+    const [activeTab, setActiveTab] = useState<'lock' | 'vote' | 'rewards'>('vote');
 
     // Lock state
     const [lockAmount, setLockAmount] = useState('');
