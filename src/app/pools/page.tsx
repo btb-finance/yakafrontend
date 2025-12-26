@@ -466,22 +466,25 @@ export default function PoolsPage() {
 
                                 {/* Mobile: Stats + Action Row */}
                                 <div className="flex md:hidden items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 text-[10px] min-w-0 flex-1">
+                                    <div className="flex items-center gap-3 text-[10px] min-w-0 flex-1">
                                         {/* TVL */}
                                         <div className="min-w-0">
                                             <div className="font-medium truncate">{formatAmount(pool.reserve0, pool.token0.symbol)} {pool.token0.symbol}</div>
                                             <div className="text-gray-400 truncate">{formatAmount(pool.reserve1, pool.token1.symbol)} {pool.token1.symbol}</div>
                                         </div>
-                                    </div>
-                                    {/* Vol badge */}
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">Vol —</span>
+                                        {/* 24h Volume */}
+                                        {pool.volume24h && parseFloat(pool.volume24h) > 0.01 && (
+                                            <div className="flex-shrink-0">
+                                                <div className="text-[9px] text-gray-500">24h Vol</div>
+                                                <div className="font-semibold text-blue-400">${parseFloat(pool.volume24h).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                            </div>
+                                        )}
                                     </div>
                                     <button
                                         onClick={() => openAddLiquidityModal(pool)}
-                                        className="px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+                                        className="px-3 py-2 rounded-lg font-bold text-xs flex-shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 text-white whitespace-nowrap"
                                     >
-                                        +LP
+                                        Add LP
                                     </button>
                                 </div>
 
