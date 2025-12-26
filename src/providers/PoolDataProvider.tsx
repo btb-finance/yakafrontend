@@ -496,18 +496,15 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
                 const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
                 const priorityFetchPromise = priorityPool ? (async () => {
-                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI pool + prices...');
+                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI prices + APR...');
                     try {
-                        const poolPadded = priorityPool.address.slice(2).toLowerCase().padStart(64, '0');
-                        // Fetch balance + reward rate + prices ALL in one batch for max speed
+                        // Only fetch reward rate + prices (TVL comes from DexScreener)
                         const priorityCalls = [
-                            { to: priorityPool.token0.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
-                            { to: priorityPool.token1.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
                             { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
                             { to: WIND_USDC_POOL, data: '0x3850c7bd' }, // slot0() for WIND price
                             { to: USDC_WSEI_POOL, data: '0x3850c7bd' }, // slot0() for SEI price
                         ];
-                        const [bal0Hex, bal1Hex, rewardRateHex, windSlot0Hex, seiSlot0Hex] = await batchRpcCall(priorityCalls);
+                        const [rewardRateHex, windSlot0Hex, seiSlot0Hex] = await batchRpcCall(priorityCalls);
 
                         // Parse prices FIRST so APR can be calculated immediately
                         const windTick = decodeTickFromSlot0(windSlot0Hex);
@@ -531,26 +528,13 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             }
                         }
 
-                        const balance0 = BigInt(bal0Hex || '0x0');
-                        const balance1 = BigInt(bal1Hex || '0x0');
-                        const reserve0 = formatUnits(balance0, priorityPool.token0.decimals);
-                        const reserve1 = formatUnits(balance1, priorityPool.token1.decimals);
-                        const tvl = (parseFloat(reserve0) + parseFloat(reserve1)).toFixed(2);
-
-                        // Update priority pool immediately
-                        setClPools(prev => prev.map(pool =>
-                            pool.address.toLowerCase() === PRIORITY_POOL
-                                ? { ...pool, reserve0, reserve1, tvl }
-                                : pool
-                        ));
-
                         // Update reward rate for priority pool
                         const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
                         if (rewardRate > BigInt(0)) {
                             setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
                             console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
                         }
-                        console.log(`[PoolDataProvider] ⚡ Priority pool loaded! TVL: $${tvl}`);
+                        console.log(`[PoolDataProvider] ⚡ Priority pool prices + APR loaded!`);
                     } catch (err) {
                         console.warn('[PoolDataProvider] Priority pool fetch error:', err);
                     }

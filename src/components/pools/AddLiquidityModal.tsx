@@ -13,10 +13,11 @@ import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, calculateRangeAdjustedAPR } from '@/hooks/useWindPrice';
+import { GAUGE_LIST } from '@/config/gauges';
 
 
 type PoolType = 'v2' | 'cl';
-type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'done' | 'error';
+type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'approving_nft' | 'staking' | 'done' | 'error';
 
 interface PoolConfig {
     token0?: Token;
@@ -66,12 +67,38 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const [txProgress, setTxProgress] = useState<TxStep>('idle');
     const [txError, setTxError] = useState<string | null>(null);
 
+    // Auto-stake state
+    const [autoStake, setAutoStake] = useState(true); // Default to enabled
+
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
     const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
     const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
     const { poolRewards, windPrice, seiPrice } = usePoolData();
+
+    // Find gauge for current pool configuration
+    const getPoolGauge = useCallback(() => {
+        if (!tokenA || !tokenB || poolType !== 'cl') return null;
+
+        const actualTokenA = tokenA.isNative ? WSEI : tokenA;
+        const actualTokenB = tokenB.isNative ? WSEI : tokenB;
+
+        // Find matching gauge by tokens and tick spacing
+        const gauge = GAUGE_LIST.find(g => {
+            if (g.type !== 'CL' || !g.gauge || g.tickSpacing !== tickSpacing) return false;
+            const matchesAB = g.token0.toLowerCase() === actualTokenA.address.toLowerCase() &&
+                g.token1.toLowerCase() === actualTokenB.address.toLowerCase();
+            const matchesBA = g.token0.toLowerCase() === actualTokenB.address.toLowerCase() &&
+                g.token1.toLowerCase() === actualTokenA.address.toLowerCase();
+            return matchesAB || matchesBA;
+        });
+
+        return gauge?.gauge || null;
+    }, [tokenA, tokenB, poolType, tickSpacing]);
+
+    const gaugeAddress = getPoolGauge();
+    const hasGauge = !!gaugeAddress;
 
 
     // Initialize from pool config when modal opens
@@ -509,7 +536,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             });
 
             setTxProgress('minting');
-            const hash = await writeContractAsync({
+            const mintHash = await writeContractAsync({
                 address: CL_CONTRACTS.NonfungiblePositionManager as Address,
                 abi: NFT_POSITION_MANAGER_ABI,
                 functionName: 'mint',
@@ -530,7 +557,82 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 value: nativeValue,
             });
 
-            setTxHash(hash);
+            setTxHash(mintHash);
+
+            // If auto-stake is enabled and this pool has a gauge, stake the NFT
+            if (autoStake && gaugeAddress) {
+                // Wait for mint transaction to confirm and get the tokenId from logs
+                let tokenId: bigint | null = null;
+                for (let i = 0; i < 30; i++) {
+                    const receipt = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                            params: [mintHash],
+                            id: 1
+                        })
+                    }).then(r => r.json());
+
+                    if (receipt.result && receipt.result.status === '0x1') {
+                        // Parse logs to find Transfer event (NFT mint)
+                        // Transfer event signature: Transfer(address,address,uint256)
+                        const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+                        const transferLog = receipt.result.logs?.find((log: any) =>
+                            log.topics[0] === transferTopic &&
+                            log.address.toLowerCase() === CL_CONTRACTS.NonfungiblePositionManager.toLowerCase()
+                        );
+                        if (transferLog && transferLog.topics[3]) {
+                            tokenId = BigInt(transferLog.topics[3]);
+                        }
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                if (tokenId) {
+                    // Approve NFT to gauge
+                    setTxProgress('approving_nft');
+                    const approveNftHash = await writeContractAsync({
+                        address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                        abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                        functionName: 'approve',
+                        args: [gaugeAddress as Address, tokenId],
+                    });
+
+                    // Wait for NFT approval to confirm
+                    let approvalConfirmed = false;
+                    for (let i = 0; i < 30; i++) {
+                        const receipt = await fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                                params: [approveNftHash],
+                                id: 1
+                            })
+                        }).then(r => r.json());
+
+                        if (receipt.result && receipt.result.status === '0x1') {
+                            approvalConfirmed = true;
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+
+                    if (approvalConfirmed) {
+                        // Stake in gauge
+                        setTxProgress('staking');
+                        await writeContractAsync({
+                            address: gaugeAddress as Address,
+                            abi: [{ inputs: [{ name: 'tokenId', type: 'uint256' }], name: 'deposit', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                            functionName: 'deposit',
+                            args: [tokenId],
+                        });
+                    }
+                }
+            }
+
             setAmountA('');
             setAmountB('');
             setTxProgress('done');
@@ -1208,6 +1310,31 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 </div>
 
+                                {/* Auto-Stake Toggle - only show for pools with gauges */}
+                                {hasGauge && poolType === 'cl' && (
+                                    <div className="p-3 rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
+                                        <label className="flex items-center justify-between cursor-pointer">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg">🎁</span>
+                                                <div>
+                                                    <span className="font-medium text-sm">Auto-Stake for WIND Rewards</span>
+                                                    <p className="text-[10px] text-gray-400">Stake in gauge after adding liquidity</p>
+                                                </div>
+                                            </div>
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={autoStake}
+                                                    onChange={(e) => setAutoStake(e.target.checked)}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="w-11 h-6 bg-white/10 rounded-full peer peer-checked:bg-green-500 transition-colors" />
+                                                <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5" />
+                                            </div>
+                                        </label>
+                                    </div>
+                                )}
+
                                 {/* Transaction Progress */}
                                 {txProgress !== 'idle' && txProgress !== 'done' && (
                                     <div className={`p-4 rounded-xl ${txProgress === 'error' ? 'bg-red-500/10 border border-red-500/30' : 'bg-primary/10 border border-primary/30'}`}>
@@ -1226,6 +1353,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     {txProgress === 'approving0' && 'Approving Token 1...'}
                                                     {txProgress === 'approving1' && 'Approving Token 2...'}
                                                     {txProgress === 'minting' && 'Creating Position...'}
+                                                    {txProgress === 'approving_nft' && 'Approving NFT for Staking...'}
+                                                    {txProgress === 'staking' && 'Staking in Gauge...'}
                                                     {txProgress === 'error' && 'Transaction Failed'}
                                                 </p>
                                                 {txError && (
