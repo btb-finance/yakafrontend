@@ -54,21 +54,15 @@ interface DexScreenerPoolData {
     tvlUsd: number;
     reserve0: number; // base token
     reserve1: number; // quote token
+    priceUsd: number; // base token price in USD
+    baseTokenSymbol: string;
+    quoteTokenSymbol: string;
 }
 
 // Fetch pool data from DexScreener for multiple pools (with caching)
 async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string, DexScreenerPoolData>> {
     // Try cache first
-    const cached = loadCachedDexScreenerVolumes();
-    if (cached && cached.size > 0) {
-        // Convert old volume-only cache format to new format (for backwards compatibility)
-        const result = new Map<string, DexScreenerPoolData>();
-        cached.forEach((vol, addr) => {
-            result.set(addr, { volume24h: vol, tvlUsd: 0, reserve0: 0, reserve1: 0 });
-        });
-        // Still need to fetch full data if we only have volume cached
-        // Fall through to fetch fresh data
-    }
+    // Always fetch fresh data (cache is just for volume backup)
 
     const dataMap = new Map<string, DexScreenerPoolData>();
     if (poolAddresses.length === 0) return dataMap;
@@ -88,6 +82,9 @@ async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string
                         tvlUsd: pair.liquidity?.usd || 0,
                         reserve0: pair.liquidity?.base || 0,
                         reserve1: pair.liquidity?.quote || 0,
+                        priceUsd: parseFloat(pair.priceUsd || '0'),
+                        baseTokenSymbol: pair.baseToken?.symbol || '',
+                        quoteTokenSymbol: pair.quoteToken?.symbol || '',
                     });
                 }
             }
@@ -272,19 +269,7 @@ KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
 const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
 const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
 
-// Pool addresses for price discovery (same as useWindPrice)
-const WIND_USDC_POOL = '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0';
-const USDC_WSEI_POOL = '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1';
 
-// Helper to decode tick from slot0 response
-function decodeTickFromSlot0(result: string): number | null {
-    if (!result || result === '0x' || result.length < 130) return null;
-    const tickSlot = result.slice(66, 130);
-    const lastSix = tickSlot.slice(-6);
-    let tick = parseInt(lastSix, 16);
-    if (tick > 0x7fffff) tick = tick - 0x1000000; // Handle negative tick
-    return tick;
-}
 
 // ============================================
 // Batch RPC Helper with retry and chunking
@@ -466,10 +451,46 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
                 console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
 
-                // Fetch volume + TVL from DexScreener (non-blocking) - replaces RPC balance fetching!
+                // Fetch volume + TVL + PRICES from DexScreener (non-blocking) - replaces ALL RPC fetching!
                 const poolAddresses = subgraphPools.map(p => p.address);
                 fetchDexScreenerData(poolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
                     if (dataMap.size > 0) {
+                        // Extract WIND and SEI prices from DexScreener data
+                        dataMap.forEach((data, addr) => {
+                            // WIND/WSEI pool - get WIND price
+                            if (addr === PRIORITY_POOL) {
+                                if (data.priceUsd > 0) {
+                                    setWindPrice(data.priceUsd);
+                                    console.log(`[DexScreener] ⚡ WIND price: $${data.priceUsd.toFixed(4)}`);
+                                }
+                            }
+                            // USDC/WSEI pool - get SEI price (1 / priceNative if USDC is base)
+                            if (data.baseTokenSymbol === 'USDC' && data.quoteTokenSymbol === 'WSEI') {
+                                // USDC price in WSEI means 1 USDC = X WSEI, so SEI = 1/X USD
+                                // But DexScreener priceUsd is USDC price which is ~$1
+                                // We need SEI price from a SEI pair
+                            }
+                            // For SEI price, use WSEI pairs where we can derive it
+                            if (data.quoteTokenSymbol === 'WSEI' && data.priceUsd > 0 && data.baseTokenSymbol !== 'WIND') {
+                                // priceUsd is base token price, we need WSEI price
+                                // Skip - we'll get SEI price from USDC/WSEI directly if available
+                            }
+                        });
+
+                        // Get SEI price from USDC/WSEI pool specifically
+                        const usdcWseiPool = '0x587b82b8ed109d8587a58f9476a8d4268ae945b1'.toLowerCase();
+                        const usdcWseiData = dataMap.get(usdcWseiPool);
+                        if (usdcWseiData && usdcWseiData.reserve0 > 0 && usdcWseiData.reserve1 > 0) {
+                            // USDC is token0, WSEI is token1
+                            // SEI price = USDC reserve / WSEI reserve (since USDC = $1)
+                            const seiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
+                            if (seiPrice > 0 && seiPrice < 100) {
+                                setSeiPrice(seiPrice);
+                                console.log(`[DexScreener] ⚡ SEI price: $${seiPrice.toFixed(4)}`);
+                            }
+                        }
+
+                        // Update pool data
                         setClPools(prev => prev.map(pool => {
                             const dexData = dataMap.get(pool.address.toLowerCase());
                             if (!dexData) return pool;
@@ -481,7 +502,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
                             };
                         }));
-                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data (volume + TVL)`);
+                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data`);
                     }
                 });
 
@@ -496,37 +517,13 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
                 const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
                 const priorityFetchPromise = priorityPool ? (async () => {
-                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI prices + APR...');
+                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI APR...');
                     try {
-                        // Only fetch reward rate + prices (TVL comes from DexScreener)
+                        // Only fetch reward rate (prices come from DexScreener now!)
                         const priorityCalls = [
                             { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
-                            { to: WIND_USDC_POOL, data: '0x3850c7bd' }, // slot0() for WIND price
-                            { to: USDC_WSEI_POOL, data: '0x3850c7bd' }, // slot0() for SEI price
                         ];
-                        const [rewardRateHex, windSlot0Hex, seiSlot0Hex] = await batchRpcCall(priorityCalls);
-
-                        // Parse prices FIRST so APR can be calculated immediately
-                        const windTick = decodeTickFromSlot0(windSlot0Hex);
-                        if (windTick !== null) {
-                            const rawPrice = Math.pow(1.0001, windTick);
-                            const price = rawPrice * Math.pow(10, 12); // WIND/USDC: 18-6 decimal diff
-                            if (price > 0 && price < 1000) {
-                                setWindPrice(price);
-                                console.log(`[PoolDataProvider] ⚡ WIND price: $${price.toFixed(4)}`);
-                            }
-                        }
-
-                        const seiTick = decodeTickFromSlot0(seiSlot0Hex);
-                        if (seiTick !== null) {
-                            const rawPrice = Math.pow(1.0001, seiTick);
-                            const wseiPerUsdc = rawPrice * Math.pow(10, -12); // USDC/WSEI: 6-18 decimal diff
-                            const price = 1 / wseiPerUsdc;
-                            if (price > 0 && price < 100) {
-                                setSeiPrice(price);
-                                console.log(`[PoolDataProvider] ⚡ SEI price: $${price.toFixed(4)}`);
-                            }
-                        }
+                        const [rewardRateHex] = await batchRpcCall(priorityCalls);
 
                         // Update reward rate for priority pool
                         const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
@@ -534,7 +531,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
                             console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
                         }
-                        console.log(`[PoolDataProvider] ⚡ Priority pool prices + APR loaded!`);
                     } catch (err) {
                         console.warn('[PoolDataProvider] Priority pool fetch error:', err);
                     }
