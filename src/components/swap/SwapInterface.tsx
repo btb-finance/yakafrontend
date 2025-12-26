@@ -32,12 +32,17 @@ interface BestRoute {
     intermediate?: Token; // Intermediate token object for multi-hop execution
 }
 
-export function SwapInterface() {
+interface SwapInterfaceProps {
+    initialTokenIn?: Token;
+    initialTokenOut?: Token;
+}
+
+export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterfaceProps) {
     const { isConnected, address } = useAccount();
 
-    // Token state
-    const [tokenIn, setTokenIn] = useState<Token | undefined>(SEI);
-    const [tokenOut, setTokenOut] = useState<Token | undefined>(USDC);
+    // Token state - use props if provided, otherwise defaults
+    const [tokenIn, setTokenIn] = useState<Token | undefined>(initialTokenIn || SEI);
+    const [tokenOut, setTokenOut] = useState<Token | undefined>(initialTokenOut || USDC);
     const [amountIn, setAmountIn] = useState('');
     const [amountOut, setAmountOut] = useState('');
 
