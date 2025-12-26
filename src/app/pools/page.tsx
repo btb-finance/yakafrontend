@@ -8,7 +8,7 @@ import { Tooltip } from '@/components/common/Tooltip';
 import { EmptyState } from '@/components/common/InfoCard';
 import { AddLiquidityModal } from '@/components/pools/AddLiquidityModal';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
-import { useWindPrice, calculatePoolAPR } from '@/hooks/useWindPrice';
+import { calculatePoolAPR } from '@/hooks/useWindPrice';
 
 type PoolType = 'all' | 'v2' | 'cl';
 type Category = 'all' | 'stable' | 'wind' | 'btc' | 'eth' | 'other';
@@ -52,10 +52,7 @@ export default function PoolsPage() {
     const [selectedPool, setSelectedPool] = useState<PoolConfig | undefined>(undefined);
 
     // Use globally prefetched pool data - instant load!
-    const { v2Pools, clPools, allPools, poolRewards, isLoading } = usePoolData();
-
-    // Get WIND and SEI prices for APR calculation
-    const { windPrice, seiPrice } = useWindPrice();
+    const { v2Pools, clPools, allPools, poolRewards, windPrice, seiPrice, isLoading } = usePoolData();
 
     // Calculate APR for a pool
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {

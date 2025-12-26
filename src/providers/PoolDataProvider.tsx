@@ -129,6 +129,9 @@ interface PoolDataContextType {
     allPools: PoolData[];
     tokenInfoMap: Map<string, TokenInfo>;
     poolRewards: Map<string, bigint>;
+    // Prices for APR calculation (loaded with priority pool)
+    windPrice: number;
+    seiPrice: number;
     // Gauge/Voting data
     gauges: GaugeInfo[];
     totalVoteWeight: bigint;
@@ -164,6 +167,24 @@ KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
     decimals: WSEI.decimals,
     logoURI: WSEI.logoURI,
 };
+
+// Priority pool address - WIND/WSEI pool loads first with its APR
+const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
+const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
+
+// Pool addresses for price discovery (same as useWindPrice)
+const WIND_USDC_POOL = '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0';
+const USDC_WSEI_POOL = '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1';
+
+// Helper to decode tick from slot0 response
+function decodeTickFromSlot0(result: string): number | null {
+    if (!result || result === '0x' || result.length < 130) return null;
+    const tickSlot = result.slice(66, 130);
+    const lastSix = tickSlot.slice(-6);
+    let tick = parseInt(lastSix, 16);
+    if (tick > 0x7fffff) tick = tick - 0x1000000; // Handle negative tick
+    return tick;
+}
 
 // ============================================
 // Batch RPC Helper with retry and chunking
@@ -263,6 +284,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [clPools, setClPools] = useState<PoolData[]>([]);
     const [tokenInfoMap, setTokenInfoMap] = useState<Map<string, TokenInfo>>(new Map());
     const [poolRewards, setPoolRewards] = useState<Map<string, bigint>>(new Map());
+    const [windPrice, setWindPrice] = useState<number>(0.005); // Default fallback
+    const [seiPrice, setSeiPrice] = useState<number>(0.35); // Default fallback
     const [isLoading, setIsLoading] = useState(true);
 
     // Gauge/Voting state
@@ -329,10 +352,19 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     };
                 });
 
-                // Set pools from subgraph (for immediate display)
+                // Sort pools to put priority pool FIRST for immediate display
+                subgraphPools.sort((a, b) => {
+                    const aIsPriority = a.address.toLowerCase() === PRIORITY_POOL;
+                    const bIsPriority = b.address.toLowerCase() === PRIORITY_POOL;
+                    if (aIsPriority && !bIsPriority) return -1;
+                    if (bIsPriority && !aIsPriority) return 1;
+                    return 0;
+                });
+
+                // Set pools from subgraph (for immediate display - priority pool first!)
                 setClPools(subgraphPools);
                 setIsLoading(false);
-                console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph`);
+                console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
 
                 // Build token map from subgraph data
                 const newTokenMap = new Map<string, TokenInfo>();
@@ -342,7 +374,73 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 });
                 setTokenInfoMap(newTokenMap);
 
-                // Fetch gauge data for voting
+                // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
+                const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
+                const priorityFetchPromise = priorityPool ? (async () => {
+                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI pool + prices...');
+                    try {
+                        const poolPadded = priorityPool.address.slice(2).toLowerCase().padStart(64, '0');
+                        // Fetch balance + reward rate + prices ALL in one batch for max speed
+                        const priorityCalls = [
+                            { to: priorityPool.token0.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
+                            { to: priorityPool.token1.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
+                            { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
+                            { to: WIND_USDC_POOL, data: '0x3850c7bd' }, // slot0() for WIND price
+                            { to: USDC_WSEI_POOL, data: '0x3850c7bd' }, // slot0() for SEI price
+                        ];
+                        const [bal0Hex, bal1Hex, rewardRateHex, windSlot0Hex, seiSlot0Hex] = await batchRpcCall(priorityCalls);
+
+                        // Parse prices FIRST so APR can be calculated immediately
+                        const windTick = decodeTickFromSlot0(windSlot0Hex);
+                        if (windTick !== null) {
+                            const rawPrice = Math.pow(1.0001, windTick);
+                            const price = rawPrice * Math.pow(10, 12); // WIND/USDC: 18-6 decimal diff
+                            if (price > 0 && price < 1000) {
+                                setWindPrice(price);
+                                console.log(`[PoolDataProvider] ⚡ WIND price: $${price.toFixed(4)}`);
+                            }
+                        }
+
+                        const seiTick = decodeTickFromSlot0(seiSlot0Hex);
+                        if (seiTick !== null) {
+                            const rawPrice = Math.pow(1.0001, seiTick);
+                            const wseiPerUsdc = rawPrice * Math.pow(10, -12); // USDC/WSEI: 6-18 decimal diff
+                            const price = 1 / wseiPerUsdc;
+                            if (price > 0 && price < 100) {
+                                setSeiPrice(price);
+                                console.log(`[PoolDataProvider] ⚡ SEI price: $${price.toFixed(4)}`);
+                            }
+                        }
+
+                        const balance0 = BigInt(bal0Hex || '0x0');
+                        const balance1 = BigInt(bal1Hex || '0x0');
+                        const reserve0 = formatUnits(balance0, priorityPool.token0.decimals);
+                        const reserve1 = formatUnits(balance1, priorityPool.token1.decimals);
+                        const tvl = (parseFloat(reserve0) + parseFloat(reserve1)).toFixed(2);
+
+                        // Update priority pool immediately
+                        setClPools(prev => prev.map(pool =>
+                            pool.address.toLowerCase() === PRIORITY_POOL
+                                ? { ...pool, reserve0, reserve1, tvl }
+                                : pool
+                        ));
+
+                        // Update reward rate for priority pool
+                        const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
+                        if (rewardRate > BigInt(0)) {
+                            setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
+                            console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
+                        }
+                        console.log(`[PoolDataProvider] ⚡ Priority pool loaded! TVL: $${tvl}`);
+                    } catch (err) {
+                        console.warn('[PoolDataProvider] Priority pool fetch error:', err);
+                    }
+                })() : Promise.resolve();
+
+                // Start priority fetch immediately (non-blocking)
+                priorityFetchPromise.catch(() => { }); // Handle silently
+
+                // Fetch gauge data for voting (in parallel with priority fetch)
                 await fetchGaugeData(newTokenMap);
 
                 // NOW fetch live balances via RPC for accurate TVL
@@ -1200,6 +1298,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         allPools: [...v2Pools, ...clPools],
         tokenInfoMap,
         poolRewards,
+        windPrice,
+        seiPrice,
         gauges,
         totalVoteWeight,
         gaugesLoading,
