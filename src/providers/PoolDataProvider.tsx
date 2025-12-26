@@ -54,21 +54,15 @@ interface DexScreenerPoolData {
     tvlUsd: number;
     reserve0: number; // base token
     reserve1: number; // quote token
+    priceUsd: number; // base token price in USD
+    baseTokenSymbol: string;
+    quoteTokenSymbol: string;
 }
 
 // Fetch pool data from DexScreener for multiple pools (with caching)
 async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string, DexScreenerPoolData>> {
     // Try cache first
-    const cached = loadCachedDexScreenerVolumes();
-    if (cached && cached.size > 0) {
-        // Convert old volume-only cache format to new format (for backwards compatibility)
-        const result = new Map<string, DexScreenerPoolData>();
-        cached.forEach((vol, addr) => {
-            result.set(addr, { volume24h: vol, tvlUsd: 0, reserve0: 0, reserve1: 0 });
-        });
-        // Still need to fetch full data if we only have volume cached
-        // Fall through to fetch fresh data
-    }
+    // Always fetch fresh data (cache is just for volume backup)
 
     const dataMap = new Map<string, DexScreenerPoolData>();
     if (poolAddresses.length === 0) return dataMap;
@@ -88,6 +82,9 @@ async function fetchDexScreenerData(poolAddresses: string[]): Promise<Map<string
                         tvlUsd: pair.liquidity?.usd || 0,
                         reserve0: pair.liquidity?.base || 0,
                         reserve1: pair.liquidity?.quote || 0,
+                        priceUsd: parseFloat(pair.priceUsd || '0'),
+                        baseTokenSymbol: pair.baseToken?.symbol || '',
+                        quoteTokenSymbol: pair.quoteToken?.symbol || '',
                     });
                 }
             }
@@ -272,19 +269,7 @@ KNOWN_TOKENS[WSEI.address.toLowerCase()] = {
 const PRIORITY_POOL = '0xc7035A2Ef7C685Fc853475744623A0F164541b69'.toLowerCase();
 const PRIORITY_GAUGE = '0x65e450a9E7735c3991b1495C772aeDb33A1A91Cb'.toLowerCase();
 
-// Pool addresses for price discovery (same as useWindPrice)
-const WIND_USDC_POOL = '0x576fc1F102c6Bb3F0A2bc87fF01fB652b883dFe0';
-const USDC_WSEI_POOL = '0x587b82b8ed109D8587a58f9476a8d4268Ae945B1';
 
-// Helper to decode tick from slot0 response
-function decodeTickFromSlot0(result: string): number | null {
-    if (!result || result === '0x' || result.length < 130) return null;
-    const tickSlot = result.slice(66, 130);
-    const lastSix = tickSlot.slice(-6);
-    let tick = parseInt(lastSix, 16);
-    if (tick > 0x7fffff) tick = tick - 0x1000000; // Handle negative tick
-    return tick;
-}
 
 // ============================================
 // Batch RPC Helper with retry and chunking
@@ -466,10 +451,46 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
                 console.log(`[PoolDataProvider] 📊 Showing ${subgraphPools.length} pools from subgraph (priority pool first)`);
 
-                // Fetch volume + TVL from DexScreener (non-blocking) - replaces RPC balance fetching!
+                // Fetch volume + TVL + PRICES from DexScreener (non-blocking) - replaces ALL RPC fetching!
                 const poolAddresses = subgraphPools.map(p => p.address);
                 fetchDexScreenerData(poolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
                     if (dataMap.size > 0) {
+                        // Extract WIND and SEI prices from DexScreener data
+                        dataMap.forEach((data, addr) => {
+                            // WIND/WSEI pool - get WIND price
+                            if (addr === PRIORITY_POOL) {
+                                if (data.priceUsd > 0) {
+                                    setWindPrice(data.priceUsd);
+                                    console.log(`[DexScreener] ⚡ WIND price: $${data.priceUsd.toFixed(4)}`);
+                                }
+                            }
+                            // USDC/WSEI pool - get SEI price (1 / priceNative if USDC is base)
+                            if (data.baseTokenSymbol === 'USDC' && data.quoteTokenSymbol === 'WSEI') {
+                                // USDC price in WSEI means 1 USDC = X WSEI, so SEI = 1/X USD
+                                // But DexScreener priceUsd is USDC price which is ~$1
+                                // We need SEI price from a SEI pair
+                            }
+                            // For SEI price, use WSEI pairs where we can derive it
+                            if (data.quoteTokenSymbol === 'WSEI' && data.priceUsd > 0 && data.baseTokenSymbol !== 'WIND') {
+                                // priceUsd is base token price, we need WSEI price
+                                // Skip - we'll get SEI price from USDC/WSEI directly if available
+                            }
+                        });
+
+                        // Get SEI price from USDC/WSEI pool specifically
+                        const usdcWseiPool = '0x587b82b8ed109d8587a58f9476a8d4268ae945b1'.toLowerCase();
+                        const usdcWseiData = dataMap.get(usdcWseiPool);
+                        if (usdcWseiData && usdcWseiData.reserve0 > 0 && usdcWseiData.reserve1 > 0) {
+                            // USDC is token0, WSEI is token1
+                            // SEI price = USDC reserve / WSEI reserve (since USDC = $1)
+                            const seiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
+                            if (seiPrice > 0 && seiPrice < 100) {
+                                setSeiPrice(seiPrice);
+                                console.log(`[DexScreener] ⚡ SEI price: $${seiPrice.toFixed(4)}`);
+                            }
+                        }
+
+                        // Update pool data
                         setClPools(prev => prev.map(pool => {
                             const dexData = dataMap.get(pool.address.toLowerCase());
                             if (!dexData) return pool;
@@ -481,7 +502,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
                             };
                         }));
-                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data (volume + TVL)`);
+                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data`);
                     }
                 });
 
@@ -496,53 +517,13 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 // ⚡ PRIORITY: Fetch WIND/WSEI pool balance + APR + PRICES IMMEDIATELY (don't await)
                 const priorityPool = subgraphPools.find(p => p.address.toLowerCase() === PRIORITY_POOL);
                 const priorityFetchPromise = priorityPool ? (async () => {
-                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI pool + prices...');
+                    console.log('[PoolDataProvider] ⚡ Priority loading WIND/WSEI APR...');
                     try {
-                        const poolPadded = priorityPool.address.slice(2).toLowerCase().padStart(64, '0');
-                        // Fetch balance + reward rate + prices ALL in one batch for max speed
+                        // Only fetch reward rate (prices come from DexScreener now!)
                         const priorityCalls = [
-                            { to: priorityPool.token0.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
-                            { to: priorityPool.token1.address, data: `0x70a08231${poolPadded}` }, // balanceOf(pool)
                             { to: PRIORITY_GAUGE, data: '0x7b0a47ee' }, // rewardRate()
-                            { to: WIND_USDC_POOL, data: '0x3850c7bd' }, // slot0() for WIND price
-                            { to: USDC_WSEI_POOL, data: '0x3850c7bd' }, // slot0() for SEI price
                         ];
-                        const [bal0Hex, bal1Hex, rewardRateHex, windSlot0Hex, seiSlot0Hex] = await batchRpcCall(priorityCalls);
-
-                        // Parse prices FIRST so APR can be calculated immediately
-                        const windTick = decodeTickFromSlot0(windSlot0Hex);
-                        if (windTick !== null) {
-                            const rawPrice = Math.pow(1.0001, windTick);
-                            const price = rawPrice * Math.pow(10, 12); // WIND/USDC: 18-6 decimal diff
-                            if (price > 0 && price < 1000) {
-                                setWindPrice(price);
-                                console.log(`[PoolDataProvider] ⚡ WIND price: $${price.toFixed(4)}`);
-                            }
-                        }
-
-                        const seiTick = decodeTickFromSlot0(seiSlot0Hex);
-                        if (seiTick !== null) {
-                            const rawPrice = Math.pow(1.0001, seiTick);
-                            const wseiPerUsdc = rawPrice * Math.pow(10, -12); // USDC/WSEI: 6-18 decimal diff
-                            const price = 1 / wseiPerUsdc;
-                            if (price > 0 && price < 100) {
-                                setSeiPrice(price);
-                                console.log(`[PoolDataProvider] ⚡ SEI price: $${price.toFixed(4)}`);
-                            }
-                        }
-
-                        const balance0 = BigInt(bal0Hex || '0x0');
-                        const balance1 = BigInt(bal1Hex || '0x0');
-                        const reserve0 = formatUnits(balance0, priorityPool.token0.decimals);
-                        const reserve1 = formatUnits(balance1, priorityPool.token1.decimals);
-                        const tvl = (parseFloat(reserve0) + parseFloat(reserve1)).toFixed(2);
-
-                        // Update priority pool immediately
-                        setClPools(prev => prev.map(pool =>
-                            pool.address.toLowerCase() === PRIORITY_POOL
-                                ? { ...pool, reserve0, reserve1, tvl }
-                                : pool
-                        ));
+                        const [rewardRateHex] = await batchRpcCall(priorityCalls);
 
                         // Update reward rate for priority pool
                         const rewardRate = rewardRateHex !== '0x' ? BigInt(rewardRateHex) : BigInt(0);
@@ -550,7 +531,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             setPoolRewards(prev => new Map(prev).set(PRIORITY_POOL, rewardRate));
                             console.log(`[PoolDataProvider] ⚡ WIND/WSEI APR loaded: ${formatUnits(rewardRate, 18)}/sec`);
                         }
-                        console.log(`[PoolDataProvider] ⚡ Priority pool loaded! TVL: $${tvl}`);
                     } catch (err) {
                         console.warn('[PoolDataProvider] Priority pool fetch error:', err);
                     }
@@ -801,68 +781,8 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 };
             });
 
-            // Fetch token balances for GAUGE_LIST pools (NOT factory pools - to avoid mismatch)
-            // Get the same pool list we're displaying
-            let gaugePoolsForBalance: { pool: string; token0: string; token1: string }[] = [];
-            try {
-                const { GAUGE_LIST } = await import('@/config/gauges');
-                gaugePoolsForBalance = GAUGE_LIST.map(g => ({ pool: g.pool, token0: g.token0, token1: g.token1 }));
-            } catch (e) {
-                console.warn('[PoolDataProvider] Could not load GAUGE_LIST for balance fetch');
-            }
-
-            // Progressive loading: fetch each pool independently and update UI immediately
-            // This way users see data as it arrives, not waiting for all pools
-            const fetchPoolBalance = async (poolInfo: { pool: string; token0: string; token1: string }, retries = 2) => {
-                for (let attempt = 0; attempt <= retries; attempt++) {
-                    try {
-                        const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
-                        const response = await fetch(getPrimaryRpc(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify([
-                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token0, data: `0x70a08231${poolPadded}` }, 'latest'], id: 1 },
-                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token1, data: `0x70a08231${poolPadded}` }, 'latest'], id: 2 }
-                            ])
-                        });
-
-                        const results = await response.json();
-                        if (!Array.isArray(results) || results.length < 2) throw new Error('Invalid response');
-
-                        const balance0 = results[0]?.result && results[0].result !== '0x' ? BigInt(results[0].result) : BigInt(0);
-                        const balance1 = results[1]?.result && results[1].result !== '0x' ? BigInt(results[1].result) : BigInt(0);
-
-                        const decimals0 = KNOWN_TOKENS[poolInfo.token0.toLowerCase()]?.decimals || 18;
-                        const decimals1 = KNOWN_TOKENS[poolInfo.token1.toLowerCase()]?.decimals || 18;
-
-                        const val0 = Number(balance0) / Math.pow(10, decimals0);
-                        const val1 = Number(balance1) / Math.pow(10, decimals1);
-
-                        const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
-                        const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
-                        const tvl = (val0 + val1).toFixed(2);
-
-                        // Update this specific pool immediately
-                        setClPools(prev => prev.map(pool =>
-                            pool.address.toLowerCase() === poolInfo.pool.toLowerCase()
-                                ? { ...pool, reserve0, reserve1, tvl }
-                                : pool
-                        ));
-                        return; // Success - exit retry loop
-                    } catch (err) {
-                        if (attempt < retries) {
-                            await new Promise(r => setTimeout(r, 200 * (attempt + 1))); // Wait before retry
-                            continue;
-                        }
-                        console.warn(`[PoolDataProvider] Failed to fetch balance for ${poolInfo.pool} after ${retries} retries`);
-                    }
-                }
-            };
-
-            // Fire all pool balance fetches in parallel, wait for all to complete, then save cache
-            await Promise.all(gaugePoolsForBalance.map(p => fetchPoolBalance(p)));
-
-            // Save to cache after all pools are fetched
+            // TVL and reserves now come from DexScreener - no RPC balance fetching needed!
+            // Save to cache after pools are set
             setClPools(currentPools => {
                 saveCachePools(currentPools, v2Pools);
                 return currentPools;
@@ -1061,109 +981,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
         fetchAllData();
     }, [fetchAllData]);
 
-    // Focused retry for failed pools only - runs every 5 seconds until all pools loaded
-    useEffect(() => {
-        let retryCount = 0;
-        const MAX_RETRIES = 12; // 60 seconds of retrying
-
-        const retryFailedPools = async () => {
-            // Check current state via callback to avoid stale closure
-            let failedPoolAddresses: string[] = [];
-            setClPools(currentPools => {
-                // A pool is "failed" if both reserves are 0 (either '0' or '0.00')
-                failedPoolAddresses = currentPools
-                    .filter(p => {
-                        const r0 = parseFloat(p.reserve0) || 0;
-                        const r1 = parseFloat(p.reserve1) || 0;
-                        return r0 === 0 && r1 === 0;
-                    })
-                    .map(p => p.address.toLowerCase());
-                return currentPools; // Return unchanged
-            });
-
-            if (failedPoolAddresses.length === 0) {
-                console.log('[PoolDataProvider] ✅ All pools loaded!');
-                return;
-            }
-
-            if (retryCount >= MAX_RETRIES) {
-                console.log(`[PoolDataProvider] ⚠️ Max retries, ${failedPoolAddresses.length} pools still failed`);
-                return;
-            }
-
-            retryCount++;
-            console.log(`[PoolDataProvider] 🔄 Retry ${retryCount}/${MAX_RETRIES} for ${failedPoolAddresses.length} failed pools`);
-
-            try {
-                const { GAUGE_LIST } = await import('@/config/gauges');
-                const poolsToRetry = GAUGE_LIST.filter(g => failedPoolAddresses.includes(g.pool.toLowerCase()));
-
-                // Retry each failed pool
-                for (const poolInfo of poolsToRetry) {
-                    try {
-                        const poolPadded = poolInfo.pool.slice(2).toLowerCase().padStart(64, '0');
-                        const response = await fetch(getPrimaryRpc(), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify([
-                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token0, data: `0x70a08231${poolPadded}` }, 'latest'], id: 1 },
-                                { jsonrpc: '2.0', method: 'eth_call', params: [{ to: poolInfo.token1, data: `0x70a08231${poolPadded}` }, 'latest'], id: 2 }
-                            ])
-                        });
-
-                        const results = await response.json();
-                        if (Array.isArray(results) && results.length >= 2) {
-                            const balance0 = results[0]?.result && results[0].result !== '0x' ? BigInt(results[0].result) : BigInt(0);
-                            const balance1 = results[1]?.result && results[1].result !== '0x' ? BigInt(results[1].result) : BigInt(0);
-
-                            const decimals0 = KNOWN_TOKENS[poolInfo.token0.toLowerCase()]?.decimals || 18;
-                            const decimals1 = KNOWN_TOKENS[poolInfo.token1.toLowerCase()]?.decimals || 18;
-
-                            const val0 = Number(balance0) / Math.pow(10, decimals0);
-                            const val1 = Number(balance1) / Math.pow(10, decimals1);
-
-                            const reserve0 = val0 > 1000 ? val0.toFixed(0) : val0.toFixed(2);
-                            const reserve1 = val1 > 1000 ? val1.toFixed(0) : val1.toFixed(2);
-                            const tvl = (val0 + val1).toFixed(2);
-
-                            setClPools(prev => {
-                                const updated = prev.map(pool =>
-                                    pool.address.toLowerCase() === poolInfo.pool.toLowerCase()
-                                        ? { ...pool, reserve0, reserve1, tvl }
-                                        : pool
-                                );
-                                // Save to cache after each successful update
-                                saveCachePools(updated, []);
-                                return updated;
-                            });
-                            console.log(`[PoolDataProvider] ✅ ${poolInfo.pool.slice(0, 10)}...`);
-                        }
-                    } catch (err) {
-                        // Continue to next pool
-                    }
-                    // Small delay between requests to avoid rate limiting
-                    await new Promise(r => setTimeout(r, 100));
-                }
-            } catch (e) {
-                console.warn('[PoolDataProvider] Retry failed');
-            }
-        };
-
-        // Start retry after 3 seconds, then every 5 seconds
-        const timeout = setTimeout(() => {
-            retryFailedPools();
-            const interval = setInterval(retryFailedPools, 5000);
-            // Store interval for cleanup
-            (window as any).__poolRetryInterval = interval;
-        }, 3000);
-
-        return () => {
-            clearTimeout(timeout);
-            if ((window as any).__poolRetryInterval) {
-                clearInterval((window as any).__poolRetryInterval);
-            }
-        };
-    }, []);
+    // Removed: Retry logic for RPC balance fetching - DexScreener provides TVL now
 
     // Auto-refresh every 10 minutes (only if page is still open)
     useEffect(() => {

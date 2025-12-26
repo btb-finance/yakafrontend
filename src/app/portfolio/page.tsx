@@ -237,6 +237,9 @@ export default function PortfolioPage() {
     const [amount1ToAdd, setAmount1ToAdd] = useState('');
     const [balance0, setBalance0] = useState<string>('0');
     const [balance1, setBalance1] = useState<string>('0');
+    // Raw balances for MAX button (full precision)
+    const [rawBalance0, setRawBalance0] = useState<string>('0');
+    const [rawBalance1, setRawBalance1] = useState<string>('0');
 
     // Contract write hook
     const { writeContractAsync } = useWriteContract();
@@ -341,6 +344,8 @@ export default function PortfolioPage() {
             if (!address || !selectedPosition || !showIncreaseLiquidityModal) {
                 setBalance0('0');
                 setBalance1('0');
+                setRawBalance0('0');
+                setRawBalance1('0');
                 setCurrentTick(null);
                 return;
             }
@@ -441,11 +446,15 @@ export default function PortfolioPage() {
                     }).then(r => r.json());
                     if (nativeBal.result) {
                         const nativeWei = BigInt(nativeBal.result);
-                        setBalance0((Number(nativeWei) / 1e18).toFixed(6));
+                        const fullValue = Number(nativeWei) / 1e18;
+                        setRawBalance0(fullValue.toString());
+                        setBalance0(fullValue.toFixed(6));
                     }
                 } else if (bal0Response.result && bal0Response.result !== '0x') {
                     const bal0Wei = BigInt(bal0Response.result);
-                    setBalance0((Number(bal0Wei) / (10 ** t0.decimals)).toFixed(6));
+                    const fullValue = Number(bal0Wei) / (10 ** t0.decimals);
+                    setRawBalance0(fullValue.toString());
+                    setBalance0(fullValue.toFixed(6));
                 }
 
                 if (isToken1WSEI) {
@@ -461,11 +470,15 @@ export default function PortfolioPage() {
                     }).then(r => r.json());
                     if (nativeBal.result) {
                         const nativeWei = BigInt(nativeBal.result);
-                        setBalance1((Number(nativeWei) / 1e18).toFixed(6));
+                        const fullValue = Number(nativeWei) / 1e18;
+                        setRawBalance1(fullValue.toString());
+                        setBalance1(fullValue.toFixed(6));
                     }
                 } else if (bal1Response.result && bal1Response.result !== '0x') {
                     const bal1Wei = BigInt(bal1Response.result);
-                    setBalance1((Number(bal1Wei) / (10 ** t1.decimals)).toFixed(6));
+                    const fullValue = Number(bal1Wei) / (10 ** t1.decimals);
+                    setRawBalance1(fullValue.toString());
+                    setBalance1(fullValue.toFixed(6));
                 }
 
                 // Parse slot0 to get current tick
@@ -691,15 +704,65 @@ export default function PortfolioPage() {
                 return;
             }
 
-            const gaugeAddress = '0x' + gaugeResult.result.slice(-40);
+            const gaugeAddress = ('0x' + gaugeResult.result.slice(-40)).toLowerCase();
 
-            // Approve NFT to gauge
-            await writeContractAsync({
-                address: CL_CONTRACTS.NonfungiblePositionManager as Address,
-                abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
-                functionName: 'approve',
-                args: [gaugeAddress as Address, position.tokenId],
-            });
+            // Check if NFT is already approved for this gauge
+            // getApproved(tokenId) returns the approved address for the token
+            const getApprovedSelector = '0x081812fc'; // getApproved(uint256)
+            const tokenIdHex = position.tokenId.toString(16).padStart(64, '0');
+
+            const approvedResult = await fetch(getPrimaryRpc(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0', method: 'eth_call',
+                    params: [{
+                        to: CL_CONTRACTS.NonfungiblePositionManager,
+                        data: `${getApprovedSelector}${tokenIdHex}`
+                    }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            const approvedAddress = approvedResult.result ? ('0x' + approvedResult.result.slice(-40)).toLowerCase() : '';
+            const needsApproval = approvedAddress !== gaugeAddress;
+
+            // Only request approval if not already approved
+            if (needsApproval) {
+                const approvalTx = await writeContractAsync({
+                    address: CL_CONTRACTS.NonfungiblePositionManager as Address,
+                    abi: [{ inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], name: 'approve', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+                    functionName: 'approve',
+                    args: [gaugeAddress as Address, position.tokenId],
+                });
+
+                // Wait for approval to be confirmed before depositing
+                // Poll for tx receipt
+                let confirmed = false;
+                for (let i = 0; i < 30; i++) { // Wait up to 30 seconds
+                    const receipt = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                            params: [approvalTx],
+                            id: 1
+                        })
+                    }).then(r => r.json());
+
+                    if (receipt.result && receipt.result.status === '0x1') {
+                        confirmed = true;
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                if (!confirmed) {
+                    alert('Approval transaction failed or timed out. Please try again.');
+                    setActionLoading(false);
+                    return;
+                }
+            }
 
             // Deposit to gauge
             await writeContractAsync({
@@ -795,13 +858,62 @@ export default function PortfolioPage() {
             const liquidityToRemove = (pos.lpBalance * BigInt(percent)) / BigInt(100);
             const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 60);
 
-            // First approve the router to spend LP tokens
-            await writeContractAsync({
-                address: pos.poolAddress as Address,
-                abi: ERC20_ABI,
-                functionName: 'approve',
-                args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
-            });
+            // Check existing allowance first
+            const allowanceSelector = '0xdd62ed3e'; // allowance(address,address)
+            const ownerPadded = address.slice(2).toLowerCase().padStart(64, '0');
+            const spenderPadded = V2_CONTRACTS.Router.slice(2).toLowerCase().padStart(64, '0');
+
+            const allowanceResult = await fetch(getPrimaryRpc(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0', method: 'eth_call',
+                    params: [{
+                        to: pos.poolAddress,
+                        data: `${allowanceSelector}${ownerPadded}${spenderPadded}`
+                    }, 'latest'],
+                    id: 1
+                })
+            }).then(r => r.json());
+
+            const currentAllowance = allowanceResult.result ? BigInt(allowanceResult.result) : BigInt(0);
+            const needsApproval = currentAllowance < liquidityToRemove;
+
+            // Only approve if needed
+            if (needsApproval) {
+                const approvalTx = await writeContractAsync({
+                    address: pos.poolAddress as Address,
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [V2_CONTRACTS.Router as Address, liquidityToRemove],
+                });
+
+                // Wait for approval to confirm before removing liquidity
+                let confirmed = false;
+                for (let i = 0; i < 30; i++) {
+                    const receipt = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                            params: [approvalTx],
+                            id: 1
+                        })
+                    }).then(r => r.json());
+
+                    if (receipt.result && receipt.result.status === '0x1') {
+                        confirmed = true;
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                if (!confirmed) {
+                    alert('Approval transaction failed or timed out. Please try again.');
+                    setActionLoading(false);
+                    return;
+                }
+            }
 
             // Then remove liquidity
             await writeContractAsync({
@@ -885,16 +997,44 @@ export default function PortfolioPage() {
                 return allowance >= amount;
             };
 
+            // Helper to wait for transaction confirmation
+            const waitForTxConfirmation = async (txHash: string): Promise<boolean> => {
+                for (let i = 0; i < 30; i++) {
+                    const receipt = await fetch(getPrimaryRpc(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0', method: 'eth_getTransactionReceipt',
+                            params: [txHash],
+                            id: 1
+                        })
+                    }).then(r => r.json());
+
+                    if (receipt.result && receipt.result.status === '0x1') {
+                        return true;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                return false;
+            };
+
             // Approve token0 if needed (skip for WSEI when using native)
             if (amount0Desired > BigInt(0) && !(isToken0WSEI && nativeValue > BigInt(0))) {
                 const hasAllowance = await checkAllowance(selectedPosition.token0, amount0Desired);
                 if (!hasAllowance) {
-                    await writeContractAsync({
+                    const approvalTx = await writeContractAsync({
                         address: selectedPosition.token0 as Address,
                         abi: ERC20_ABI,
                         functionName: 'approve',
                         args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount0Desired],
                     });
+                    // Wait for approval to confirm
+                    const confirmed = await waitForTxConfirmation(approvalTx);
+                    if (!confirmed) {
+                        alert('Token0 approval failed or timed out. Please try again.');
+                        setActionLoading(false);
+                        return;
+                    }
                 }
             }
 
@@ -902,12 +1042,19 @@ export default function PortfolioPage() {
             if (amount1Desired > BigInt(0) && !(isToken1WSEI && nativeValue > BigInt(0))) {
                 const hasAllowance = await checkAllowance(selectedPosition.token1, amount1Desired);
                 if (!hasAllowance) {
-                    await writeContractAsync({
+                    const approvalTx = await writeContractAsync({
                         address: selectedPosition.token1 as Address,
                         abi: ERC20_ABI,
                         functionName: 'approve',
                         args: [CL_CONTRACTS.NonfungiblePositionManager as Address, amount1Desired],
                     });
+                    // Wait for approval to confirm
+                    const confirmed = await waitForTxConfirmation(approvalTx);
+                    if (!confirmed) {
+                        alert('Token1 approval failed or timed out. Please try again.');
+                        setActionLoading(false);
+                        return;
+                    }
                 }
             }
 
@@ -1681,12 +1828,12 @@ export default function PortfolioPage() {
                                         </div>
                                     </div>
                                     {/* Quick percentage buttons */}
-                                    {balance0 && parseFloat(balance0) > 0 && (
+                                    {rawBalance0 && parseFloat(rawBalance0) > 0 && (
                                         <div className="flex gap-1 mt-2">
                                             {[25, 50, 75, 100].map(pct => (
                                                 <button
                                                     key={pct}
-                                                    onClick={() => handleAmount0Change((parseFloat(balance0) * pct / 100).toFixed(6))}
+                                                    onClick={() => handleAmount0Change((parseFloat(rawBalance0) * pct / 100).toString())}
                                                     className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                                                 >
                                                     {pct === 100 ? 'MAX' : `${pct}%`}
