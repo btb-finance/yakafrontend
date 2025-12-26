@@ -334,6 +334,19 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 setIsLoading(false);
                 saveCachePools(subgraphPools, []);
                 console.log(`[PoolDataProvider] 💾 Cached ${subgraphPools.length} pools from subgraph`);
+
+                // Build token map from subgraph data (for gauge fetching)
+                const newTokenMap = new Map<string, TokenInfo>();
+                subgraphPools.forEach(p => {
+                    newTokenMap.set(p.token0.address.toLowerCase(), p.token0);
+                    newTokenMap.set(p.token1.address.toLowerCase(), p.token1);
+                });
+                setTokenInfoMap(newTokenMap);
+
+                // Fetch gauge data for voting (only RPC call we need)
+                await fetchGaugeData(newTokenMap);
+                console.log('[PoolDataProvider] ✅ Complete - using subgraph data (no RPC for pool data!)');
+                return; // Skip all RPC pool fetching below!
             } else {
                 // Subgraph failed or empty - fall back to GAUGE_LIST
                 console.log('[PoolDataProvider] ⚠️ Subgraph empty/failed, using GAUGE_LIST');
