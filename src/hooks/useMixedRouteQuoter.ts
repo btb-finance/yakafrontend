@@ -2,12 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { parseUnits, formatUnits } from 'viem';
-import { Token, WSEI, USDC } from '@/config/tokens';
+import { Token, WSEI, USDC, WIND } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';
 import { getPrimaryRpc } from '@/utils/rpc';
 
 // Common intermediate tokens for routing
-const INTERMEDIATE_TOKENS = [WSEI, USDC];
+const INTERMEDIATE_TOKENS = [WSEI, USDC, WIND];
 
 // CL tick spacings from CLFactory contract
 const TICK_SPACINGS = [1, 50, 100, 200, 2000] as const;
