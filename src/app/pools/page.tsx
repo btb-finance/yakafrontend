@@ -456,14 +456,13 @@ export default function PoolsPage() {
                                     )}
                                 </div>
 
-                                {/* Desktop: TVL (Token Amounts) */}
+                                {/* Desktop: TVL (USD) */}
                                 <div className="hidden md:flex md:col-span-2 items-center justify-end">
                                     <div className="text-right text-sm">
-                                        {parseFloat(pool.reserve0) > 0 || parseFloat(pool.reserve1) > 0 ? (
-                                            <>
-                                                <div className="font-semibold">{formatAmount(pool.reserve0, pool.token0.symbol)} {pool.token0.symbol}</div>
-                                                <div className="text-gray-400">{formatAmount(pool.reserve1, pool.token1.symbol)} {pool.token1.symbol}</div>
-                                            </>
+                                        {parseFloat(pool.tvl) > 0 ? (
+                                            <div className="font-semibold">
+                                                ${parseFloat(pool.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </div>
                                         ) : (
                                             <span className="text-gray-500">New Pool</span>
                                         )}
@@ -473,10 +472,15 @@ export default function PoolsPage() {
                                 {/* Mobile: Stats + Action Row */}
                                 <div className="flex md:hidden items-center justify-between gap-2">
                                     <div className="flex items-center gap-3 text-[10px] min-w-0 flex-1">
-                                        {/* TVL */}
+                                        {/* TVL in USD */}
                                         <div className="min-w-0">
-                                            <div className="font-medium truncate">{formatAmount(pool.reserve0, pool.token0.symbol)} {pool.token0.symbol}</div>
-                                            <div className="text-gray-400 truncate">{formatAmount(pool.reserve1, pool.token1.symbol)} {pool.token1.symbol}</div>
+                                            <div className="text-[9px] text-gray-500">TVL</div>
+                                            <div className="font-semibold">
+                                                {parseFloat(pool.tvl) > 0
+                                                    ? `$${parseFloat(pool.tvl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                                                    : 'New'
+                                                }
+                                            </div>
                                         </div>
                                         {/* 24h Volume */}
                                         {pool.volume24h && parseFloat(pool.volume24h) > 0.01 && (
