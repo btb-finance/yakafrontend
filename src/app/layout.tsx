@@ -1,23 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import dynamic from "next/dynamic";
 import "./globals.css";
+import { ClientProviders } from "@/providers/ClientProviders";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 
-// Dynamic import with SSR disabled to prevent WalletConnect's idb-keyval
-// from accessing indexedDB during server-side rendering in serverless environments
-const Providers = dynamic(
-  () => import("@/providers/WagmiProvider").then(mod => mod.Providers),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="min-h-screen bg-[#0a0b0d] flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    ),
-  }
-);
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -86,7 +73,7 @@ export default function RootLayout({
             `,
           }}
         />
-        <Providers>
+        <ClientProviders>
           {/* Background Effects */}
           <div className="bg-orb bg-orb-primary" />
           <div className="bg-orb bg-orb-secondary" />
@@ -101,7 +88,7 @@ export default function RootLayout({
 
           {/* Footer */}
           <Footer />
-        </Providers>
+        </ClientProviders>
       </body>
     </html>
   );
