@@ -7,7 +7,7 @@ import { Address, formatUnits } from 'viem';
 import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
-import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
+import { useCLPositionsFromSubgraph, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { getPrimaryRpc } from '@/utils/rpc';
@@ -244,8 +244,8 @@ export default function PortfolioPage() {
     // Contract write hook
     const { writeContractAsync } = useWriteContract();
 
-    // Get CL and V2 positions
-    const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositions();
+    // Get CL and V2 positions (CL positions now loaded from subgraph - much faster!)
+    const { positions: clPositions, positionCount: clCount, isLoading: clLoading, refetch: refetchCL } = useCLPositionsFromSubgraph();
     const { positions: v2Positions, refetch: refetchV2 } = useV2Positions();
 
     // V2 position management state

@@ -29,6 +29,48 @@ export interface V2Position {
     lpBalance: bigint;
 }
 
+// ============================================
+// SUBGRAPH-BASED POSITION FETCHING (FAST!)
+// ============================================
+
+import { useUserPositions, SubgraphPosition } from './useSubgraph';
+
+/**
+ * Hook that fetches CL positions from subgraph (much faster than RPC!)
+ * Returns positions in the same format as useCLPositions for easy migration
+ */
+export function useCLPositionsFromSubgraph() {
+    const { address } = useAccount();
+    const { positions: subgraphPositions, isLoading, error, refetch } = useUserPositions(address);
+
+    // Convert subgraph positions to CLPosition format
+    const positions: CLPosition[] = subgraphPositions
+        .filter(p => BigInt(p.liquidity) > BigInt(0)) // Only active positions
+        .map((p: SubgraphPosition) => ({
+            tokenId: BigInt(p.tokenId),
+            token0: p.pool.token0.id as Address,
+            token1: p.pool.token1.id as Address,
+            tickSpacing: p.pool.tickSpacing,
+            tickLower: p.tickLower,
+            tickUpper: p.tickUpper,
+            liquidity: BigInt(p.liquidity),
+            // Subgraph doesn't have real-time pending fees, set to 0
+            // User can still collect fees - actual amounts calculated on-chain
+            tokensOwed0: BigInt(0),
+            tokensOwed1: BigInt(0),
+            token0Symbol: p.pool.token0.symbol,
+            token1Symbol: p.pool.token1.symbol,
+        }));
+
+    return {
+        positions,
+        positionCount: positions.length,
+        isLoading,
+        error,
+        refetch,
+    };
+}
+
 // Hook to fetch CL positions from NonfungiblePositionManager
 export function useCLPositions() {
     const { address } = useAccount();
