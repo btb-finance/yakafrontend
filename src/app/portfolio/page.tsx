@@ -1588,6 +1588,55 @@ export default function PortfolioPage() {
                                                 </span>
                                             </div>
 
+                                            {/* Token Amounts */}
+                                            {(() => {
+                                                const amounts = calculateTokenAmounts(
+                                                    pos.liquidity,
+                                                    pos.tickLower,
+                                                    pos.tickUpper,
+                                                    pos.currentTick,
+                                                    pos.token0Decimals,
+                                                    pos.token1Decimals
+                                                );
+                                                const inRange = pos.currentTick >= pos.tickLower && pos.currentTick < pos.tickUpper;
+
+                                                return (
+                                                    <div className="text-xs mb-2 px-1 space-y-1">
+                                                        {/* Token balances */}
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div className="p-1.5 rounded bg-white/5">
+                                                                <div className="text-[9px] text-gray-400">{pos.token0Symbol}</div>
+                                                                <div className="font-medium text-sm">
+                                                                    {amounts.amount0.toFixed(amounts.amount0 < 0.01 ? 6 : 2)}
+                                                                </div>
+                                                            </div>
+                                                            <div className="p-1.5 rounded bg-white/5">
+                                                                <div className="text-[9px] text-gray-400">{pos.token1Symbol}</div>
+                                                                <div className="font-medium text-sm">
+                                                                    {amounts.amount1.toFixed(amounts.amount1 < 0.01 ? 6 : 2)}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Range status */}
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-gray-400">Range:</span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isFullRangePosition(pos.tickLower, pos.tickUpper)
+                                                                    ? 'bg-purple-500/20 text-purple-400'
+                                                                    : inRange
+                                                                        ? 'bg-green-500/20 text-green-400'
+                                                                        : 'bg-yellow-500/20 text-yellow-400'
+                                                                }`}>
+                                                                {isFullRangePosition(pos.tickLower, pos.tickUpper)
+                                                                    ? '∞ Full Range'
+                                                                    : inRange
+                                                                        ? '✓ In Range'
+                                                                        : '⚠ Out of Range'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+
                                             {/* Pending rewards */}
                                             <div className="text-xs mb-2 px-1">
                                                 <span className="text-green-400 font-medium">

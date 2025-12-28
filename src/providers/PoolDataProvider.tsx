@@ -206,6 +206,9 @@ export interface StakedPosition {
     token0Decimals: number;
     token1Decimals: number;
     tickSpacing: number;
+    tickLower: number;
+    tickUpper: number;
+    currentTick: number;
     liquidity: bigint;
     pendingRewards: bigint;
     rewardRate: bigint;
@@ -1043,19 +1046,82 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const tokenIdHex = data.slice(128 + j * 64, 128 + (j + 1) * 64);
                     const tokenId = BigInt('0x' + tokenIdHex);
 
-                    // Get pending rewards
-                    const rewardsResult = await fetch(getPrimaryRpc(), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0', id: 1,
-                            method: 'eth_call',
-                            params: [{
-                                to: g.gauge,
-                                data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
-                            }, 'latest']
-                        })
-                    }).then(r => r.json());
+                    // Fetch position details and pending rewards in parallel
+                    const [positionResult, rewardsResult, slot0Result] = await Promise.all([
+                        // positions(tokenId) on NonfungiblePositionManager
+                        fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: CL_CONTRACTS.NonfungiblePositionManager,
+                                    data: `0x99fbab88${tokenId.toString(16).padStart(64, '0')}` // positions(uint256)
+                                }, 'latest']
+                            })
+                        }).then(r => r.json()),
+                        // earned(address, tokenId) on gauge
+                        fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: g.gauge,
+                                    data: `0x3e491d47${address.slice(2).toLowerCase().padStart(64, '0')}${tokenId.toString(16).padStart(64, '0')}`
+                                }, 'latest']
+                            })
+                        }).then(r => r.json()),
+                        // slot0() on pool to get current tick
+                        fetch(getPrimaryRpc(), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0', id: 1,
+                                method: 'eth_call',
+                                params: [{
+                                    to: g.pool,
+                                    data: '0x3850c7bd' // slot0()
+                                }, 'latest']
+                            })
+                        }).then(r => r.json()),
+                    ]);
+
+                    // Parse position data:
+                    // positions(tokenId) returns: (nonce, operator, token0, token1, tickSpacing, tickLower, tickUpper, liquidity, ...)
+                    let liquidity = BigInt(0);
+                    let tickLower = 0;
+                    let tickUpper = 0;
+
+                    if (positionResult.result && positionResult.result.length >= 514) {
+                        const posData = positionResult.result.slice(2);
+                        // tickLower is at slot 5 (320-384 hex chars)
+                        // int24 is only 3 bytes (6 hex chars), take last 6 chars
+                        const tickLowerHex = posData.slice(320, 384).slice(-6);
+                        const tickLowerVal = parseInt(tickLowerHex, 16);
+                        tickLower = tickLowerVal > 0x7fffff ? tickLowerVal - 0x1000000 : tickLowerVal;
+
+                        // tickUpper is at slot 6 (384-448 hex chars)
+                        const tickUpperHex = posData.slice(384, 448).slice(-6);
+                        const tickUpperVal = parseInt(tickUpperHex, 16);
+                        tickUpper = tickUpperVal > 0x7fffff ? tickUpperVal - 0x1000000 : tickUpperVal;
+
+                        // liquidity is at slot 7 (448-512 hex chars)
+                        const liquidityHex = posData.slice(448, 512);
+                        liquidity = BigInt('0x' + liquidityHex);
+                    }
+
+                    // Parse current tick from slot0
+                    // slot0 returns: sqrtPriceX96 (32 bytes), tick (32 bytes), ...
+                    let currentTick = 0;
+                    if (slot0Result.result && slot0Result.result.length >= 130) {
+                        const tickSlot = slot0Result.result.slice(66, 130);
+                        const tickHex = tickSlot.slice(-6);
+                        const tickVal = parseInt(tickHex, 16);
+                        currentTick = tickVal > 0x7fffff ? tickVal - 0x1000000 : tickVal;
+                    }
 
                     const known0 = KNOWN_TOKENS[g.token0.toLowerCase()];
                     const known1 = KNOWN_TOKENS[g.token1.toLowerCase()];
@@ -1071,7 +1137,10 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         token0Decimals: known0?.decimals || 18,
                         token1Decimals: known1?.decimals || 18,
                         tickSpacing: g.tickSpacing || 0,
-                        liquidity: BigInt(0),
+                        tickLower,
+                        tickUpper,
+                        currentTick,
+                        liquidity,
                         pendingRewards: rewardsResult.result ? BigInt(rewardsResult.result) : BigInt(0),
                         rewardRate: BigInt(0),
                     });
