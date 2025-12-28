@@ -1287,8 +1287,8 @@ export default function PortfolioPage() {
                                                 <div className="flex items-center gap-2 p-2 rounded-lg bg-gradient-to-r from-green-500/10 to-cyan-500/10 border border-green-500/30 mb-2">
                                                     <span className="text-lg">✨</span>
                                                     <div className="flex-1">
-                                                        <div className="text-xs font-medium text-green-400">Earning trading fees!</div>
-                                                        <div className="text-[10px] text-gray-400">Higher APR than DragonSwap • Stake for extra WIND rewards</div>
+                                                        <div className="text-xs font-medium text-green-400">✨ Earning trading fees!</div>
+                                                        <div className="text-[10px] text-gray-400">Already earning more than DragonSwap • Stake for extra WIND rewards</div>
                                                     </div>
                                                     <button
                                                         onClick={() => handleStakePosition(pos)}
@@ -1621,10 +1621,10 @@ export default function PortfolioPage() {
                                                         <div className="flex justify-between items-center">
                                                             <span className="text-gray-400">Range:</span>
                                                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isFullRangePosition(pos.tickLower, pos.tickUpper)
-                                                                    ? 'bg-purple-500/20 text-purple-400'
-                                                                    : inRange
-                                                                        ? 'bg-green-500/20 text-green-400'
-                                                                        : 'bg-yellow-500/20 text-yellow-400'
+                                                                ? 'bg-purple-500/20 text-purple-400'
+                                                                : inRange
+                                                                    ? 'bg-green-500/20 text-green-400'
+                                                                    : 'bg-yellow-500/20 text-yellow-400'
                                                                 }`}>
                                                                 {isFullRangePosition(pos.tickLower, pos.tickUpper)
                                                                     ? '∞ Full Range'
