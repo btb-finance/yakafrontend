@@ -122,22 +122,14 @@ export default function Home() {
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link href="/swap">
-              <motion.button
-                className="btn-gradient text-lg px-8 py-4"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
+              <button className="btn-gradient text-lg px-8 py-4 hover:scale-[1.02] active:scale-[0.98] transition-transform">
                 Start Trading
-              </motion.button>
+              </button>
             </Link>
             <Link href="/pools">
-              <motion.button
-                className="btn-secondary text-lg px-8 py-4"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
+              <button className="btn-secondary text-lg px-8 py-4 hover:scale-[1.02] active:scale-[0.98] transition-transform">
                 Provide Liquidity
-              </motion.button>
+              </button>
             </Link>
           </div>
 
@@ -397,31 +389,19 @@ export default function Home() {
               <h2 className="text-2xl font-bold mb-6">Quick Actions</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Link href="/swap">
-                  <motion.button
-                    className="w-full py-4 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30 font-medium hover:from-primary/30 hover:to-secondary/30 transition-all flex items-center justify-center gap-2"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
+                  <button className="w-full py-4 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-primary/30 font-medium hover:from-primary/30 hover:to-secondary/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                     Swap Tokens
-                  </motion.button>
+                  </button>
                 </Link>
                 <Link href="/pools">
-                  <motion.button
-                    className="w-full py-4 rounded-xl bg-white/5 border border-white/10 font-medium hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
+                  <button className="w-full py-4 rounded-xl bg-white/5 border border-white/10 font-medium hover:bg-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                     Manage Positions
-                  </motion.button>
+                  </button>
                 </Link>
                 <Link href="/vote">
-                  <motion.button
-                    className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 font-medium hover:from-green-500/30 hover:to-emerald-500/30 transition-all flex items-center justify-center gap-2"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
+                  <button className="w-full py-4 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 font-medium hover:from-green-500/30 hover:to-emerald-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                     Vote & Earn
-                  </motion.button>
+                  </button>
                 </Link>
               </div>
             </motion.div>
@@ -441,13 +421,9 @@ export default function Home() {
                   <p className="text-gray-400 text-sm">Track your positions and rewards</p>
                 </div>
                 <Link href="/portfolio">
-                  <motion.button
-                    className="btn-secondary px-4 py-2 text-sm"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
+                  <button className="btn-secondary px-4 py-2 text-sm hover:scale-[1.02] active:scale-[0.98] transition-transform">
                     View Full Portfolio →
-                  </motion.button>
+                  </button>
                 </Link>
               </div>
 
@@ -521,22 +497,14 @@ export default function Home() {
             </div>
             <div className="flex gap-4">
               <Link href="/swap">
-                <motion.button
-                  className="btn-gradient"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
+                <button className="btn-gradient hover:scale-[1.02] active:scale-[0.98] transition-transform">
                   Get WIND
-                </motion.button>
+                </button>
               </Link>
               <Link href="/vote">
-                <motion.button
-                  className="btn-secondary"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
+                <button className="btn-secondary hover:scale-[1.02] active:scale-[0.98] transition-transform">
                   Lock & Vote
-                </motion.button>
+                </button>
               </Link>
             </div>
           </div>

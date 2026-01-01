@@ -29,13 +29,9 @@ export function Header() {
                     <div className="flex items-center justify-between">
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2 md:gap-3">
-                            <motion.div
-                                className="w-9 h-9 md:w-10 md:h-10 rounded-xl overflow-hidden"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                            >
+                            <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl overflow-hidden hover:scale-105 active:scale-95 transition-transform">
                                 <img src="/logo.png" alt="Wind Swap" className="w-full h-full object-contain" />
-                            </motion.div>
+                            </div>
                             <span className="text-lg md:text-xl font-bold gradient-text">Wind Swap</span>
                         </Link>
 

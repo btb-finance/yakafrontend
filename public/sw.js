@@ -1,10 +1,13 @@
 // WindSwap Service Worker - Caches static assets for offline/instant load
 
-const CACHE_NAME = 'windswap-v1';
+const CACHE_NAME = 'windswap-v2';
 const STATIC_ASSETS = [
     '/',
     '/swap',
     '/pools',
+    '/portfolio',
+    '/vote',
+    '/bridge',
     '/logo.png',
 ];
 
@@ -31,37 +34,45 @@ self.addEventListener('activate', (event) => {
     self.clients.claim();
 });
 
-// Fetch - network first, fallback to cache
+// Fetch - stale-while-revalidate for HTML, cache-first for static assets
 self.addEventListener('fetch', (event) => {
     const { request } = event;
+    const url = new URL(request.url);
 
     // Skip non-GET and API requests
     if (request.method !== 'GET') return;
     if (request.url.includes('/api/') || request.url.includes('rpc')) return;
     if (request.url.includes('dexscreener') || request.url.includes('subgraph')) return;
 
-    event.respondWith(
-        fetch(request)
-            .then((response) => {
-                // Cache successful responses
-                if (response.ok) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(request, clone);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                // Fallback to cache
-                return caches.match(request).then((cached) => {
-                    if (cached) return cached;
-                    // Return offline page for navigation requests
-                    if (request.mode === 'navigate') {
-                        return caches.match('/');
+    // Static assets: cache-first (faster)
+    if (url.pathname.match(/\.(png|jpg|svg|woff2?|js|css)$/)) {
+        event.respondWith(
+            caches.match(request).then((cached) => {
+                if (cached) return cached;
+                return fetch(request).then((response) => {
+                    if (response.ok) {
+                        const clone = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
                     }
-                    return new Response('Offline', { status: 503 });
+                    return response;
                 });
             })
+        );
+        return;
+    }
+
+    // HTML pages: stale-while-revalidate (fast + fresh)
+    event.respondWith(
+        caches.match(request).then((cached) => {
+            const fetchPromise = fetch(request).then((response) => {
+                if (response.ok) {
+                    const clone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+                }
+                return response;
+            }).catch(() => cached || new Response('Offline', { status: 503 }));
+
+            return cached || fetchPromise;
+        })
     );
 });
