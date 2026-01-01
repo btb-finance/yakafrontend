@@ -182,109 +182,74 @@ export function useGovernance() {
         functionName: 'votingPeriod',
     });
 
-    // Fetch past proposals from events
-    const fetchProposals = useCallback(async () => {
-        if (!publicClient) return;
+    // Subgraph URL for governance data
+    const GOVERNANCE_SUBGRAPH = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap/v2/gn';
 
+    // Fetch proposals from subgraph (fast!)
+    const fetchProposals = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Scan from first proposal block to current block
-            const currentBlock = await publicClient.getBlockNumber();
-            const PROPOSAL_START_BLOCK = BigInt(185781300);
-            // Use block 50 behind current to avoid RPC sync issues
-            const PROPOSAL_END_BLOCK = currentBlock - BigInt(50);
-
-            // Batch getLogs requests - use 2k blocks to stay under RPC limits
-            const BATCH_SIZE = BigInt(2000);
-            const allLogs: any[] = [];
-
-            for (let from = PROPOSAL_START_BLOCK; from <= PROPOSAL_END_BLOCK; from += BATCH_SIZE) {
-                const to = from + BATCH_SIZE - BigInt(1) > PROPOSAL_END_BLOCK
-                    ? PROPOSAL_END_BLOCK
-                    : from + BATCH_SIZE - BigInt(1);
-
-                try {
-                    const logs = await publicClient.getLogs({
-                        address: V2_CONTRACTS.ProtocolGovernor as Address,
-                        event: {
-                            type: 'event',
-                            name: 'ProposalCreated',
-                            inputs: [
-                                { indexed: false, name: 'proposalId', type: 'uint256' },
-                                { indexed: false, name: 'proposer', type: 'address' },
-                                { indexed: false, name: 'targets', type: 'address[]' },
-                                { indexed: false, name: 'values', type: 'uint256[]' },
-                                { indexed: false, name: 'signatures', type: 'string[]' },
-                                { indexed: false, name: 'calldatas', type: 'bytes[]' },
-                                { indexed: false, name: 'voteStart', type: 'uint256' },
-                                { indexed: false, name: 'voteEnd', type: 'uint256' },
-                                { indexed: false, name: 'description', type: 'string' },
-                            ],
-                        },
-                        fromBlock: from,
-                        toBlock: to,
-                    });
-                    allLogs.push(...logs);
-                } catch (e) {
-                    console.warn(`Failed to fetch logs from ${from} to ${to}:`, e);
+            // Query subgraph for proposals
+            const query = `{
+                proposals(orderBy: createdAtTimestamp, orderDirection: desc, first: 50) {
+                    id
+                    proposalId
+                    proposer
+                    targets
+                    values
+                    calldatas
+                    description
+                    voteStart
+                    voteEnd
+                    forVotes
+                    againstVotes
+                    abstainVotes
+                    state
+                    executed
+                    canceled
+                    createdAtTimestamp
                 }
+            }`;
+
+            const response = await fetch(GOVERNANCE_SUBGRAPH, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query }),
+            });
+
+            const result = await response.json();
+            console.log('[Governance] Subgraph response:', result);
+
+            if (result.errors) {
+                console.error('[Governance] Subgraph errors:', result.errors);
+                throw new Error(result.errors[0]?.message || 'Subgraph query failed');
             }
 
-            const logs = allLogs;
+            const subgraphProposals = result.data?.proposals || [];
+            const parsedProposals: Proposal[] = subgraphProposals.map((p: any) => ({
+                id: BigInt(p.proposalId),
+                proposer: p.proposer as Address,
+                description: p.description,
+                state: p.state as ProposalState,
+                forVotes: BigInt(p.forVotes || '0'),
+                againstVotes: BigInt(p.againstVotes || '0'),
+                abstainVotes: BigInt(p.abstainVotes || '0'),
+                startBlock: BigInt(p.voteStart),
+                endBlock: BigInt(p.voteEnd),
+                targets: p.targets as Address[],
+                values: (p.values || []).map((v: string) => BigInt(v)),
+                calldatas: p.calldatas as `0x${string}`[],
+            }));
 
-            // Parse and enrich proposals
-            const parsedProposals: Proposal[] = [];
-
-            for (const log of logs) {
-                try {
-                    const args = log.args as any;
-                    const proposalId = args.proposalId as bigint;
-
-                    // Get current state
-                    const state = await publicClient.readContract({
-                        address: V2_CONTRACTS.ProtocolGovernor as Address,
-                        abi: GOVERNOR_ABI,
-                        functionName: 'state',
-                        args: [proposalId],
-                    }) as number;
-
-                    // Get votes
-                    const [againstVotes, forVotes, abstainVotes] = await publicClient.readContract({
-                        address: V2_CONTRACTS.ProtocolGovernor as Address,
-                        abi: GOVERNOR_ABI,
-                        functionName: 'proposalVotes',
-                        args: [proposalId],
-                    }) as [bigint, bigint, bigint];
-
-                    parsedProposals.push({
-                        id: proposalId,
-                        proposer: args.proposer as Address,
-                        description: args.description as string,
-                        state: state as ProposalState,
-                        forVotes,
-                        againstVotes,
-                        abstainVotes,
-                        startBlock: args.voteStart as bigint,
-                        endBlock: args.voteEnd as bigint,
-                        targets: args.targets as Address[],
-                        values: args.values as bigint[],
-                        calldatas: args.calldatas as `0x${string}`[],
-                    });
-                } catch (e) {
-                    console.error('Error parsing proposal:', e);
-                }
-            }
-
-            // Sort by ID descending (newest first)
-            parsedProposals.sort((a, b) => Number(b.id - a.id));
+            console.log(`[Governance] Loaded ${parsedProposals.length} proposals from subgraph`);
             setProposals(parsedProposals);
         } catch (err: any) {
-            console.error('Error fetching proposals:', err);
+            console.error('[Governance] Error fetching proposals:', err);
             setError('Failed to fetch proposals');
         } finally {
             setIsLoading(false);
         }
-    }, [publicClient]);
+    }, []);
 
     // Fetch proposals on mount
     useEffect(() => {
