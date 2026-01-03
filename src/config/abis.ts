@@ -733,3 +733,41 @@ export const REWARDS_DISTRIBUTOR_ABI = [
         type: 'function',
     },
 ] as const;
+
+// SugarHelper ABI - On-chain liquidity math helper
+export const SUGAR_HELPER_ABI = [
+    {
+        inputs: [
+            { name: 'amount0', type: 'uint256' },
+            { name: 'pool', type: 'address' },
+            { name: 'sqrtRatioX96', type: 'uint160' },
+            { name: 'tickLow', type: 'int24' },
+            { name: 'tickHigh', type: 'int24' },
+        ],
+        name: 'estimateAmount1',
+        outputs: [{ name: 'amount1', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [
+            { name: 'amount1', type: 'uint256' },
+            { name: 'pool', type: 'address' },
+            { name: 'sqrtRatioX96', type: 'uint160' },
+            { name: 'tickLow', type: 'int24' },
+            { name: 'tickHigh', type: 'int24' },
+        ],
+        name: 'estimateAmount0',
+        outputs: [{ name: 'amount0', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [{ name: 'tick', type: 'int24' }],
+        name: 'getSqrtRatioAtTick',
+        outputs: [{ name: 'sqrtRatioX96', type: 'uint160' }],
+        stateMutability: 'pure',
+        type: 'function',
+    },
+] as const;
+
