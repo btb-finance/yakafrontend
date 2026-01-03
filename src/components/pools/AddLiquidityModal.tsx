@@ -323,14 +323,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 let tickUpper = priceToTickLocal(pUpper);
                 if (tickLower > tickUpper) [tickLower, tickUpper] = [tickUpper, tickLower];
 
-                console.log('SugarHelper call:', {
-                    inputAmount: amountA,
-                    inputAmountWei: inputAmountWei.toString(),
-                    pool: clPoolAddress,
-                    tickLower,
-                    tickUpper,
-                    isAToken0,
-                });
+
 
                 // Use viem's encodeFunctionData for proper ABI encoding
                 const { encodeFunctionData } = await import('viem');
@@ -360,14 +353,14 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                 });
                 const result = await response.json();
 
-                console.log('SugarHelper result:', result);
+
 
                 if (result.result && result.result !== '0x' && result.result.length > 2) {
                     const outputAmountWei = BigInt(result.result);
                     const outputDecimals = actualTokenB?.decimals || 18;
                     const outputAmount = formatUnits(outputAmountWei, outputDecimals);
 
-                    console.log('Calculated output:', outputAmount);
+
 
                     // Format with reasonable precision
                     const parsedOutput = parseFloat(outputAmount);
@@ -377,7 +370,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         setAmountB('0');
                     }
                 } else {
-                    console.warn('SugarHelper returned empty, using fallback');
+
                     // Fallback to frontend calculation if on-chain call fails
                     const position = {
                         currentPrice,
