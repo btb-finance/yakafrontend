@@ -18,11 +18,7 @@ import {
     calculateOptimalAmounts,
     getRequiredTokens,
     priceToTick,
-    parseToWei,
-    formatFromWei,
-    getSqrtRatioAtTick,
     MAX_TICK,
-    MIN_TICK,
 } from '@/utils/liquidityMath';
 
 
@@ -293,10 +289,6 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return;
         }
 
-        // Get token decimals
-        const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
-        const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
-
         // Check which tokens are needed for this range
         const required = getRequiredTokens(currentPrice, pLower, pUpper);
 
@@ -309,27 +301,30 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return; // User should enter B instead
         }
 
-        // Parse amount to wei
-        const inputDecimals = actualTokenA?.decimals || 18;
-        const inputAmountWei = parseToWei(amountA, inputDecimals);
+        // Parse amount as simple float (no wei conversion needed for UI calculation)
+        const inputAmount = parseFloat(amountA);
 
-        // Calculate optimal amounts using proper V3 math
+        // Calculate optimal amounts using proper V3 math with floating-point
         const position = {
             currentPrice,
             priceLower: pLower,
             priceUpper: pUpper,
-            token0Decimals,
-            token1Decimals,
+            token0Decimals: actualTokenA?.decimals || 18,
+            token1Decimals: actualTokenB?.decimals || 18,
             tickSpacing,
         };
 
-        const result = calculateOptimalAmounts(inputAmountWei, isAToken0, position);
+        const result = calculateOptimalAmounts(inputAmount, isAToken0, position);
 
         // Set the calculated amount for token B
-        const outputDecimals = actualTokenB?.decimals || 18;
         const outputAmount = isAToken0 ? result.amount1 : result.amount0;
-        const formattedOutput = formatFromWei(outputAmount, outputDecimals, 6);
-        setAmountB(formattedOutput === '0' ? '0' : formattedOutput);
+
+        // Format with reasonable precision
+        if (outputAmount > 0 && isFinite(outputAmount)) {
+            setAmountB(outputAmount.toFixed(6).replace(/\.?0+$/, ''));
+        } else {
+            setAmountB('0');
+        }
     }, [poolType, clPoolPrice, initialPrice, amountA, priceLower, priceUpper, isAToken0, actualTokenA, actualTokenB, tickSpacing]);
 
     // Handle V2 liquidity add
