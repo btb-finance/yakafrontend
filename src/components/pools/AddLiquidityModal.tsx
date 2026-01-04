@@ -14,6 +14,7 @@ import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, calculateRangeAdjustedAPR } from '@/hooks/useWindPrice';
 import { GAUGE_LIST } from '@/config/gauges';
+import { isStablecoinPair, tickToStablecoinPrice } from '@/config/stablecoinTicks';
 import {
     calculateOptimalAmounts,
     getRequiredTokens,
@@ -231,10 +232,23 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                 setClPoolPrice(price);
 
-                // Auto-set default range to ±10% when pool price loads
+                // Auto-set default range when pool price loads
                 if (!priceLower && !priceUpper) {
-                    setPriceLower((price * 0.9).toFixed(6));
-                    setPriceUpper((price * 1.1).toFixed(6));
+                    // Check if this is a stablecoin pair
+                    const isStablePair = isStablecoinPair(
+                        actualTokenA.symbol || actualTokenA.address,
+                        actualTokenB.symbol || actualTokenB.address
+                    );
+
+                    if (isStablePair) {
+                        // Use tight range for stablecoins: ±0.5% centered on current price
+                        setPriceLower((price * 0.995).toFixed(6));
+                        setPriceUpper((price * 1.005).toFixed(6));
+                    } else {
+                        // Standard ±10% range for other pairs
+                        setPriceLower((price * 0.9).toFixed(6));
+                        setPriceUpper((price * 1.1).toFixed(6));
+                    }
                 }
             } catch (err) {
                 console.error('Error fetching CL pool price:', err);
@@ -1014,20 +1028,25 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 const isStablecoinPool = tickSpacing === 1 || tickSpacing === 50;
 
                                                 // Different presets based on pool type
+                                                // Stablecoins: no Full range, use tight percentages
+                                                // Volatile: keep Full range option
                                                 const presets = isStablecoinPool
-                                                    ? [0.5, 1, 2] // Tight ranges for stablecoins
+                                                    ? [0.1, 0.2, 0.5, 1] // Very tight ranges for stablecoins (1:1 pegged)
                                                     : [2, 10, 50]; // Wider ranges for volatile
 
                                                 return (
-                                                    <div className="grid grid-cols-4 gap-1.5">
-                                                        <button
-                                                            onClick={() => { setPriceLower(''); setPriceUpper(''); }}
-                                                            className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${isFullRange
-                                                                ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
-                                                                : 'bg-white/5 hover:bg-white/10 border border-white/10'}`}
-                                                        >
-                                                            <div className="text-xs font-bold">Full</div>
-                                                        </button>
+                                                    <div className={`grid gap-1.5 ${isStablecoinPool ? 'grid-cols-4' : 'grid-cols-4'}`}>
+                                                        {/* Only show Full range for non-stablecoin pools */}
+                                                        {!isStablecoinPool && (
+                                                            <button
+                                                                onClick={() => { setPriceLower(''); setPriceUpper(''); }}
+                                                                className={`py-2 px-1 rounded-lg text-center transition-all active:scale-[0.98] ${isFullRange
+                                                                    ? 'bg-gradient-to-br from-primary/30 to-secondary/30 border border-primary/50'
+                                                                    : 'bg-white/5 hover:bg-white/10 border border-white/10'}`}
+                                                            >
+                                                                <div className="text-xs font-bold">Full</div>
+                                                            </button>
+                                                        )}
                                                         {presets.map(pct => {
                                                             const isActive = rangePercent !== null && Math.abs(rangePercent - pct) < 0.5;
                                                             return (
