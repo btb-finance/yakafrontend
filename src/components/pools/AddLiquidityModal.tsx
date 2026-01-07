@@ -316,11 +316,13 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
             return; // User should enter B instead
         }
 
+        // Compute token0/token1 decimals based on pool order (needed for fallbacks too)
+        const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
+        const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
+
         // Call on-chain SugarHelper for accurate calculation
         const calculateOnChain = async () => {
             try {
-                const token0Decimals = isAToken0 ? (actualTokenA?.decimals || 18) : (actualTokenB?.decimals || 18);
-                const token1Decimals = isAToken0 ? (actualTokenB?.decimals || 18) : (actualTokenA?.decimals || 18);
 
                 // Parse amount to wei
                 const inputDecimals = actualTokenA?.decimals || 18;
@@ -390,8 +392,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                         currentPrice,
                         priceLower: pLower,
                         priceUpper: pUpper,
-                        token0Decimals: actualTokenA?.decimals || 18,
-                        token1Decimals: actualTokenB?.decimals || 18,
+                        token0Decimals,
+                        token1Decimals,
                         tickSpacing,
                         isToken0Base: isAToken0,
                     };
@@ -410,8 +412,8 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                     currentPrice,
                     priceLower: pLower,
                     priceUpper: pUpper,
-                    token0Decimals: actualTokenA?.decimals || 18,
-                    token1Decimals: actualTokenB?.decimals || 18,
+                    token0Decimals,
+                    token1Decimals,
                     tickSpacing,
                     isToken0Base: isAToken0,
                 };
