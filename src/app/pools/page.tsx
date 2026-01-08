@@ -60,7 +60,7 @@ export default function PoolsPage() {
     // Use globally prefetched pool data - instant load!
     const { v2Pools, clPools, allPools, poolRewards, windPrice, seiPrice, isLoading } = usePoolData();
 
-    // Calculate APR for a pool (shows ±10% range APR for CL pools)
+    // Calculate APR for a pool (shows typical range APR based on tick spacing)
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
         const rewardRate = poolRewards.get(pool.address.toLowerCase());
         if (!rewardRate || rewardRate === BigInt(0)) return null;
@@ -88,11 +88,22 @@ export default function PoolsPage() {
 
         const baseAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd);
 
-        // For CL pools, apply ±10% range concentration multiplier
-        // ±10% range width = 0.2 (20% of price), reference full range = 1.5
-        // Multiplier = 1.5 / 0.2 = 7.5x
-        if (pool.poolType === 'CL') {
-            const rangeMultiplier = 7.5; // ±10% range boost
+        // For CL pools, apply concentration multiplier based on tick spacing
+        // Tighter tick spacing = more concentrated positions = higher APR
+        if (pool.poolType === 'CL' && pool.tickSpacing) {
+            // Multiplier scales with concentration (inverse of tick spacing)
+            // tickSpacing 1 (stables) = very tight = ~50x boost
+            // tickSpacing 50 (stable pairs) = ~15x boost  
+            // tickSpacing 200 (standard) = ~7.5x boost
+            // tickSpacing 2000 (volatile) = ~2x boost
+            const multipliers: Record<number, number> = {
+                1: 50,     // Ultra-concentrated stables (LARRY/USDC)
+                50: 15,    // Stable pairs (USDT/USDC)
+                100: 10,   // Standard pairs
+                200: 7.5,  // Medium volatility
+                2000: 2.5, // High volatility (WIND pairs)
+            };
+            const rangeMultiplier = multipliers[pool.tickSpacing] || 7.5;
             return baseAPR * rangeMultiplier;
         }
 
