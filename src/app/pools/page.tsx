@@ -14,7 +14,7 @@ const AddLiquidityModal = dynamic(
     { ssr: false }
 );
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
-import { calculatePoolAPR } from '@/hooks/useWindPrice';
+import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 
 type PoolType = 'all' | 'v2' | 'cl';
 type Category = 'all' | 'stable' | 'wind' | 'btc' | 'eth' | 'other';
@@ -60,16 +60,15 @@ export default function PoolsPage() {
     // Use globally prefetched pool data - instant load!
     const { v2Pools, clPools, allPools, poolRewards, windPrice, seiPrice, isLoading } = usePoolData();
 
-    // Calculate APR for a pool (shows typical range APR based on tick spacing)
+    // Calculate APR for a pool (uses concentration multiplier based on tick spacing)
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
         const rewardRate = poolRewards.get(pool.address.toLowerCase());
         if (!rewardRate || rewardRate === BigInt(0)) return null;
 
-        // Estimate TVL in USD using real prices from DEX
+        // Try to estimate TVL in USD using reserves first
         const r0 = parseFloat(pool.reserve0) || 0;
         const r1 = parseFloat(pool.reserve1) || 0;
 
-        let tvlUsd = 0;
         const s0 = pool.token0.symbol.toUpperCase();
         const s1 = pool.token1.symbol.toUpperCase();
 
@@ -83,31 +82,15 @@ export default function PoolsPage() {
             return amount * seiPrice; // Fallback to SEI price
         };
 
-        tvlUsd = getTokenValue(s0, r0) + getTokenValue(s1, r1);
-        if (tvlUsd <= 0) return 0;
-
-        const baseAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd);
-
-        // For CL pools, apply concentration multiplier based on tick spacing
-        // Tighter tick spacing = more concentrated positions = higher APR
-        if (pool.poolType === 'CL' && pool.tickSpacing) {
-            // Multiplier scales with concentration (inverse of tick spacing)
-            // tickSpacing 1 (stables) = very tight = ~50x boost
-            // tickSpacing 50 (stable pairs) = ~15x boost  
-            // tickSpacing 200 (standard) = ~7.5x boost
-            // tickSpacing 2000 (volatile) = ~2x boost
-            const multipliers: Record<number, number> = {
-                1: 50,     // Ultra-concentrated stables (LARRY/USDC)
-                50: 15,    // Stable pairs (USDT/USDC)
-                100: 10,   // Standard pairs
-                200: 7.5,  // Medium volatility
-                2000: 2.5, // High volatility (WIND pairs)
-            };
-            const rangeMultiplier = multipliers[pool.tickSpacing] || 7.5;
-            return baseAPR * rangeMultiplier;
+        // Use reserves-based TVL if available, otherwise fall back to pool.tvl from DexScreener/subgraph
+        let tvlUsd = getTokenValue(s0, r0) + getTokenValue(s1, r1);
+        if (tvlUsd <= 0) {
+            tvlUsd = parseFloat(pool.tvl) || 0;
         }
+        if (tvlUsd <= 0) return null; // No TVL data available
 
-        return baseAPR;
+        // Use new APR calculator with tick spacing for CL concentration boost
+        return calculatePoolAPR(rewardRate, windPrice, tvlUsd, pool.tickSpacing);
     };
 
 
@@ -414,8 +397,7 @@ export default function PoolsPage() {
                                             {(() => {
                                                 const apr = getPoolAPR(pool);
                                                 if (apr !== null && apr > 0) {
-                                                    const aprText = apr >= 1000 ? `${(apr / 1000).toFixed(0)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : apr >= 1 ? `${apr.toFixed(1)}%` : `${apr.toFixed(2)}%`;
-                                                    return <span className="md:hidden text-xs font-bold px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]">🔥 APR {aprText}</span>;
+                                                    return <span className="md:hidden text-xs font-bold px-2 py-1 rounded-lg bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40 shadow-[0_0_8px_rgba(34,197,94,0.3)]">🔥 APR {formatAPR(apr)}</span>;
                                                 }
                                                 return null;
                                             })()}
@@ -448,7 +430,7 @@ export default function PoolsPage() {
                                         if (apr !== null && apr > 0) {
                                             return (
                                                 <span className="text-sm font-semibold text-green-400">
-                                                    {apr >= 1000 ? `${(apr / 1000).toFixed(1)}K%` : apr >= 100 ? `${apr.toFixed(0)}%` : `${apr.toFixed(1)}%`}
+                                                    {formatAPR(apr)}
                                                 </span>
                                             );
                                         }

@@ -12,7 +12,7 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { calculatePoolAPR, calculateRangeAdjustedAPR } from '@/hooks/useWindPrice';
+import { calculateBaseAPR, formatAPR } from '@/utils/aprCalculator';
 import { GAUGE_LIST } from '@/config/gauges';
 import { isStablecoinPair, tickToStablecoinPrice } from '@/config/stablecoinTicks';
 import {
@@ -1192,28 +1192,16 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             const rawMultiplier = referenceWidth / rangeWidth;
                                                             const multiplier = Math.max(1, Math.min(rawMultiplier, 100));
 
-                                                            // Calculate base APR from pool's reward rate
-                                                            // Estimate TVL from pool reserves (rough estimate using $10k reference)
-                                                            const rewardsPerSecond = Number(rewardRate) / 1e18;
-                                                            const annualRewardsWind = rewardsPerSecond * 60 * 60 * 24 * 365;
-                                                            const annualRewardsUsd = annualRewardsWind * windPrice;
-
-                                                            // Use reference TVL of $10k for base APR estimate
+                                                            // Use reference TVL of $10k for base APR estimate  
                                                             const referenceTvl = 10000;
-                                                            const baseAPR = (annualRewardsUsd / referenceTvl) * 100;
+                                                            const baseAPR = calculateBaseAPR(rewardRate, windPrice, referenceTvl);
 
                                                             // Apply concentration multiplier
                                                             const adjustedAPR = baseAPR * multiplier;
 
-                                                            // Format APR
-                                                            const aprText = adjustedAPR >= 10000 ? `${(adjustedAPR / 1000).toFixed(0)}K%` :
-                                                                adjustedAPR >= 1000 ? `${(adjustedAPR / 1000).toFixed(1)}K%` :
-                                                                    adjustedAPR >= 100 ? `${adjustedAPR.toFixed(0)}%` :
-                                                                        `${adjustedAPR.toFixed(1)}%`;
-
                                                             return (
                                                                 <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
-                                                                    🔥 APR {aprText}
+                                                                    🔥 APR {formatAPR(adjustedAPR)}
                                                                 </span>
                                                             );
                                                         })()}

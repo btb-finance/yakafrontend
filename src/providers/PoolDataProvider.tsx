@@ -554,33 +554,48 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         data: '0x7b0a47ee', // rewardRate()
                         pool: g.pool.toLowerCase(),
                         token0: g.token0.toLowerCase(),
-                        token1: g.token1.toLowerCase()
+                        token1: g.token1.toLowerCase(),
+                        tickSpacing: g.tickSpacing || 0
                     }));
 
                     if (rewardCalls.length > 0) {
                         const rewardResults = await batchRpcCall(rewardCalls.map(c => ({ to: c.to, data: c.data })));
                         const newRewards = new Map<string, bigint>();
 
-                        // Build token pair to reward rate mapping
+                        // Build token pair + tickSpacing to reward rate mapping
+                        // Key: token0-token1-tickSpacing (tokens sorted alphabetically)
                         const pairRewardMap = new Map<string, bigint>();
+
+                        // Log all reward rates for debugging
+                        const { GAUGE_LIST } = await import('@/config/gauges');
 
                         rewardCalls.forEach((call, i) => {
                             const rate = rewardResults[i] !== '0x' ? BigInt(rewardResults[i]) : BigInt(0);
+                            const gaugeInfo = GAUGE_LIST.find(g => g.gauge?.toLowerCase() === call.to.toLowerCase());
+                            const pairName = gaugeInfo ? `${gaugeInfo.symbol0}/${gaugeInfo.symbol1}` : call.pool;
+
+                            // Log ALL rates for debugging (including zeros)
+                            if (rate === BigInt(0)) {
+                                console.log(`[Gauge] ⚠️ ${pairName} (ts:${call.tickSpacing}): 0 reward rate`);
+                            }
+
                             if (rate > BigInt(0)) {
                                 // Key by GAUGE_LIST pool address
                                 newRewards.set(call.pool, rate);
 
-                                // Also key by token pair (for subgraph pool address matching)
-                                const pairKey = [call.token0, call.token1].sort().join('-');
+                                // Also key by token pair + tickSpacing (for subgraph pool address matching)
+                                const sortedTokens = [call.token0, call.token1].sort();
+                                const pairKey = `${sortedTokens[0]}-${sortedTokens[1]}-${call.tickSpacing}`;
                                 pairRewardMap.set(pairKey, rate);
                             }
                         });
 
-                        // Also add rewards for subgraph pools that match by token pair
+                        // Also add rewards for subgraph pools that match by token pair + tickSpacing
                         subgraphPools.forEach(pool => {
                             const t0 = pool.token0.address.toLowerCase();
                             const t1 = pool.token1.address.toLowerCase();
-                            const pairKey = [t0, t1].sort().join('-');
+                            const sortedTokens = [t0, t1].sort();
+                            const pairKey = `${sortedTokens[0]}-${sortedTokens[1]}-${pool.tickSpacing || 0}`;
                             const rate = pairRewardMap.get(pairKey);
                             if (rate && rate > BigInt(0)) {
                                 newRewards.set(pool.address.toLowerCase(), rate);
@@ -595,6 +610,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 } catch (err) {
                     console.warn('[PoolDataProvider] Failed to fetch gauge reward rates:', err);
                 }
+
 
                 // Fetch gauge data for voting (in parallel with priority fetch)
                 await fetchGaugeData(newTokenMap);
