@@ -6,6 +6,7 @@ import { useAccount } from 'wagmi';
 import { V2_CONTRACTS, CL_CONTRACTS } from '@/config/contracts';
 import { DEFAULT_TOKEN_LIST, WSEI } from '@/config/tokens';
 import { RPC_ENDPOINTS, getSecondaryRpc, getPrimaryRpc } from '@/utils/rpc';
+import { useWindPrice as useWindPriceHook } from '@/hooks/useWindPrice';
 
 // Goldsky Subgraph URL for pool data (v2.0.0 with user data)
 const SUBGRAPH_URL = 'https://api.goldsky.com/api/public/project_cmjlh2t5mylhg01tm7t545rgk/subgraphs/windswap-cl/2.0.0/gn';
@@ -376,6 +377,21 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
     const [seiPrice, setSeiPrice] = useState<number>(0.35); // Default fallback
     const [isLoading, setIsLoading] = useState(true);
 
+    // Use the on-chain price hook as primary source
+    const { windPrice: onChainWindPrice, seiPrice: onChainSeiPrice } = useWindPriceHook();
+
+    // Sync on-chain prices to local state (only if they're valid)
+    useEffect(() => {
+        if (onChainWindPrice > 0) {
+            setWindPrice(onChainWindPrice);
+            console.log(`[PoolDataProvider] 💰 WIND price from on-chain: $${onChainWindPrice.toFixed(6)}`);
+        }
+        if (onChainSeiPrice > 0) {
+            setSeiPrice(onChainSeiPrice);
+            console.log(`[PoolDataProvider] 💰 SEI price from on-chain: $${onChainSeiPrice.toFixed(4)}`);
+        }
+    }, [onChainWindPrice, onChainSeiPrice]);
+
     // Gauge/Voting state
     const [gauges, setGauges] = useState<GaugeInfo[]>([]);
     const [totalVoteWeight, setTotalVoteWeight] = useState<bigint>(BigInt(0));
@@ -458,39 +474,57 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                 const poolAddresses = subgraphPools.map(p => p.address);
                 fetchDexScreenerData(poolAddresses).then((dataMap: Map<string, DexScreenerPoolData>) => {
                     if (dataMap.size > 0) {
-                        // Extract WIND and SEI prices from DexScreener data
-                        dataMap.forEach((data, addr) => {
-                            // WIND/WSEI pool - get WIND price
-                            if (addr === PRIORITY_POOL) {
-                                if (data.priceUsd > 0) {
-                                    setWindPrice(data.priceUsd);
-                                    console.log(`[DexScreener] ⚡ WIND price: $${data.priceUsd.toFixed(4)}`);
-                                }
-                            }
-                            // USDC/WSEI pool - get SEI price (1 / priceNative if USDC is base)
-                            if (data.baseTokenSymbol === 'USDC' && data.quoteTokenSymbol === 'WSEI') {
-                                // USDC price in WSEI means 1 USDC = X WSEI, so SEI = 1/X USD
-                                // But DexScreener priceUsd is USDC price which is ~$1
-                                // We need SEI price from a SEI pair
-                            }
-                            // For SEI price, use WSEI pairs where we can derive it
-                            if (data.quoteTokenSymbol === 'WSEI' && data.priceUsd > 0 && data.baseTokenSymbol !== 'WIND') {
-                                // priceUsd is base token price, we need WSEI price
-                                // Skip - we'll get SEI price from USDC/WSEI directly if available
-                            }
-                        });
+                        let detectedWindPrice = 0;
+                        let detectedSeiPrice = 0;
 
-                        // Get SEI price from USDC/WSEI pool specifically
+                        // First, get SEI price from USDC/WSEI pool
                         const usdcWseiPool = '0x587b82b8ed109d8587a58f9476a8d4268ae945b1'.toLowerCase();
                         const usdcWseiData = dataMap.get(usdcWseiPool);
                         if (usdcWseiData && usdcWseiData.reserve0 > 0 && usdcWseiData.reserve1 > 0) {
                             // USDC is token0, WSEI is token1
                             // SEI price = USDC reserve / WSEI reserve (since USDC = $1)
-                            const seiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
-                            if (seiPrice > 0 && seiPrice < 100) {
-                                setSeiPrice(seiPrice);
-                                console.log(`[DexScreener] ⚡ SEI price: $${seiPrice.toFixed(4)}`);
+                            detectedSeiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
+                            if (detectedSeiPrice > 0 && detectedSeiPrice < 100) {
+                                setSeiPrice(detectedSeiPrice);
+                                console.log(`[DexScreener] ⚡ SEI price: $${detectedSeiPrice.toFixed(4)}`);
                             }
+                        }
+
+                        // Try to get WIND price from WIND/USDC pool first (most reliable)
+                        const windUsdcPool = '0x576fc1f102c6bb3f0a2bc87ff01fb652b883dfe0'.toLowerCase();
+                        const windUsdcData = dataMap.get(windUsdcPool);
+                        if (windUsdcData) {
+                            // First try priceUsd from DexScreener
+                            if (windUsdcData.priceUsd > 0) {
+                                detectedWindPrice = windUsdcData.priceUsd;
+                            } else if (windUsdcData.reserve0 > 0 && windUsdcData.reserve1 > 0) {
+                                // WIND is token0, USDC is token1
+                                // WIND price = USDC reserve / WIND reserve
+                                detectedWindPrice = windUsdcData.reserve1 / windUsdcData.reserve0;
+                            }
+                        }
+
+                        // If still no WIND price, try WIND/WSEI pool
+                        if (detectedWindPrice <= 0) {
+                            const windWseiData = dataMap.get(PRIORITY_POOL);
+                            if (windWseiData) {
+                                if (windWseiData.priceUsd > 0) {
+                                    detectedWindPrice = windWseiData.priceUsd;
+                                } else if (windWseiData.reserve0 > 0 && windWseiData.reserve1 > 0 && detectedSeiPrice > 0) {
+                                    // WIND is token0, WSEI is token1
+                                    // WIND in WSEI = WSEI reserve / WIND reserve
+                                    // WIND in USD = (WSEI reserve / WIND reserve) * seiPrice
+                                    const windInWsei = windWseiData.reserve1 / windWseiData.reserve0;
+                                    detectedWindPrice = windInWsei * detectedSeiPrice;
+                                }
+                            }
+                        }
+
+                        if (detectedWindPrice > 0 && detectedWindPrice < 1000) {
+                            setWindPrice(detectedWindPrice);
+                            console.log(`[DexScreener] ⚡ WIND price: $${detectedWindPrice.toFixed(6)}`);
+                        } else {
+                            console.warn(`[DexScreener] ⚠️ Could not detect WIND price, APR may be wrong`);
                         }
 
                         // Update pool data
@@ -574,9 +608,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             const gaugeInfo = GAUGE_LIST.find(g => g.gauge?.toLowerCase() === call.to.toLowerCase());
                             const pairName = gaugeInfo ? `${gaugeInfo.symbol0}/${gaugeInfo.symbol1}` : call.pool;
 
-                            // Log ALL rates for debugging (including zeros)
+                            // Log ALL rates for debugging
+                            const ratePerDay = Number(rate) / 1e18 * 86400;
                             if (rate === BigInt(0)) {
                                 console.log(`[Gauge] ⚠️ ${pairName} (ts:${call.tickSpacing}): 0 reward rate`);
+                            } else {
+                                console.log(`[Gauge] ✅ ${pairName} (ts:${call.tickSpacing}): ${ratePerDay.toFixed(2)} WIND/day`);
                             }
 
                             if (rate > BigInt(0)) {
@@ -591,6 +628,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         });
 
                         // Also add rewards for subgraph pools that match by token pair + tickSpacing
+                        let matchedCount = 0;
+                        let unmatchedPools: string[] = [];
+
                         subgraphPools.forEach(pool => {
                             const t0 = pool.token0.address.toLowerCase();
                             const t1 = pool.token1.address.toLowerCase();
@@ -599,12 +639,33 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             const rate = pairRewardMap.get(pairKey);
                             if (rate && rate > BigInt(0)) {
                                 newRewards.set(pool.address.toLowerCase(), rate);
+                                matchedCount++;
+                            } else {
+                                // Check if there's a rate for same tokens but different tickSpacing
+                                let foundAlternate = false;
+                                pairRewardMap.forEach((altRate, altKey) => {
+                                    if (altKey.startsWith(`${sortedTokens[0]}-${sortedTokens[1]}-`) && !foundAlternate) {
+                                        foundAlternate = true;
+                                        const altTickSpacing = altKey.split('-')[2];
+                                        console.log(`[Match] ⚠️ ${pool.token0.symbol}/${pool.token1.symbol}: subgraph ts=${pool.tickSpacing}, gauge ts=${altTickSpacing}`);
+                                        // Use the alternate rate
+                                        newRewards.set(pool.address.toLowerCase(), altRate);
+                                        matchedCount++;
+                                    }
+                                });
+                                if (!foundAlternate) {
+                                    unmatchedPools.push(`${pool.token0.symbol}/${pool.token1.symbol}`);
+                                }
                             }
                         });
 
+                        if (unmatchedPools.length > 0) {
+                            console.log(`[Match] ❌ No gauge found for: ${unmatchedPools.join(', ')}`);
+                        }
+
                         if (newRewards.size > 0) {
                             setPoolRewards(newRewards);
-                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates`);
+                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates (matched ${matchedCount} subgraph pools)`);
                         }
                     }
                 } catch (err) {
