@@ -484,7 +484,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             detectedSeiPrice = usdcWseiData.reserve0 / usdcWseiData.reserve1;
                             if (detectedSeiPrice > 0 && detectedSeiPrice < 100) {
                                 setSeiPrice(detectedSeiPrice);
-                                console.log(`[DexScreener] ⚡ SEI price: $${detectedSeiPrice.toFixed(4)}`);
                             }
                         }
 
@@ -520,9 +519,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
 
                         if (detectedWindPrice > 0 && detectedWindPrice < 1000) {
                             setWindPrice(detectedWindPrice);
-                            console.log(`[DexScreener] ⚡ WIND price: $${detectedWindPrice.toFixed(6)}`);
-                        } else {
-                            console.warn(`[DexScreener] ⚠️ Could not detect WIND price, APR may be wrong`);
                         }
 
                         // Update pool data
@@ -537,7 +533,6 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 reserve1: dexData.reserve1 > 0 ? dexData.reserve1.toString() : pool.reserve1,
                             };
                         }));
-                        console.log(`[PoolDataProvider] 📈 Updated ${dataMap.size} pools with DexScreener data`);
                     }
                 });
 
