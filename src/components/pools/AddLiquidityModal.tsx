@@ -12,7 +12,7 @@ import { useTokenBalance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
-import { calculateBaseAPR, formatAPR } from '@/utils/aprCalculator';
+import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 import { GAUGE_LIST } from '@/config/gauges';
 import { isStablecoinPair, tickToStablecoinPrice } from '@/config/stablecoinTicks';
 import {
@@ -82,7 +82,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
     const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
-    const { poolRewards, windPrice, seiPrice } = usePoolData();
+    const { poolRewards, windPrice, seiPrice, allPools } = usePoolData();
 
     // Find gauge for current pool configuration
     const getPoolGauge = useCallback(() => {
@@ -1181,27 +1181,17 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                             const rewardRate = poolRewards.get(clPoolAddress.toLowerCase());
                                                             if (!rewardRate || rewardRate === BigInt(0)) return null;
 
-                                                            const pLow = parseFloat(priceLower || '0');
-                                                            const pHigh = parseFloat(priceUpper || '0');
+                                                            // Find pool data to get actual TVL
+                                                            const pool = allPools.find(p => p.address.toLowerCase() === clPoolAddress.toLowerCase());
+                                                            const tvlUsd = pool ? (parseFloat(pool.tvl) || 1) : 1;
+                                                            const poolTickSpacing = pool?.tickSpacing || tickSpacing;
 
-                                                            if (pLow <= 0 || pHigh <= 0 || pLow >= pHigh || !currentPrice) return null;
-
-                                                            // Calculate range width as ratio - this determines "capital efficiency"
-                                                            const rangeWidth = (pHigh - pLow) / currentPrice;
-                                                            const referenceWidth = 1.5; // Full range reference (±100%)
-                                                            const rawMultiplier = referenceWidth / rangeWidth;
-                                                            const multiplier = Math.max(1, Math.min(rawMultiplier, 100));
-
-                                                            // Use reference TVL of $10k for base APR estimate  
-                                                            const referenceTvl = 10000;
-                                                            const baseAPR = calculateBaseAPR(rewardRate, windPrice, referenceTvl);
-
-                                                            // Apply concentration multiplier
-                                                            const adjustedAPR = baseAPR * multiplier;
+                                                            // Use the same calculation as pools page
+                                                            const poolAPR = calculatePoolAPR(rewardRate, windPrice, tvlUsd, poolTickSpacing);
 
                                                             return (
                                                                 <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
-                                                                    🔥 APR {formatAPR(adjustedAPR)}
+                                                                    🔥 APR {formatAPR(poolAPR)}
                                                                 </span>
                                                             );
                                                         })()}
