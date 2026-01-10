@@ -216,18 +216,32 @@ export default function VotePage() {
         fetchVotingRewards();
     }, [fetchVotingRewards]);
 
-    // Handle distribute rewards (anyone can call this!)
+    // Handle distribute rewards (anyone can call this!) - batch in groups of 10 to avoid gas limits
     const handleDistributeRewards = async () => {
         if (!voterPoolCount || Number(voterPoolCount) === 0) return;
         setIsDistributing(true);
+
+        const totalPools = Number(voterPoolCount);
+        const batchSize = 10;
+
         try {
-            const hash = await writeContractAsync({
-                address: V2_CONTRACTS.Voter as Address,
-                abi: VOTER_DISTRIBUTE_ABI,
-                functionName: 'distribute',
-                args: [BigInt(0), voterPoolCount],
-            });
-            setTxHash(hash);
+            for (let start = 0; start < totalPools; start += batchSize) {
+                const end = Math.min(start + batchSize, totalPools);
+                console.log(`Distributing pools ${start} to ${end - 1}...`);
+
+                const hash = await writeContractAsync({
+                    address: V2_CONTRACTS.Voter as Address,
+                    abi: VOTER_DISTRIBUTE_ABI,
+                    functionName: 'distribute',
+                    args: [BigInt(start), BigInt(end)],
+                });
+                setTxHash(hash);
+
+                // Brief pause between batches
+                if (end < totalPools) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
         } catch (err: any) {
             console.error('Distribute failed:', err);
         }
