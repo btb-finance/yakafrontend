@@ -170,53 +170,98 @@ export default function VotePage() {
         },
     ] as const;
 
-    // Fetch claimable voting rewards for all veNFTs
+    // Fetch claimable voting rewards for all veNFTs using batch RPC
     const fetchVotingRewards = useCallback(async () => {
-        if (!publicClient || positions.length === 0 || gauges.length === 0) return;
+        if (positions.length === 0 || gauges.length === 0) return;
 
         setIsLoadingVotingRewards(true);
         try {
-            const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
+            // Build all earned() calls upfront
+            interface EarnedCall {
+                tokenId: string;
+                pool: string;
+                token: string;
+                feeReward: string;
+            }
+            const calls: EarnedCall[] = [];
 
-            // For each veNFT position
             for (const position of positions) {
-                const tokenIdStr = position.tokenId.toString();
-                newRewards[tokenIdStr] = {};
-
-                // For each gauge with a fee reward contract
                 for (const gauge of gauges) {
                     if (!gauge.feeReward || gauge.feeReward === '0x0000000000000000000000000000000000000000') continue;
 
-                    newRewards[tokenIdStr][gauge.pool] = {};
-
-                    // Fetch earned for token0 and token1
-                    const tokens = [gauge.token0, gauge.token1];
-                    const symbols = [gauge.symbol0, gauge.symbol1];
-
-                    for (let i = 0; i < tokens.length; i++) {
-                        try {
-                            const earned = await publicClient.readContract({
-                                address: gauge.feeReward as Address,
-                                abi: FEE_REWARD_ABI,
-                                functionName: 'earned',
-                                args: [tokens[i] as Address, position.tokenId],
-                            });
-                            if (earned > BigInt(0)) {
-                                newRewards[tokenIdStr][gauge.pool][tokens[i]] = earned;
-                            }
-                        } catch (err) {
-                            // Ignore individual errors
-                        }
-                    }
+                    // Add call for token0 and token1
+                    calls.push({
+                        tokenId: position.tokenId.toString(),
+                        pool: gauge.pool,
+                        token: gauge.token0,
+                        feeReward: gauge.feeReward,
+                    });
+                    calls.push({
+                        tokenId: position.tokenId.toString(),
+                        pool: gauge.pool,
+                        token: gauge.token1,
+                        feeReward: gauge.feeReward,
+                    });
                 }
             }
+
+            if (calls.length === 0) {
+                setVotingRewards({});
+                setIsLoadingVotingRewards(false);
+                return;
+            }
+
+            // Encode earned(token, tokenId) calls
+            const earnedSelector = '0x3e491d47'; // earned(address,uint256)
+            const rpcCalls = calls.map(call => ({
+                method: 'eth_call',
+                params: [{
+                    to: call.feeReward,
+                    data: earnedSelector +
+                        call.token.slice(2).padStart(64, '0') +
+                        BigInt(call.tokenId).toString(16).padStart(64, '0')
+                }, 'latest']
+            }));
+
+            // Execute batch RPC call
+            const response = await fetch('https://evm-rpc.sei-apis.com', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rpcCalls.map((call, i) => ({
+                    jsonrpc: '2.0',
+                    method: call.method,
+                    params: call.params,
+                    id: i + 1,
+                }))),
+            });
+
+            const results = await response.json();
+            const earnedResults = Array.isArray(results) ? results.map(r => r.result || '0x0') : [];
+
+            // Parse results into votingRewards structure
+            const newRewards: Record<string, Record<string, Record<string, bigint>>> = {};
+
+            earnedResults.forEach((result, idx) => {
+                const call = calls[idx];
+                if (!call) return;
+
+                const earned = result && result !== '0x' && result.length > 2
+                    ? BigInt(result)
+                    : BigInt(0);
+
+                if (earned > BigInt(0)) {
+                    if (!newRewards[call.tokenId]) newRewards[call.tokenId] = {};
+                    if (!newRewards[call.tokenId][call.pool]) newRewards[call.tokenId][call.pool] = {};
+                    newRewards[call.tokenId][call.pool][call.token] = earned;
+                }
+            });
 
             setVotingRewards(newRewards);
         } catch (err) {
             console.error('Error fetching voting rewards:', err);
         }
         setIsLoadingVotingRewards(false);
-    }, [publicClient, positions, gauges]);
+    }, [positions, gauges]);
 
     // Fetch voting rewards when positions or gauges change
     useEffect(() => {
