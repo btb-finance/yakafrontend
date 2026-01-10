@@ -96,7 +96,9 @@ export default function PoolsPage() {
             tvlUsd = getTokenValue(s0, adj0) + getTokenValue(s1, adj1);
         }
 
-        if (tvlUsd <= 0) return null;
+        // For pools with rewards but no TVL data, use minimum $1 to show very high APR
+        // Better to show "1000K%+" than "—" when rewards are active
+        if (tvlUsd <= 0) tvlUsd = 1;
 
         return calculatePoolAPR(rewardRate, windPrice, tvlUsd, pool.tickSpacing);
     };
