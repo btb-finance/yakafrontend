@@ -449,7 +449,7 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         },
                         poolType: 'CL' as const,
                         stable: false,
-                        tickSpacing: p.tickSpacing,
+                        tickSpacing: typeof p.tickSpacing === 'number' ? p.tickSpacing : parseInt(String(p.tickSpacing)) || 0,
                         reserve0: '0', // Subgraph doesn't give individual reserves
                         reserve1: '0',
                         tvl: tvl > 0 ? tvl.toFixed(2) : '0',
@@ -628,8 +628,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                         });
 
                         // Also add rewards for subgraph pools that match by token pair + tickSpacing
+                        // Also store the correct tickSpacing from gauge for APR calculation
                         let matchedCount = 0;
                         let unmatchedPools: string[] = [];
+
+                        // Store tickSpacing corrections for pools that matched with different tickSpacing
+                        const tickSpacingCorrections = new Map<string, number>();
 
                         subgraphPools.forEach(pool => {
                             const t0 = pool.token0.address.toLowerCase();
@@ -646,10 +650,12 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                                 pairRewardMap.forEach((altRate, altKey) => {
                                     if (altKey.startsWith(`${sortedTokens[0]}-${sortedTokens[1]}-`) && !foundAlternate) {
                                         foundAlternate = true;
-                                        const altTickSpacing = altKey.split('-')[2];
+                                        const altTickSpacing = parseInt(altKey.split('-')[2]) || 0;
                                         console.log(`[Match] ⚠️ ${pool.token0.symbol}/${pool.token1.symbol}: subgraph ts=${pool.tickSpacing}, gauge ts=${altTickSpacing}`);
                                         // Use the alternate rate
                                         newRewards.set(pool.address.toLowerCase(), altRate);
+                                        // Store the correct tickSpacing from gauge
+                                        tickSpacingCorrections.set(pool.address.toLowerCase(), altTickSpacing);
                                         matchedCount++;
                                     }
                                 });
@@ -659,13 +665,25 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                             }
                         });
 
+                        // Apply tickSpacing corrections to pools
+                        if (tickSpacingCorrections.size > 0) {
+                            setClPools(prev => prev.map(pool => {
+                                const correctedTs = tickSpacingCorrections.get(pool.address.toLowerCase());
+                                if (correctedTs !== undefined) {
+                                    console.log(`[Fix] Correcting ${pool.token0.symbol}/${pool.token1.symbol} tickSpacing: ${pool.tickSpacing} → ${correctedTs}`);
+                                    return { ...pool, tickSpacing: correctedTs };
+                                }
+                                return pool;
+                            }));
+                        }
+
                         if (unmatchedPools.length > 0) {
                             console.log(`[Match] ❌ No gauge found for: ${unmatchedPools.join(', ')}`);
                         }
 
                         if (newRewards.size > 0) {
                             setPoolRewards(newRewards);
-                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates (matched ${matchedCount} subgraph pools)`);
+                            console.log(`[PoolDataProvider] 🎉 Loaded ${newRewards.size} gauge reward rates (matched ${matchedCount} subgraph pools, ${tickSpacingCorrections.size} corrected)`);
                         }
                     }
                 } catch (err) {

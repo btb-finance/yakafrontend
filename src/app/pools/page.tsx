@@ -63,33 +63,41 @@ export default function PoolsPage() {
     // Calculate APR for a pool (uses concentration multiplier based on tick spacing)
     const getPoolAPR = (pool: typeof allPools[0]): number | null => {
         const rewardRate = poolRewards.get(pool.address.toLowerCase());
-        if (!rewardRate || rewardRate === BigInt(0)) return null;
 
-        // Try to estimate TVL in USD using reserves first
-        const r0 = parseFloat(pool.reserve0) || 0;
-        const r1 = parseFloat(pool.reserve1) || 0;
+        if (!rewardRate || rewardRate === BigInt(0)) return null;
 
         const s0 = pool.token0.symbol.toUpperCase();
         const s1 = pool.token1.symbol.toUpperCase();
 
-        // Calculate value of each token
-        const getTokenValue = (symbol: string, amount: number): number => {
-            if (symbol === 'USDC' || symbol === 'USDT' || symbol === 'USDT0' || symbol === 'USDC.N') return amount;
-            if (symbol === 'WSEI' || symbol === 'SEI') return amount * seiPrice;
-            if (symbol === 'WIND') return amount * windPrice;
-            if (symbol.includes('BTC') || symbol.includes('WBTC')) return amount * 95000;
-            if (symbol.includes('ETH') || symbol.includes('WETH')) return amount * 3500;
-            return amount * seiPrice; // Fallback to SEI price
-        };
+        // PREFER pool.tvl from DexScreener/subgraph - it's more reliable
+        // Reserve-based calculation has token order mismatch issues
+        let tvlUsd = parseFloat(pool.tvl) || 0;
 
-        // Use reserves-based TVL if available, otherwise fall back to pool.tvl from DexScreener/subgraph
-        let tvlUsd = getTokenValue(s0, r0) + getTokenValue(s1, r1);
+        // Only fall back to reserves if TVL is not available
         if (tvlUsd <= 0) {
-            tvlUsd = parseFloat(pool.tvl) || 0;
-        }
-        if (tvlUsd <= 0) return null; // No TVL data available
+            const r0 = parseFloat(pool.reserve0) || 0;
+            const r1 = parseFloat(pool.reserve1) || 0;
 
-        // Use new APR calculator with tick spacing for CL concentration boost
+            const d0 = pool.token0.decimals || 18;
+            const d1 = pool.token1.decimals || 18;
+            const adj0 = r0 > 1e12 ? r0 / Math.pow(10, d0) : r0;
+            const adj1 = r1 > 1e12 ? r1 / Math.pow(10, d1) : r1;
+
+            // Calculate value of each token
+            const getTokenValue = (symbol: string, amount: number): number => {
+                if (symbol === 'USDC' || symbol === 'USDT' || symbol === 'USDT0' || symbol === 'USDC.N') return amount;
+                if (symbol === 'WSEI' || symbol === 'SEI') return amount * seiPrice;
+                if (symbol === 'WIND') return amount * windPrice;
+                if (symbol.includes('BTC') || symbol.includes('WBTC')) return amount * 95000;
+                if (symbol.includes('ETH') || symbol.includes('WETH')) return amount * 3500;
+                return amount * seiPrice;
+            };
+
+            tvlUsd = getTokenValue(s0, adj0) + getTokenValue(s1, adj1);
+        }
+
+        if (tvlUsd <= 0) return null;
+
         return calculatePoolAPR(rewardRate, windPrice, tvlUsd, pool.tickSpacing);
     };
 
