@@ -132,7 +132,7 @@ export function useVoter() {
                     method: 'eth_call',
                     params: [{
                         to: V2_CONTRACTS.Voter,
-                        data: `0x8d5e0ad8${gaugeAddress.slice(2).padStart(64, '0')}`
+                        data: `0x929c8dcd${gaugeAddress.slice(2).padStart(64, '0')}`
                     }, 'latest'],
                     id: 1,
                 }),
