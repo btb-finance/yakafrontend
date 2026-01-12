@@ -13,8 +13,9 @@ const AddLiquidityModal = dynamic(
     () => import('@/components/pools/AddLiquidityModal').then(mod => mod.AddLiquidityModal),
     { ssr: false }
 );
-import { Token, SEI, WSEI, USDC } from '@/config/tokens';
+import { Token, SEI, WSEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
+import { formatTVL } from '@/utils/format';
 import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 
 type PoolType = 'all' | 'v2' | 'cl';
@@ -200,28 +201,6 @@ export default function PoolsPage() {
     const getFeeTier = (tickSpacing?: number) => {
         if (!tickSpacing) return '';
         return FEE_TIERS[tickSpacing] || `${tickSpacing}ts`;
-    };
-
-    // Format TVL nicely
-    const formatTVL = (tvl: string, poolType?: string) => {
-        const num = parseFloat(tvl);
-        if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
-        if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-        if (num >= 1) return `$${num.toFixed(2)}`;
-        if (num > 0) return `$${num.toFixed(4)}`;
-        if (poolType === 'CL') return 'New Pool';
-        return 'Low';
-    };
-
-    // Format token amount with proper decimals
-    const formatAmount = (amount: string, symbol: string): string => {
-        const num = parseFloat(amount);
-        if (isNaN(num) || num === 0) return '0';
-        if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-        if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
-        if (num >= 1) return num.toFixed(2);
-        if (num >= 0.0001) return num.toFixed(4);
-        return num.toExponential(2);
     };
 
     const totalPoolCount = v2Pools.length + clPools.length;

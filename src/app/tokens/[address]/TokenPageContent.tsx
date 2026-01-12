@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useTokenPage, TokenPool } from '@/hooks/useTokenPage';
 import { Token, SEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
+import { formatTVL } from '@/utils/format';
 
 // Lazy load modal for faster initial page load
 const AddLiquidityModal = dynamic(
@@ -113,16 +114,6 @@ export function TokenPageContent() {
             });
             setModalOpen(true);
         }
-    };
-
-    // Format TVL nicely
-    const formatTVL = (tvl: string) => {
-        const num = parseFloat(tvl);
-        if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
-        if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-        if (num >= 1) return `$${num.toFixed(2)}`;
-        if (num > 0) return `$${num.toFixed(4)}`;
-        return 'New';
     };
 
     // SSR guard - show loading until mounted in browser

@@ -6,8 +6,9 @@ import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { Address, formatUnits } from 'viem';
 import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
-import { WSEI, USDC, Token } from '@/config/tokens';
+import { WSEI, Token } from '@/config/tokens';
 import { getTokenLogo as getTokenLogoUtil, getTokenDisplayInfo } from '@/utils/tokens';
+import { formatPrice } from '@/utils/format';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
@@ -180,17 +181,6 @@ const tickToPrice = (tick: number, token0Decimals: number, token1Decimals: numbe
     const rawPrice = Math.pow(1.0001, tick);
     // Adjust for decimals: actualPrice = rawPrice * 10^(token0Decimals - token1Decimals)
     return rawPrice * Math.pow(10, token0Decimals - token1Decimals);
-};
-
-// Format price for display with appropriate precision
-const formatPrice = (price: number): string => {
-    if (price === 0) return '0';
-    if (price < 0.0001) return price.toExponential(2);
-    if (price < 0.01) return price.toFixed(6);
-    if (price < 1) return price.toFixed(4);
-    if (price < 100) return price.toFixed(3);
-    if (price < 10000) return price.toFixed(2);
-    return price.toLocaleString(undefined, { maximumFractionDigits: 0 });
 };
 
 // Check if position is in range based on current tick
