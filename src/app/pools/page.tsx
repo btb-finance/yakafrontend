@@ -13,7 +13,8 @@ const AddLiquidityModal = dynamic(
     () => import('@/components/pools/AddLiquidityModal').then(mod => mod.AddLiquidityModal),
     { ssr: false }
 );
-import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
+import { Token, SEI, WSEI, USDC } from '@/config/tokens';
+import { getTokenByAddress } from '@/utils/tokens';
 import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 
 type PoolType = 'all' | 'v2' | 'cl';
@@ -38,13 +39,12 @@ interface PoolConfig {
     stable?: boolean;
 }
 
-// Helper to find token by address
-const findTokenByAddress = (addr: string): Token | undefined => {
-    const lowerAddr = addr.toLowerCase();
-    if (lowerAddr === WSEI.address.toLowerCase()) {
-        return SEI; // Use SEI for native token UI
-    }
-    return DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === lowerAddr);
+// Helper to find token by address - use SEI for WSEI in UI
+const findTokenForUI = (addr: string): Token | undefined => {
+    const token = getTokenByAddress(addr);
+    // Show SEI for WSEI in UI for better UX
+    if (token?.symbol === 'WSEI') return SEI;
+    return token || undefined;
 };
 
 export default function PoolsPage() {
@@ -106,8 +106,8 @@ export default function PoolsPage() {
 
     // Open modal for a specific pool
     const openAddLiquidityModal = (pool: typeof allPools[0]) => {
-        const token0 = findTokenByAddress(pool.token0.address);
-        const token1 = findTokenByAddress(pool.token1.address);
+        const token0 = findTokenForUI(pool.token0.address);
+        const token1 = findTokenForUI(pool.token1.address);
         setSelectedPool({
             token0,
             token1,

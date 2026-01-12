@@ -6,7 +6,8 @@ import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useTokenPage, TokenPool } from '@/hooks/useTokenPage';
-import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
+import { Token, SEI } from '@/config/tokens';
+import { getTokenByAddress } from '@/utils/tokens';
 
 // Lazy load modal for faster initial page load
 const AddLiquidityModal = dynamic(
@@ -23,13 +24,12 @@ interface PoolConfig {
     stable?: boolean;
 }
 
-// Helper to find token by address
-const findTokenByAddress = (addr: string): Token | undefined => {
-    const lowerAddr = addr.toLowerCase();
-    if (lowerAddr === WSEI.address.toLowerCase()) {
-        return SEI; // Use SEI for native token UI
-    }
-    return DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === lowerAddr);
+// Helper to find token by address - use SEI for WSEI in UI
+const findTokenForUI = (addr: string): Token | undefined => {
+    const token = getTokenByAddress(addr);
+    // Show SEI for WSEI in UI for better UX
+    if (token?.symbol === 'WSEI') return SEI;
+    return token || undefined;
 };
 
 // Fee tier mapping
@@ -92,8 +92,8 @@ export function TokenPageContent() {
 
     // Open add liquidity modal for a specific pool
     const openAddLiquidity = (pool: TokenPool) => {
-        const t0 = findTokenByAddress(pool.token0.address);
-        const t1 = findTokenByAddress(pool.token1.address);
+        const t0 = findTokenForUI(pool.token0.address);
+        const t1 = findTokenForUI(pool.token1.address);
         setSelectedPool({
             token0: t0,
             token1: t1,

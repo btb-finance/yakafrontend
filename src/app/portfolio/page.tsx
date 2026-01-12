@@ -6,7 +6,8 @@ import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { Address, formatUnits } from 'viem';
 import Link from 'next/link';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
-import { DEFAULT_TOKEN_LIST, WSEI, USDC, Token } from '@/config/tokens';
+import { WSEI, USDC, Token } from '@/config/tokens';
+import { getTokenLogo as getTokenLogoUtil, getTokenDisplayInfo } from '@/utils/tokens';
 import { useCLPositions, useV2Positions } from '@/hooks/usePositions';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI, ROUTER_ABI } from '@/config/abis';
 import { usePoolData } from '@/providers/PoolDataProvider';
@@ -101,16 +102,15 @@ interface StakedPosition {
     rewardRate: bigint;
 }
 
-// Get token info from known token list
+// Get token info from known token list (uses centralized utility)
 const getTokenInfo = (addr: string) => {
-    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-    return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
+    const info = getTokenDisplayInfo(addr);
+    return { symbol: info.symbol, decimals: info.decimals };
 };
 
-// Get token logo from known token list
+// Get token logo from known token list (uses centralized utility)
 const getTokenLogo = (addr: string): string | undefined => {
-    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-    return token?.logoURI;
+    return getTokenLogoUtil(addr);
 };
 
 // Calculate token amounts from CL position liquidity and tick range
@@ -219,15 +219,15 @@ export default function PortfolioPage() {
     const stakedPositions = prefetchedStakedPositions;
     const veNFTs = prefetchedVeNFTs;
 
-    // Shadow outer getTokenInfo - uses global data first, then fallback to token list
+    // Shadow outer getTokenInfo - uses global data first, then fallback to utility
     const getTokenInfo = (addr: string) => {
         const globalInfo = getGlobalTokenInfo(addr);
         if (globalInfo) {
             return { symbol: globalInfo.symbol, decimals: globalInfo.decimals };
         }
-        // Fallback to local token list
-        const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-        return { symbol: token?.symbol || addr.slice(0, 10) + '...', decimals: token?.decimals || 18 };
+        // Fallback to centralized utility
+        const info = getTokenDisplayInfo(addr);
+        return { symbol: info.symbol, decimals: info.decimals };
     };
 
     // Increase liquidity modal state

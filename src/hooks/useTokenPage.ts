@@ -3,7 +3,8 @@
 import { useMemo } from 'react';
 import { Address, isAddress, getAddress } from 'viem';
 import { useReadContract } from 'wagmi';
-import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI } from '@/config/tokens';
+import { Token, SEI, WSEI } from '@/config/tokens';
+import { getTokenByAddress } from '@/utils/tokens';
 import { GAUGE_LIST, GaugeConfig } from '@/config/gauges';
 import { usePoolData } from '@/providers/PoolDataProvider';
 
@@ -61,20 +62,10 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
     const isValidAddress = !!address && isAddress(address);
     const checksumAddr = isValidAddress ? getAddress(address) : undefined;
 
-    // First, try to find token in our known list
+    // First, try to find token in our known list using centralized utility
     const knownToken = useMemo(() => {
         if (!checksumAddr) return null;
-        const lowerAddr = checksumAddr.toLowerCase();
-
-        // Check for native SEI addresses
-        if (lowerAddr === SEI.address.toLowerCase()) {
-            return SEI;
-        }
-        if (lowerAddr === WSEI.address.toLowerCase()) {
-            return WSEI;
-        }
-
-        return DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === lowerAddr) || null;
+        return getTokenByAddress(checksumAddr);
     }, [checksumAddr]);
 
     const isKnownToken = knownToken !== null;
@@ -137,9 +128,9 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
         const matchingPools: TokenPool[] = [];
         const seenPoolAddrs = new Set<string>();
 
-        // Helper to find token by address
+        // Helper to find token by address - uses centralized utility
         const findToken = (addr: string, symbol?: string): Token => {
-            const found = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
+            const found = getTokenByAddress(addr);
             return found || { address: addr, symbol: symbol || '???', name: symbol || 'Unknown', decimals: 18 };
         };
 
@@ -227,13 +218,8 @@ export function useTokenPage(address: string | undefined): UseTokenPageResult {
 
 /**
  * Helper to find a token by address (for use outside the hook)
+ * @deprecated Use getTokenByAddress from '@/utils/tokens' instead
  */
 export function findTokenByAddress(address: string): Token | null {
-    if (!address || !isAddress(address)) return null;
-    const lowerAddr = address.toLowerCase();
-
-    if (lowerAddr === SEI.address.toLowerCase()) return SEI;
-    if (lowerAddr === WSEI.address.toLowerCase()) return WSEI;
-
-    return DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === lowerAddr) || null;
+    return getTokenByAddress(address);
 }

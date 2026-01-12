@@ -9,16 +9,13 @@ import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useVoter } from '@/hooks/useVoter';
 import { WIND, DEFAULT_TOKEN_LIST } from '@/config/tokens';
+import { getTokenLogo } from '@/utils/tokens';
 import { V2_CONTRACTS } from '@/config/contracts';
 import { Tooltip } from '@/components/common/Tooltip';
 import { InfoCard, EmptyState } from '@/components/common/InfoCard';
 import { LockVoteEarnSteps } from '@/components/common/StepIndicator';
 
-// Helper to get token logo from global token list
-const getTokenLogo = (addr: string): string | undefined => {
-    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === addr.toLowerCase());
-    return token?.logoURI;
-};
+
 
 // Minter ABI for epoch info
 const MINTER_ABI = [
