@@ -6,7 +6,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData } from 'viem';
 import { Token, SEI, USDC, WSEI } from '@/config/tokens';
 import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';
-import { ROUTER_ABI, ERC20_ABI, SWAP_ROUTER_ABI } from '@/config/abis';
+import { ROUTER_ABI, ERC20_ABI, SWAP_ROUTER_ABI, WETH_ABI } from '@/config/abis';
 import { TokenInput } from './TokenInput';
 import { SwapSettings } from './SwapSettings';
 import { useSwap } from '@/hooks/useSwap';
@@ -23,13 +23,14 @@ interface Route {
 }
 
 interface BestRoute {
-    type: 'v2' | 'v3' | 'multi-hop';
+    type: 'v2' | 'v3' | 'multi-hop' | 'wrap';
     amountOut: string;
     tickSpacing?: number;
     feeLabel: string;
     stable?: boolean;
     via?: string; // Intermediate token symbol for multi-hop
     intermediate?: Token; // Intermediate token object for multi-hop execution
+    isWrap?: boolean; // true = SEI->WSEI (wrap), false = WSEI->SEI (unwrap)
 }
 
 interface SwapInterfaceProps {
@@ -321,6 +322,29 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             try {
                 const routes: BestRoute[] = [];
 
+                // === Check for direct wrap/unwrap (WSEI <-> SEI) ===
+                // Use address comparison for reliability (isNative may not always be preserved)
+                const seiAddress = SEI.address.toLowerCase();
+                const wseiAddress = WSEI.address.toLowerCase();
+                const tokenInAddr = tokenIn.address.toLowerCase();
+                const tokenOutAddr = tokenOut.address.toLowerCase();
+
+                const isWrap = tokenInAddr === seiAddress && tokenOutAddr === wseiAddress;
+                const isUnwrap = tokenInAddr === wseiAddress && tokenOutAddr === seiAddress;
+
+                if (isWrap || isUnwrap) {
+                    // 1:1 rate for wrap/unwrap
+                    setBestRoute({
+                        type: 'wrap',
+                        amountOut: amountIn,
+                        feeLabel: isWrap ? 'Wrap' : 'Unwrap',
+                        isWrap,
+                    });
+                    setAmountOut(amountIn);
+                    setIsQuoting(false);
+                    return;
+                }
+
                 // === Get best V3 route (direct or multi-hop) - SINGLE call handles both ===
                 const v3Route = await findMultiHopRoute(tokenIn, tokenOut, amountIn);
 
@@ -424,12 +448,44 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
         : null;
 
     const handleSwap = async () => {
-        if (!canSwap || !tokenIn || !tokenOut || !bestRoute) return;
+        if (!tokenIn || !tokenOut || !bestRoute) return;
+        // For wrap/unwrap, we don't need the full canSwap check
+        if (bestRoute.type !== 'wrap' && !canSwap) return;
 
         setRouteLocked(true); // Lock route during swap
 
         let result;
-        if (bestRoute.type === 'v2') {
+
+        // Handle wrap/unwrap directly
+        if (bestRoute.type === 'wrap') {
+            try {
+                const amountWei = parseUnits(amountIn, 18);
+                let hash: `0x${string}`;
+
+                if (bestRoute.isWrap) {
+                    // Wrap: SEI -> WSEI (deposit)
+                    hash = await writeContractAsync({
+                        address: WSEI.address as Address,
+                        abi: WETH_ABI,
+                        functionName: 'deposit',
+                        args: [],
+                        value: amountWei,
+                    });
+                } else {
+                    // Unwrap: WSEI -> SEI (withdraw)
+                    hash = await writeContractAsync({
+                        address: WSEI.address as Address,
+                        abi: WETH_ABI,
+                        functionName: 'withdraw',
+                        args: [amountWei],
+                    });
+                }
+                result = { hash };
+            } catch (err: any) {
+                console.error('Wrap/unwrap error:', err);
+                result = null;
+            }
+        } else if (bestRoute.type === 'v2') {
             result = await executeSwap(
                 tokenIn,
                 tokenOut,
