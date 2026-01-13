@@ -14,6 +14,7 @@ import { useSwapV3 } from '@/hooks/useSwapV3';
 import { useTokenBalance } from '@/hooks/useToken';
 import { useMixedRouteQuoter } from '@/hooks/useMixedRouteQuoter';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
+import { haptic } from '@/hooks/useHaptic';
 
 interface Route {
     from: Address;
@@ -525,6 +526,9 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             setAmountIn('');
             setAmountOut('');
             setBestRoute(null);
+            haptic('success');
+        } else {
+            haptic('error');
         }
         setRouteLocked(false); // Unlock after swap completes or fails
     };
@@ -640,7 +644,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
             {/* Approve/Swap Button */}
             {needsApproval && canSwap ? (
                 <button
-                    onClick={handleApproveAndSwap}
+                    onClick={() => { haptic('medium'); handleApproveAndSwap(); }}
                     disabled={isApproving || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
                 >
@@ -648,7 +652,7 @@ export function SwapInterface({ initialTokenIn, initialTokenOut }: SwapInterface
                 </button>
             ) : (
                 <button
-                    onClick={handleSwap}
+                    onClick={() => { haptic('medium'); handleSwap(); }}
                     disabled={!canSwap || isLoading}
                     className="w-full btn-primary py-4 text-base mt-4 disabled:opacity-50"
                 >

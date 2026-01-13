@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { haptic } from '@/hooks/useHaptic';
 
 // SVG Icons as components
 const SwapIcon = ({ className }: { className?: string }) => (
@@ -65,6 +66,7 @@ export function MobileBottomNav() {
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                onClick={() => haptic('medium')}
                                 className="relative flex flex-col items-center justify-center flex-1 -mt-3"
                             >
                                 <div
@@ -84,6 +86,7 @@ export function MobileBottomNav() {
                         <Link
                             key={item.href}
                             href={item.href}
+                            onClick={() => haptic('light')}
                             className="relative flex items-center justify-center flex-1 py-2 group"
                         >
                             {isActive && (
