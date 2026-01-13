@@ -4,6 +4,7 @@ import "./globals.css";
 import { ClientProviders } from "@/providers/ClientProviders";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 
 
 const geistSans = Geist({
@@ -81,13 +82,18 @@ export default function RootLayout({
           {/* Header */}
           <Header />
 
-          {/* Main Content */}
-          <main className="flex-1 pt-24 pb-16">
+          {/* Main Content - extra bottom padding on mobile for bottom nav */}
+          <main className="flex-1 pt-24 pb-20 md:pb-16">
             {children}
           </main>
 
-          {/* Footer */}
-          <Footer />
+          {/* Mobile Bottom Navigation */}
+          <MobileBottomNav />
+
+          {/* Footer - hidden on mobile since we have bottom nav */}
+          <div className="hidden md:block">
+            <Footer />
+          </div>
         </ClientProviders>
       </body>
     </html>
