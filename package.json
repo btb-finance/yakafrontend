@@ -6,7 +6,6 @@
     "dev": "next dev --turbopack",
     "dev:webpack": "next dev --webpack",
     "build": "next build --turbopack",
-    "build:webpack": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
