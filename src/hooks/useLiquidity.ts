@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useAccount, useWriteContract, useReadContract } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
+import { useWriteContract } from '@/hooks/useWriteContract';
 import { parseUnits, formatUnits, Address, maxUint256 } from 'viem';
 import { V2_CONTRACTS, COMMON } from '@/config/contracts';
 import { ROUTER_ABI, ERC20_ABI, POOL_FACTORY_ABI } from '@/config/abis';
