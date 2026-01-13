@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useWriteContract } from '@/hooks/useWriteContract';
 import { parseUnits, formatUnits, Address, maxUint256, encodeFunctionData } from 'viem';
 import { Token, SEI, USDC, WSEI } from '@/config/tokens';
 import { V2_CONTRACTS, CL_CONTRACTS, COMMON } from '@/config/contracts';

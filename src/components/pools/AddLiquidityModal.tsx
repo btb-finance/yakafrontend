@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount } from 'wagmi';
+import { useWriteContract } from '@/hooks/useWriteContract';
 import { parseUnits, Address, formatUnits } from 'viem';
 import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';

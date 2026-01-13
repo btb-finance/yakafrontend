@@ -2,7 +2,8 @@
 import { getPrimaryRpc } from '@/utils/rpc';
 
 import { useState, useCallback } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount } from 'wagmi';
+import { useWriteContract } from '@/hooks/useWriteContract';
 import { parseUnits, formatUnits, Address, encodeFunctionData } from 'viem';
 import { Token, WSEI } from '@/config/tokens';
 import { CL_CONTRACTS } from '@/config/contracts';

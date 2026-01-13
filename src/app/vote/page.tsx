@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useReadContract, useWriteContract, usePublicClient } from 'wagmi';
+import { useAccount, useReadContract, usePublicClient } from 'wagmi';
+import { useWriteContract } from '@/hooks/useWriteContract';
 import { formatUnits, Address, encodeFunctionData } from 'viem';
 import Link from 'next/link';
 import { useVeWIND, LOCK_DURATIONS } from '@/hooks/useVeWIND';

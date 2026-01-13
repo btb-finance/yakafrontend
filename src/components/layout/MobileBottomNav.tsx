@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useRef } from 'react';
 import { haptic } from '@/hooks/useHaptic';
+import { useWalletModal } from '@/providers/WalletModalContext';
 
 // SVG Icons as components
 const SwapIcon = ({ className }: { className?: string }) => (
@@ -49,17 +50,20 @@ const navItems = [
  * Mobile bottom navigation bar - fixed at bottom like native apps
  * Portfolio is elevated in the center like main action in mobile apps
  * Uses custom touch handling to prevent accidental navigation during scroll/swipe
+ * IMPORTANT: Nav is disabled when wallet modals are open to prevent accidental taps
  * Only visible on mobile (< md breakpoint)
  */
 export function MobileBottomNav() {
     const pathname = usePathname();
     const router = useRouter();
+    const { isWalletModalOpen } = useWalletModal();
 
     // Track touch start position to distinguish taps from swipes
     const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
     // Handle touch start - record position
     const handleTouchStart = (e: React.TouchEvent) => {
+        if (isWalletModalOpen) return; // Don't handle when wallet modal is open
         const touch = e.touches[0];
         touchStartRef.current = {
             x: touch.clientX,
@@ -70,6 +74,7 @@ export function MobileBottomNav() {
 
     // Handle touch end - only navigate if it was a true tap (not a swipe)
     const handleTouchEnd = (e: React.TouchEvent, href: string, isMain?: boolean) => {
+        if (isWalletModalOpen) return; // Don't handle when wallet modal is open
         const touch = e.changedTouches[0];
         const start = touchStartRef.current;
 
@@ -94,6 +99,10 @@ export function MobileBottomNav() {
 
     // Prevent default click to avoid double navigation
     const handleClick = (e: React.MouseEvent) => {
+        if (isWalletModalOpen) {
+            e.preventDefault();
+            return;
+        }
         // On touch devices, we handle navigation in touchEnd
         // On desktop, allow normal click
         if ('ontouchstart' in window) {
@@ -102,7 +111,11 @@ export function MobileBottomNav() {
     };
 
     return (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 safe-area-bottom">
+        <nav
+            className={`md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 safe-area-bottom transition-opacity duration-200 ${isWalletModalOpen ? 'pointer-events-none opacity-50' : ''
+                }`}
+            aria-hidden={isWalletModalOpen}
+        >
             <div className="flex items-end justify-around px-2 py-2.5">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
