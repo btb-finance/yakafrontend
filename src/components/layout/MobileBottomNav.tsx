@@ -37,11 +37,11 @@ const VoteIcon = ({ className }: { className?: string }) => (
 
 // Nav items with Portfolio in center (elevated like mobile apps)
 const navItems = [
-    { href: '/swap', label: 'Swap', Icon: SwapIcon, isMain: false },
-    { href: '/pools', label: 'Pools', Icon: PoolsIcon, isMain: false },
+    { href: '/swap', label: 'Swap', Icon: SwapIcon },
+    { href: '/pools', label: 'Pools', Icon: PoolsIcon },
     { href: '/portfolio', label: 'Portfolio', Icon: PortfolioIcon, isMain: true },
-    { href: '/bridge', label: 'Bridge', Icon: BridgeIcon, isMain: false },
-    { href: '/vote', label: 'Vote', Icon: VoteIcon, isMain: false },
+    { href: '/bridge', label: 'Bridge', Icon: BridgeIcon },
+    { href: '/vote', label: 'Vote', Icon: VoteIcon },
 ];
 
 /**
@@ -54,7 +54,7 @@ export function MobileBottomNav() {
 
     return (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[var(--bg-primary)]/95 backdrop-blur-xl border-t border-white/10 safe-area-bottom">
-            <div className="flex items-end justify-around px-1 py-2">
+            <div className="flex items-end justify-around px-2 py-1.5">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     const Icon = item.Icon;
@@ -65,24 +65,16 @@ export function MobileBottomNav() {
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className="relative flex flex-col items-center justify-center flex-1 -mt-4"
+                                className="relative flex flex-col items-center justify-center flex-1 -mt-3"
                             >
-                                {/* Elevated circle button */}
                                 <div
-                                    className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${isActive
-                                            ? 'bg-gradient-to-r from-primary to-secondary scale-110'
-                                            : 'bg-gradient-to-r from-primary/80 to-secondary/80 active:scale-95'
+                                    className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all ${isActive
+                                        ? 'bg-gradient-to-r from-primary to-secondary scale-110'
+                                        : 'bg-gradient-to-r from-primary/80 to-secondary/80 active:scale-95'
                                         }`}
                                 >
-                                    <Icon className="w-6 h-6 text-white" />
+                                    <Icon className="w-5 h-5 text-white" />
                                 </div>
-                                {/* Label */}
-                                <span
-                                    className={`text-[10px] font-medium mt-1 ${isActive ? 'text-primary' : 'text-gray-400'
-                                        }`}
-                                >
-                                    {item.label}
-                                </span>
                             </Link>
                         );
                     }
@@ -92,32 +84,19 @@ export function MobileBottomNav() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className="relative flex flex-col items-center justify-center flex-1 py-1 px-1 group"
+                            className="relative flex items-center justify-center flex-1 py-2 group"
                         >
-                            {/* Active indicator background */}
                             {isActive && (
                                 <motion.div
                                     layoutId="bottomNavActive"
-                                    className="absolute inset-1 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-xl"
+                                    className="absolute inset-2 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-lg"
                                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                 />
                             )}
-
-                            {/* Icon */}
                             <Icon
-                                className={`w-5 h-5 mb-0.5 transition-all ${isActive ? 'text-primary scale-110' : 'text-gray-500 group-active:scale-90'
+                                className={`w-5 h-5 transition-all ${isActive ? 'text-primary scale-110' : 'text-gray-500 group-active:scale-90'
                                     }`}
                             />
-
-                            {/* Label */}
-                            <span
-                                className={`text-[10px] font-medium transition-colors ${isActive
-                                        ? 'text-primary'
-                                        : 'text-gray-500 group-hover:text-gray-300'
-                                    }`}
-                            >
-                                {item.label}
-                            </span>
                         </Link>
                     );
                 })}
