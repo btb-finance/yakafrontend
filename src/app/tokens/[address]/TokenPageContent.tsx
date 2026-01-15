@@ -193,7 +193,7 @@ export function TokenPageContent() {
                         onClick={copyAddress}
                         className="px-3 py-2 rounded-lg bg-white/5 text-xs hover:bg-white/10 transition flex-shrink-0"
                     >
-                        {copied ? '✓ Copied' : 'Copy'}
+                        {copied ? 'Copied' : 'Copy'}
                     </button>
                 </div>
 
@@ -201,7 +201,7 @@ export function TokenPageContent() {
                 {isKnownToken && (
                     <div className="mt-3">
                         <span className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-400">
-                            ✓ Verified Token
+                            Verified Token
                         </span>
                     </div>
                 )}
@@ -218,7 +218,7 @@ export function TokenPageContent() {
                     onClick={handleTrade}
                     className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">🔄</div>
+                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition"></div>
                     <div className="font-semibold text-xs sm:text-base">Trade</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Swap tokens</div>
                 </button>
@@ -236,7 +236,7 @@ export function TokenPageContent() {
                     onClick={handleVote}
                     className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">🗳️</div>
+                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition"></div>
                     <div className="font-semibold text-xs sm:text-base">Vote</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Vote on pools</div>
                 </button>
@@ -246,7 +246,7 @@ export function TokenPageContent() {
                     className={`glass-card p-3 sm:p-6 text-center transition group ${linkCopied ? 'bg-green-500/20 border-green-500/30' : 'hover:bg-white/10'}`}
                 >
                     <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">
-                        {linkCopied ? '✓' : '🔗'}
+                        {linkCopied ? '' : ''}
                     </div>
                     <div className="font-semibold text-xs sm:text-base">
                         {linkCopied ? 'Copied!' : 'Share'}

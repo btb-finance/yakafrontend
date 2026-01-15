@@ -202,7 +202,7 @@ export default function GovernancePage() {
                             disabled={veLoading}
                             className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition disabled:opacity-50 whitespace-nowrap"
                         >
-                            {veLoading ? '...' : '🗳️ Delegate'}
+                            {veLoading ? '...' : 'Delegate'}
                         </button>
                     </div>
                 </div>
@@ -411,7 +411,7 @@ export default function GovernancePage() {
                         </div>
                     ) : !hasVotingPower ? (
                         <div className="glass-card p-6 text-center">
-                            <div className="text-4xl mb-4">🔐</div>
+                            <div className="text-4xl mb-4"></div>
                             <h3 className="text-lg font-semibold mb-2">Lock WIND to Propose</h3>
                             <p className="text-gray-400 text-sm mb-4">
                                 You need veWIND to create governance proposals
@@ -566,7 +566,7 @@ export default function GovernancePage() {
 
                                     <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
                                         <p className="text-xs text-gray-400">
-                                            ⚠️ This will transfer Voter control to:
+                                            Warning: This will transfer Voter control to:
                                         </p>
                                         <code className="text-xs text-green-400 block mt-1 break-all">
                                             {newGovernorAddress || address || 'No address specified'}
@@ -603,7 +603,7 @@ export default function GovernancePage() {
                             {/* Info */}
                             <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                                 <p className="text-xs text-yellow-400">
-                                    ⚠️ Creating a proposal requires {proposalThreshold ? formatUnits(proposalThreshold, 18) : '...'} veWIND voting power.
+                                    Creating a proposal requires {proposalThreshold ? formatUnits(proposalThreshold, 18) : '...'} veWIND voting power.
                                     After creation, the proposal enters a voting period of ~{votingPeriod ? Number(votingPeriod) / 86400 : '...'} days.
                                 </p>
                             </div>

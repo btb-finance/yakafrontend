@@ -31,10 +31,10 @@ const toastStyles: Record<ToastType, string> = {
 };
 
 const toastIcons: Record<ToastType, string> = {
-    success: '✓',
-    error: '✕',
-    warning: '⚠',
-    info: 'ℹ',
+    success: '',
+    error: '',
+    warning: '',
+    info: '',
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {

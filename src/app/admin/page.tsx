@@ -600,7 +600,7 @@ export default function AdminPage() {
                                     {voterGovernor ? voterGovernor.slice(0, 10) + '...' : 'Loading...'}
                                 </div>
                                 {address?.toLowerCase() === voterGovernor?.toLowerCase() && (
-                                    <span className="text-xs text-green-400">✓ You are governor</span>
+                                    <span className="text-xs text-green-400">You are governor</span>
                                 )}
                             </div>
                             <div className="p-3 rounded-lg bg-white/5">
@@ -609,7 +609,7 @@ export default function AdminPage() {
                                     {registryOwner ? registryOwner.slice(0, 10) + '...' : 'Loading...'}
                                 </div>
                                 {address?.toLowerCase() === registryOwner?.toLowerCase() && (
-                                    <span className="text-xs text-green-400">✓ You are owner</span>
+                                    <span className="text-xs text-green-400">You are owner</span>
                                 )}
                             </div>
                             <div className="p-3 rounded-lg bg-white/5">
@@ -618,7 +618,7 @@ export default function AdminPage() {
                                     {clFactoryOwner ? clFactoryOwner.slice(0, 10) + '...' : 'Loading...'}
                                 </div>
                                 {address?.toLowerCase() === clFactoryOwner?.toLowerCase() && (
-                                    <span className="text-xs text-green-400">✓ You are owner</span>
+                                    <span className="text-xs text-green-400">You are owner</span>
                                 )}
                             </div>
                         </div>
@@ -693,7 +693,7 @@ export default function AdminPage() {
                                         />
                                         {tokenAddress && isTokenWhitelisted !== undefined && (
                                             <div className={`text-xs mt-1 ${isTokenWhitelisted ? 'text-green-400' : 'text-yellow-400'}`}>
-                                                {isTokenWhitelisted ? '✓ Already whitelisted' : '⚠ Not whitelisted'}
+                                                {isTokenWhitelisted ? 'Already whitelisted' : 'Not whitelisted'}
                                             </div>
                                         )}
                                     </div>
@@ -766,13 +766,13 @@ export default function AdminPage() {
                                     <div className={`p-3 rounded-lg ${isV2FactoryApproved ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
                                         <div className="text-gray-400 text-xs mb-1">V2 PoolFactory</div>
                                         <div className={`font-medium ${isV2FactoryApproved ? 'text-green-400' : 'text-red-400'}`}>
-                                            {isV2FactoryApproved ? '✓ Approved' : '✗ Not Approved'}
+                                            {isV2FactoryApproved ? 'Approved' : 'Not Approved'}
                                         </div>
                                     </div>
                                     <div className={`p-3 rounded-lg ${isCLFactoryApproved ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
                                         <div className="text-gray-400 text-xs mb-1">CL Factory</div>
                                         <div className={`font-medium ${isCLFactoryApproved ? 'text-green-400' : 'text-red-400'}`}>
-                                            {isCLFactoryApproved ? '✓ Approved' : '✗ Not Approved'}
+                                            {isCLFactoryApproved ? 'Approved' : 'Not Approved'}
                                         </div>
                                     </div>
                                 </div>
@@ -781,7 +781,7 @@ export default function AdminPage() {
                                         onClick={handleApproveCLFactories}
                                         className="w-full mt-4 py-2 rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition text-sm font-medium"
                                     >
-                                        🔓 Approve CL Factory Set (One-Click)
+                                        Approve CL Factory Set (One-Click)
                                     </button>
                                 )}
                             </div>
@@ -818,7 +818,7 @@ export default function AdminPage() {
 
                             {/* Claim Pool Fees */}
                             <div className="glass-card p-6 bg-gradient-to-br from-green-500/5 to-emerald-500/5 border-green-500/20">
-                                <h3 className="text-lg font-semibold mb-2 text-green-400">💰 Claim Pool Fees</h3>
+                                <h3 className="text-lg font-semibold mb-2 text-green-400">Claim Pool Fees</h3>
                                 <p className="text-gray-400 text-sm mb-4">
                                     Push accumulated trading fees from all pools to the voting reward contracts.
                                     This makes fees claimable by voters on the Vote page.
@@ -883,7 +883,7 @@ export default function AdminPage() {
                                     </div>
                                     {gaugeAddress && (
                                         <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
-                                            ⚠️ Killing a gauge is irreversible! Make sure this is the correct gauge.
+                                            Warning: Killing a gauge is irreversible! Make sure this is the correct gauge.
                                         </div>
                                     )}
                                     <button
@@ -1059,7 +1059,7 @@ export default function AdminPage() {
                                         <div className="text-xs text-gray-400 mb-1">Minter Status</div>
                                         <div className={`text-xl font-bold ${minterInitialized ? 'text-green-400' : 'text-yellow-400'}`}>
                                             {minterInitialized !== undefined
-                                                ? (minterInitialized ? '✓ Initialized' : '⚠ Not Initialized')
+                                                ? (minterInitialized ? 'Initialized' : 'Not Initialized')
                                                 : 'Loading...'}
                                         </div>
                                     </div>
@@ -1097,7 +1097,7 @@ export default function AdminPage() {
                                             {minterTeam ? `${minterTeam.slice(0, 10)}...${minterTeam.slice(-6)}` : 'Loading...'}
                                         </div>
                                         {address?.toLowerCase() === minterTeam?.toLowerCase() && (
-                                            <span className="text-xs text-green-400">✓ You are team</span>
+                                            <span className="text-xs text-green-400">You are team</span>
                                         )}
                                     </div>
                                 </div>
@@ -1112,14 +1112,14 @@ export default function AdminPage() {
                                         onClick={handleUpdatePeriod}
                                         className="w-full py-3 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-medium hover:opacity-90 transition"
                                     >
-                                        🔄 Update Period (Mint Emissions)
+                                        Update Period (Mint Emissions)
                                     </button>
                                 </div>
                             </div>
 
                             {/* Distribute Rewards Section */}
                             <div className="glass-card p-6">
-                                <h3 className="text-lg font-semibold mb-4">💰 Distribute Rewards</h3>
+                                <h3 className="text-lg font-semibold mb-4">Distribute Rewards</h3>
                                 <div className="p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 mb-4">
                                     <div className="text-sm text-gray-300 mb-2 font-medium">What this does:</div>
                                     <ul className="text-sm text-gray-400 space-y-1.5 list-disc list-inside">
@@ -1161,7 +1161,7 @@ export default function AdminPage() {
                                     disabled={!voterPoolsLength}
                                     className="w-full py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium hover:opacity-90 transition disabled:opacity-50"
                                 >
-                                    💰 Distribute Rewards to All Gauges ({voterPoolsLength?.toString() || '0'} pools)
+                                    Distribute Rewards to All Gauges ({voterPoolsLength?.toString() || '0'} pools)
                                 </button>
                             </div>
 
@@ -1225,7 +1225,7 @@ export default function AdminPage() {
                                 </div>
 
                                 <div className="mt-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                                    <div className="text-sm text-yellow-400 font-medium mb-2">⚠️ Important Notes:</div>
+                                    <div className="text-sm text-yellow-400 font-medium mb-2">Important Notes:</div>
                                     <ul className="text-xs text-gray-400 space-y-1 list-disc list-inside">
                                         <li>Tick spacing must be divisible into 887272 (max tick)</li>
                                         <li>Common valid spacings: 1, 2, 5, 10, 20, 50, 60, 100, 200, 500, 1000, 2000</li>

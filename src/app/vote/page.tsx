@@ -968,7 +968,7 @@ export default function VotePage() {
                                                                                             {p.hasVoted ? (
                                                                                                 <div className="text-xs text-red-400">Voted</div>
                                                                                             ) : mergeTarget === p.tokenId ? (
-                                                                                                <div className="text-purple-400 text-sm font-bold">✓</div>
+                                                                                                <div className="text-purple-400 text-sm font-bold">Selected</div>
                                                                                             ) : null}
                                                                                         </button>
                                                                                         {p.hasVoted && (
@@ -1049,7 +1049,7 @@ export default function VotePage() {
                                                                                     disabled={isLoading}
                                                                                     className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-violet-500 text-white disabled:opacity-50"
                                                                                 >
-                                                                                    {isLoading ? 'Processing...' : '∞ Lock Permanently'}
+                                                                                    {isLoading ? 'Processing...' : 'Lock Permanently'}
                                                                                 </button>
                                                                             </>
                                                                         )}

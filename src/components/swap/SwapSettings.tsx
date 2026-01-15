@@ -89,8 +89,8 @@ export function SwapSettings({
                                         setCustomSlippage('');
                                     }}
                                     className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${slippage === preset && !customSlippage
-                                            ? 'bg-primary text-white'
-                                            : 'bg-white/5 hover:bg-white/10'
+                                        ? 'bg-primary text-white'
+                                        : 'bg-white/5 hover:bg-white/10'
                                         }`}
                                 >
                                     {preset}%
@@ -111,7 +111,7 @@ export function SwapSettings({
                         </div>
                         {slippage > 5 && (
                             <p className="text-xs text-warning mt-2">
-                                ⚠️ High slippage: Transaction may be frontrun
+                                High slippage: Transaction may be frontrun
                             </p>
                         )}
                     </div>

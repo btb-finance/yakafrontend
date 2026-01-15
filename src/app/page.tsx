@@ -150,7 +150,7 @@ export default function Home() {
                   </div>
                   <div className="flex-1">
                     <h3 className="text-lg md:text-xl font-bold text-green-400 mb-1">
-                      🎉 Congratulations! You&apos;re a veWIND Holder!
+                      Congratulations! You&apos;re a veWIND Holder!
                     </h3>
                     <p className="text-sm md:text-base text-gray-300">
                       You received the WIND airdrop! Keep voting to earn trading fees and rewards.
@@ -359,15 +359,15 @@ export default function Home() {
               </div>
               <ul className="space-y-3 text-sm">
                 <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span>
+                  <span className="text-green-400"></span>
                   <span className="text-gray-300">Focus liquidity where trading happens</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span>
+                  <span className="text-green-400"></span>
                   <span className="text-gray-300">Earn 10-100x more in trading fees</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span>
+                  <span className="text-green-400"></span>
                   <span className="text-gray-300">Best for active liquidity providers</span>
                 </li>
               </ul>

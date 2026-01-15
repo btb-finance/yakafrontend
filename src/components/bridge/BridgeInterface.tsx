@@ -84,7 +84,7 @@ export function BridgeInterface() {
             {/* Success Display */}
             {showSuccess && txHash && (
                 <div className="mb-3 p-2 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs">
-                    <div className="font-medium mb-1">✓ Bridge submitted!</div>
+                    <div className="font-medium mb-1">Bridge submitted!</div>
                     <a
                         href={`https://explorer.hyperlane.xyz/?search=${txHash}`}
                         target="_blank"
