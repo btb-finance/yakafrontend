@@ -514,9 +514,9 @@ export default function VotePage() {
     };
 
     const tabConfig = [
-        { key: 'lock' as const, label: 'Lock WIND', icon: '🔐', description: 'Get voting power' },
-        { key: 'vote' as const, label: 'Vote', icon: '🗳️', description: 'Choose pools' },
-        { key: 'rewards' as const, label: 'Rewards', icon: '💰', description: 'Claim earnings' },
+        { key: 'lock' as const, label: 'Lock WIND', icon: '', description: 'Get voting power' },
+        { key: 'vote' as const, label: 'Vote', icon: '', description: 'Choose pools' },
+        { key: 'rewards' as const, label: 'Rewards', icon: '', description: 'Claim earnings' },
     ];
 
     return (
@@ -606,7 +606,7 @@ export default function VotePage() {
                 </div>
                 {epochHasEnded && (
                     <div className="mt-2 pt-2 border-t border-white/10 text-[10px] text-gray-400">
-                        ✨ Epoch ended! Anyone can trigger reward distribution to send fees to voters.
+                        Epoch ended! Anyone can trigger reward distribution to send fees to voters.
                     </div>
                 )}
             </motion.div>
@@ -788,7 +788,7 @@ export default function VotePage() {
                                                             <div className="font-bold">{parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND</div>
                                                             <div className="text-xs text-gray-400">
                                                                 {position.isPermanent ? (
-                                                                    <span className="text-amber-400">✨ Permanent Lock</span>
+                                                                    <span className="text-amber-400">Permanent Lock</span>
                                                                 ) : isExpired ? (
                                                                     <span className="text-yellow-400">Unlocked - Ready to withdraw</span>
                                                                 ) : (
@@ -1010,14 +1010,14 @@ export default function VotePage() {
                                                                             <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
                                                                                 <div className="flex items-center justify-between gap-2">
                                                                                     <div className="text-xs text-red-400">
-                                                                                        ⚠️ This veNFT has voted this epoch. Reset votes first to unlock.
+                                                                                        This veNFT has voted this epoch. Reset votes first to unlock.
                                                                                     </div>
                                                                                     <button
                                                                                         onClick={() => handleResetVotes(position.tokenId)}
                                                                                         disabled={isVoting}
                                                                                         className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 whitespace-nowrap"
                                                                                     >
-                                                                                        {isVoting ? '...' : '🔄 Reset Votes'}
+                                                                                        {isVoting ? '...' : 'Reset Votes'}
                                                                                     </button>
                                                                                 </div>
                                                                             </div>
@@ -1026,7 +1026,7 @@ export default function VotePage() {
                                                                             <>
                                                                                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
                                                                                     <div className="text-xs text-amber-400">
-                                                                                        ✨ This is a permanent lock with maximum voting power. You can unlock it to a 4-year time lock if you want to eventually withdraw.
+                                                                                        This is a permanent lock with maximum voting power. You can unlock it to a 4-year time lock if you want to eventually withdraw.
                                                                                     </div>
                                                                                 </div>
                                                                                 <button
@@ -1034,7 +1034,7 @@ export default function VotePage() {
                                                                                     disabled={isLoading || position.hasVoted}
                                                                                     className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                 >
-                                                                                    {isLoading ? 'Processing...' : position.hasVoted ? '🔒 Reset Votes First' : '🔓 Unlock to 4-Year Lock'}
+                                                                                    {isLoading ? 'Processing...' : position.hasVoted ? 'Reset Votes First' : 'Unlock to 4-Year Lock'}
                                                                                 </button>
                                                                             </>
                                                                         ) : (
@@ -1089,7 +1089,7 @@ export default function VotePage() {
                             />
                         ) : gauges.length === 0 ? (
                             <EmptyState
-                                icon="🗳️"
+                                icon=""
                                 title="No Pools Available"
                                 description="No pools with reward distribution found yet. Check back soon!"
                             />
@@ -1219,7 +1219,7 @@ export default function VotePage() {
                                                     {/* Already voted indicator */}
                                                     {existingVotes[gauge.pool.toLowerCase()] && existingVotes[gauge.pool.toLowerCase()] > BigInt(0) && (
                                                         <span className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-400 flex items-center gap-1">
-                                                            ✓ Voted ({parseFloat(formatUnits(existingVotes[gauge.pool.toLowerCase()], 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                            Voted ({parseFloat(formatUnits(existingVotes[gauge.pool.toLowerCase()], 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                                                         </span>
                                                     )}
 
@@ -1262,7 +1262,7 @@ export default function VotePage() {
                                                         </>
                                                     ) : (
                                                         <span className={`text-[10px] px-2 py-1 rounded ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                                                            {gauge.isAlive ? '✓ Active' : '✗ Inactive'}
+                                                            {gauge.isAlive ? 'Active' : 'Inactive'}
                                                         </span>
                                                     )}
 
