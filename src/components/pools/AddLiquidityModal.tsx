@@ -932,7 +932,9 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     }`}
                                             >
                                                 <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                                                    <span className="text-2xl">💧</span>
+                                                    <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                                    </svg>
                                                 </div>
                                                 <div className="font-semibold mb-1">Classic V2</div>
                                                 <div className="text-xs text-gray-400">Simple 50/50</div>
@@ -966,7 +968,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                     : 'bg-white/5 border border-white/10 hover:bg-white/8 text-gray-300'
                                                     }`}
                                             >
-                                                <span className="block text-lg mb-1">📈</span>
+                                                <span className="block text-lg mb-1"></span>
                                                 Volatile
                                             </button>
                                             <button
@@ -1111,7 +1113,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                                 return (
                                                     <div className="mt-3">
                                                         <div className="text-[10px] text-gray-500 mb-1.5 flex items-center gap-1">
-                                                            <span>🎯</span> One-Sided LP ({rangeLabel} range)
+                                                            One-Sided LP ({rangeLabel} range)
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <button
@@ -1208,7 +1210,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                                                                 return (
                                                                     <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 border border-green-500/40">
-                                                                        🔥 APR {formatAPR(rangeAdjustedAPR)}
+                                                                        APR {formatAPR(rangeAdjustedAPR)}
                                                                     </span>
                                                                 );
                                                             }

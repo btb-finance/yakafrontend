@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '@/hooks/useHaptic';
+import { CheckIcon, ErrorIcon, WarningIcon, InfoIcon } from '@/components/common/Icons';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -30,11 +31,14 @@ const toastStyles: Record<ToastType, string> = {
     info: 'bg-primary/90 border-primary/50',
 };
 
-const toastIcons: Record<ToastType, string> = {
-    success: '',
-    error: '',
-    warning: '',
-    info: '',
+const ToastIcon = ({ type }: { type: ToastType }) => {
+    const className = "w-5 h-5 text-white";
+    switch (type) {
+        case 'success': return <CheckIcon className={className} />;
+        case 'error': return <ErrorIcon className={className} />;
+        case 'warning': return <WarningIcon className={className} />;
+        case 'info': return <InfoIcon className={className} />;
+    }
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -89,9 +93,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                             onClick={() => removeToast(toast.id)}
                         >
                             <div className="flex items-center gap-3">
-                                <span className="text-white text-lg font-bold">
-                                    {toastIcons[toast.type]}
-                                </span>
+                                <ToastIcon type={toast.type} />
                                 <span className="text-white text-sm font-medium flex-1">
                                     {toast.message}
                                 </span>

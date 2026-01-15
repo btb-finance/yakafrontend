@@ -9,6 +9,7 @@ import { useTokenPage, TokenPool } from '@/hooks/useTokenPage';
 import { Token, SEI } from '@/config/tokens';
 import { getTokenByAddress } from '@/utils/tokens';
 import { formatTVL } from '@/utils/format';
+import { SwapIcon, VoteIcon, LinkIcon, CheckIcon, SparklesIcon } from '@/components/common/Icons';
 
 // Lazy load modal for faster initial page load
 const AddLiquidityModal = dynamic(
@@ -133,7 +134,7 @@ export function TokenPageContent() {
         return (
             <div className="container mx-auto px-3 sm:px-6 py-8">
                 <div className="glass-card p-8 text-center max-w-lg mx-auto">
-                    <div className="text-4xl mb-4">🔍</div>
+                    <div className="text-4xl mb-4"></div>
                     <h2 className="text-xl font-bold mb-2">Token Not Found</h2>
                     <p className="text-gray-400 mb-4 text-sm">
                         {!isValidAddress ? 'Invalid token address format' : error || 'Could not load token information'}
@@ -218,7 +219,9 @@ export function TokenPageContent() {
                     onClick={handleTrade}
                     className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition"></div>
+                    <div className="flex justify-center mb-1 sm:mb-2 group-hover:scale-110 transition">
+                        <SwapIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
+                    </div>
                     <div className="font-semibold text-xs sm:text-base">Trade</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Swap tokens</div>
                 </button>
@@ -227,7 +230,11 @@ export function TokenPageContent() {
                     onClick={openAddLiquidityGeneral}
                     className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">💧</div>
+                    <div className="flex justify-center mb-1 sm:mb-2 group-hover:scale-110 transition">
+                        <svg className="w-6 h-6 sm:w-8 sm:h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                    </div>
                     <div className="font-semibold text-xs sm:text-base">Add LP</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Provide liquidity</div>
                 </button>
@@ -236,7 +243,9 @@ export function TokenPageContent() {
                     onClick={handleVote}
                     className="glass-card p-3 sm:p-6 text-center hover:bg-white/10 transition group"
                 >
-                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition"></div>
+                    <div className="flex justify-center mb-1 sm:mb-2 group-hover:scale-110 transition">
+                        <VoteIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
+                    </div>
                     <div className="font-semibold text-xs sm:text-base">Vote</div>
                     <div className="text-[10px] text-gray-400 hidden sm:block">Vote on pools</div>
                 </button>
@@ -245,8 +254,8 @@ export function TokenPageContent() {
                     onClick={shareToken}
                     className={`glass-card p-3 sm:p-6 text-center transition group ${linkCopied ? 'bg-green-500/20 border-green-500/30' : 'hover:bg-white/10'}`}
                 >
-                    <div className="text-xl sm:text-3xl mb-1 sm:mb-2 group-hover:scale-110 transition">
-                        {linkCopied ? '' : ''}
+                    <div className="flex justify-center mb-1 sm:mb-2 group-hover:scale-110 transition">
+                        {linkCopied ? <CheckIcon className="w-6 h-6 sm:w-8 sm:h-8 text-green-400" /> : <LinkIcon className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />}
                     </div>
                     <div className="font-semibold text-xs sm:text-base">
                         {linkCopied ? 'Copied!' : 'Share'}
@@ -272,7 +281,7 @@ export function TokenPageContent() {
 
                 {pools.length === 0 ? (
                     <div className="p-8 text-center text-gray-400">
-                        <div className="text-3xl mb-3">🏊</div>
+                        <div className="text-3xl mb-3"></div>
                         <p className="text-sm">No pools found for this token</p>
                         <button
                             onClick={openAddLiquidityGeneral}
@@ -317,8 +326,8 @@ export function TokenPageContent() {
                                                 </span>
                                             )}
                                             {pool.hasGauge && (
-                                                <span className="px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                                                    ⭐ Rewards
+                                                <span className="px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex items-center gap-0.5">
+                                                    <SparklesIcon className="w-3 h-3" /> Rewards
                                                 </span>
                                             )}
                                         </div>
