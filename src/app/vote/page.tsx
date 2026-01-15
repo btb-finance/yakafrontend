@@ -74,6 +74,7 @@ export default function VotePage() {
     const [increaseAmountValue, setIncreaseAmountValue] = useState('');
     const [extendDuration, setExtendDuration] = useState<keyof typeof LOCK_DURATIONS>('4Y');
     const [mergeTarget, setMergeTarget] = useState<bigint | null>(null);
+    const [activeAction, setActiveAction] = useState<'add' | 'extend' | 'merge' | 'permanent' | null>(null);
 
     // Incentive modal state
     const [incentivePool, setIncentivePool] = useState<{ pool: string; symbol0: string; symbol1: string } | null>(null);
@@ -91,6 +92,8 @@ export default function VotePage() {
         withdraw,
         claimRebases,
         merge,
+        lockPermanent,
+        unlockPermanent,
         isLoading,
         error,
         refetch,
@@ -111,7 +114,7 @@ export default function VotePage() {
         addIncentive,
     } = useVoter();
 
-    const { balance: yakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
+    const { balance: yakaBalance, raw: rawYakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
 
     // Read epoch info from Minter
     const { data: activePeriod } = useReadContract({
@@ -418,6 +421,22 @@ export default function VotePage() {
         }
     };
 
+    const handleLockPermanent = async (tokenId: bigint) => {
+        const result = await lockPermanent(tokenId);
+        if (result) {
+            setTxHash(result.hash);
+            setManagingNFT(null);
+        }
+    };
+
+    const handleUnlockPermanent = async (tokenId: bigint) => {
+        const result = await unlockPermanent(tokenId);
+        if (result) {
+            setTxHash(result.hash);
+            setManagingNFT(null);
+        }
+    };
+
     const handleVote = async () => {
         if (!selectedVeNFT || totalVoteWeight === 0) return;
         setIsVoting(true);
@@ -671,7 +690,7 @@ export default function VotePage() {
                                         className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                     />
                                     <button
-                                        onClick={() => setLockAmount(formattedYakaBalance || '0')}
+                                        onClick={() => setLockAmount(rawYakaBalance || '0')}
                                         className="px-2 py-1 text-[10px] font-medium rounded bg-white/10 hover:bg-white/20 text-primary"
                                     >
                                         MAX
@@ -722,167 +741,292 @@ export default function VotePage() {
                         </button>
                     </div>
 
-                    {/* Existing Positions */}
+                    {/* Existing Positions - Redesigned */}
                     {positions.length > 0 && (
                         <div className="glass-card p-3 sm:p-4 mt-3">
-                            <h3 className="text-sm font-semibold mb-2">Your veNFTs ({positions.length})</h3>
-                            <div className="space-y-3">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm font-semibold">Your veNFTs</h3>
+                                <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-full">{positions.length} position{positions.length > 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="space-y-4">
                                 {positions.map((position) => {
                                     const isExpired = position.end < BigInt(Math.floor(Date.now() / 1000)) && !position.isPermanent;
                                     const endDate = new Date(Number(position.end) * 1000);
                                     const isManaging = managingNFT === position.tokenId;
 
                                     return (
-                                        <div key={position.tokenId.toString()} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                                            {/* Position Info */}
-                                            <div className="flex justify-between items-center">
-                                                <div className="min-w-0">
-                                                    <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
-                                                    <div className="font-bold text-sm">{parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-bold text-sm text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toLocaleString()} veWIND</div>
-                                                    <div className="text-[10px] text-gray-400">
-                                                        {position.isPermanent ? '∞ Permanent' : isExpired ? '🔓 Unlocked' : endDate.toLocaleDateString()}
+                                        <div key={position.tokenId.toString()} className={`rounded-xl border transition-all ${isManaging ? 'bg-white/5 border-primary/50' : 'bg-white/3 border-white/10'}`}>
+                                            {/* Main Card Header */}
+                                            <div
+                                                className="p-4 cursor-pointer"
+                                                onClick={() => {
+                                                    if (isManaging) {
+                                                        setManagingNFT(null);
+                                                        setActiveAction(null);
+                                                    } else {
+                                                        setManagingNFT(position.tokenId);
+                                                        setActiveAction(null);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    {/* Left: NFT Info */}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
+                                                            #{position.tokenId.toString()}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold">{parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND</div>
+                                                            <div className="text-xs text-gray-400">
+                                                                {position.isPermanent ? (
+                                                                    <span className="text-amber-400">✨ Permanent Lock</span>
+                                                                ) : isExpired ? (
+                                                                    <span className="text-yellow-400">🔓 Unlocked - Ready to withdraw</span>
+                                                                ) : (
+                                                                    <span>Unlocks {endDate.toLocaleDateString()}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Right: Voting Power & Toggle */}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="text-right">
+                                                            <div className="font-bold text-primary">{parseFloat(formatUnits(position.votingPower, 18)).toLocaleString()}</div>
+                                                            <div className="text-[10px] text-gray-400">veWIND</div>
+                                                        </div>
+                                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isManaging ? 'bg-primary text-white rotate-180' : 'bg-white/10 text-gray-400'}`}>
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* Action Buttons - show for non-expired locks */}
-                                            {!isExpired && (
-                                                <div className="flex gap-2 mt-2">
-                                                    <button
-                                                        onClick={() => setManagingNFT(isManaging ? null : position.tokenId)}
-                                                        className={`flex-1 py-1.5 text-[10px] rounded transition ${isManaging ? 'bg-primary text-white' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}
-                                                    >
-                                                        {isManaging ? '✕ Close' : '⚙️ Manage'}
-                                                    </button>
-                                                    {!position.isPermanent && (
-                                                        <button
-                                                            onClick={() => handleMaxLock(position.tokenId)}
-                                                            disabled={isLoading}
-                                                            className="flex-1 py-1.5 text-[10px] rounded bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:from-primary/30 hover:to-secondary/30 transition disabled:opacity-50"
-                                                        >
-                                                            🔒 Max Lock (4Y)
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Management Panel */}
-                                            {isManaging && !isExpired && (
-                                                <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
-                                                    {/* Increase Amount - available for all locks */}
-                                                    <div>
-                                                        <label className="text-[10px] text-gray-400 mb-1 block">Add More WIND</label>
-                                                        <div className="flex gap-2">
-                                                            <div className="flex-1 flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
-                                                                <input
-                                                                    type="text"
-                                                                    value={increaseAmountValue}
-                                                                    onChange={(e) => setIncreaseAmountValue(e.target.value)}
-                                                                    placeholder="0.0"
-                                                                    className="flex-1 min-w-0 bg-transparent text-sm font-bold outline-none placeholder-gray-600"
-                                                                />
-                                                                <button
-                                                                    onClick={() => setIncreaseAmountValue(formattedYakaBalance || '0')}
-                                                                    className="px-2 py-0.5 text-[8px] font-medium rounded bg-white/10 hover:bg-white/20 text-primary"
-                                                                >
-                                                                    MAX
-                                                                </button>
-                                                            </div>
+                                            {/* Expanded Management Panel */}
+                                            {isManaging && (
+                                                <div className="border-t border-white/10">
+                                                    {/* Quick Actions for Expired */}
+                                                    {isExpired ? (
+                                                        <div className="p-4">
                                                             <button
-                                                                onClick={() => handleIncreaseAmount(position.tokenId)}
-                                                                disabled={isLoading || !increaseAmountValue || parseFloat(increaseAmountValue) <= 0}
-                                                                className="px-3 py-2 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                                onClick={() => handleWithdraw(position.tokenId)}
+                                                                className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:opacity-90 transition"
                                                             >
-                                                                + Add
+                                                                🔓 Withdraw {parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND
                                                             </button>
                                                         </div>
-                                                    </div>
-
-                                                    {/* Extend Lock - only for non-permanent locks */}
-                                                    {!position.isPermanent && (
-                                                        <div>
-                                                            <label className="text-[10px] text-gray-400 mb-1 block">Extend Lock Duration</label>
-                                                            <div className="flex gap-2">
-                                                                <div className="flex-1 grid grid-cols-4 gap-1">
-                                                                    {(['1M', '3M', '1Y', '4Y'] as const).map((duration) => (
-                                                                        <button
-                                                                            key={duration}
-                                                                            onClick={() => setExtendDuration(duration)}
-                                                                            className={`py-1 rounded text-[10px] font-medium transition ${extendDuration === duration
-                                                                                ? 'bg-primary text-white'
-                                                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                                                                }`}
-                                                                        >
-                                                                            {duration}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
+                                                    ) : (
+                                                        <>
+                                                            {/* Action Tabs */}
+                                                            <div className="flex border-b border-white/10">
                                                                 <button
-                                                                    onClick={() => handleExtendLock(position.tokenId)}
-                                                                    disabled={isLoading}
-                                                                    className="px-3 py-2 text-[10px] font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition disabled:opacity-50"
+                                                                    onClick={() => setActiveAction(activeAction === 'add' ? null : 'add')}
+                                                                    className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'add' ? 'bg-green-500/20 text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                                                 >
-                                                                    Extend
+                                                                    ➕ Add WIND
+                                                                </button>
+                                                                {!position.isPermanent && (
+                                                                    <button
+                                                                        onClick={() => setActiveAction(activeAction === 'extend' ? null : 'extend')}
+                                                                        className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'extend' ? 'bg-blue-500/20 text-blue-400 border-b-2 border-blue-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                                                    >
+                                                                        ⏰ Extend
+                                                                    </button>
+                                                                )}
+                                                                {positions.length > 1 && (
+                                                                    <button
+                                                                        onClick={() => setActiveAction(activeAction === 'merge' ? null : 'merge')}
+                                                                        className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'merge' ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                                                    >
+                                                                        🔀 Merge
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => setActiveAction(activeAction === 'permanent' ? null : 'permanent')}
+                                                                    className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'permanent' ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                                                >
+                                                                    {position.isPermanent ? '🔓 Unlock' : '∞ Permanent'}
                                                                 </button>
                                                             </div>
-                                                        </div>
-                                                    )}
 
-                                                    {/* Info for permanent locks */}
-                                                    {position.isPermanent && (
-                                                        <div className="text-[10px] text-gray-400 flex items-center gap-1">
-                                                            <span>✨</span>
-                                                            <span>Permanent lock - maximum voting power forever!</span>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Merge - Only show if user has more than 1 veNFT */}
-                                                    {positions.length > 1 && !position.isPermanent && (
-                                                        <div>
-                                                            <label className="text-[10px] text-gray-400 mb-1 block">Merge with another veNFT</label>
-                                                            <div className="flex gap-2 flex-wrap">
-                                                                {positions
-                                                                    .filter(p => p.tokenId !== position.tokenId && !p.isPermanent)
-                                                                    .map(p => (
+                                                            {/* Action Content */}
+                                                            <div className="p-4">
+                                                                {/* Add WIND */}
+                                                                {activeAction === 'add' && (
+                                                                    <div className="space-y-3">
+                                                                        <div className="text-xs text-gray-400">Add more WIND to increase your voting power</div>
+                                                                        <div className="flex gap-2">
+                                                                            <div className="flex-1 flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={increaseAmountValue}
+                                                                                    onChange={(e) => setIncreaseAmountValue(e.target.value)}
+                                                                                    placeholder="0.0"
+                                                                                    className="flex-1 min-w-0 bg-transparent text-lg font-bold outline-none placeholder-gray-600"
+                                                                                />
+                                                                                <button
+                                                                                    onClick={() => setIncreaseAmountValue(rawYakaBalance || '0')}
+                                                                                    className="px-3 py-1 text-xs font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30"
+                                                                                >
+                                                                                    MAX
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-500">Balance: {formattedYakaBalance} WIND</div>
                                                                         <button
-                                                                            key={p.tokenId.toString()}
-                                                                            onClick={() => setMergeTarget(mergeTarget === p.tokenId ? null : p.tokenId)}
-                                                                            className={`px-2 py-1 text-[10px] rounded transition ${mergeTarget === p.tokenId
-                                                                                ? 'bg-purple-500 text-white'
-                                                                                : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                                                                }`}
+                                                                            onClick={() => handleIncreaseAmount(position.tokenId)}
+                                                                            disabled={isLoading || !increaseAmountValue || parseFloat(increaseAmountValue) <= 0}
+                                                                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50"
                                                                         >
-                                                                            #{p.tokenId.toString()} ({parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND)
+                                                                            {isLoading ? 'Processing...' : `Add ${increaseAmountValue || '0'} WIND`}
                                                                         </button>
-                                                                    ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Extend Lock */}
+                                                                {activeAction === 'extend' && !position.isPermanent && (
+                                                                    <div className="space-y-3">
+                                                                        <div className="text-xs text-gray-400">Extend your lock duration to increase voting power</div>
+                                                                        <div className="grid grid-cols-4 gap-2">
+                                                                            {(['1M', '3M', '1Y', '4Y'] as const).map((duration) => (
+                                                                                <button
+                                                                                    key={duration}
+                                                                                    onClick={() => setExtendDuration(duration)}
+                                                                                    className={`py-3 rounded-xl text-sm font-bold transition-all ${extendDuration === duration
+                                                                                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                                                                                        : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                                        }`}
+                                                                                >
+                                                                                    {duration}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleExtendLock(position.tokenId)}
+                                                                            disabled={isLoading}
+                                                                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-500 to-cyan-500 text-white disabled:opacity-50"
+                                                                        >
+                                                                            {isLoading ? 'Processing...' : `Extend to ${extendDuration}`}
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Merge */}
+                                                                {activeAction === 'merge' && positions.length > 1 && (
+                                                                    <div className="space-y-3">
+                                                                        {position.hasVoted && (
+                                                                            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                                                                <div className="text-xs text-red-400">
+                                                                                    ⚠️ This veNFT has voted this epoch. You must reset your votes before you can merge it.
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="text-xs text-gray-400">
+                                                                            Combine another veNFT into this one. The merged NFT will be burned.
+                                                                        </div>
+                                                                        <div className="text-xs font-medium text-white mb-2">Select veNFT to merge:</div>
+                                                                        <div className="space-y-2">
+                                                                            {positions
+                                                                                .filter(p => p.tokenId !== position.tokenId && !p.hasVoted)
+                                                                                .map(p => (
+                                                                                    <button
+                                                                                        key={p.tokenId.toString()}
+                                                                                        onClick={() => setMergeTarget(mergeTarget === p.tokenId ? null : p.tokenId)}
+                                                                                        className={`w-full p-3 rounded-xl flex items-center justify-between transition-all ${mergeTarget === p.tokenId
+                                                                                            ? 'bg-purple-500/20 border-2 border-purple-500'
+                                                                                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                                                                                            }`}
+                                                                                    >
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <div className="w-8 h-8 rounded-full bg-purple-500/30 flex items-center justify-center text-xs font-bold">
+                                                                                                #{p.tokenId.toString()}
+                                                                                            </div>
+                                                                                            <div className="text-left">
+                                                                                                <div className="font-bold text-sm">{parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND</div>
+                                                                                                <div className="text-xs text-gray-400">
+                                                                                                    {p.isPermanent ? '∞ Permanent' : new Date(Number(p.end) * 1000).toLocaleDateString()}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        {mergeTarget === p.tokenId && (
+                                                                                            <div className="text-purple-400 text-sm">✓</div>
+                                                                                        )}
+                                                                                    </button>
+                                                                                ))}
+                                                                            {positions.filter(p => p.tokenId !== position.tokenId && !p.hasVoted).length === 0 && (
+                                                                                <div className="text-xs text-gray-500 text-center py-3">
+                                                                                    No veNFTs available to merge. Other veNFTs may have already voted this epoch.
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        {mergeTarget && (
+                                                                            <button
+                                                                                onClick={() => handleMerge(mergeTarget, position.tokenId)}
+                                                                                disabled={isLoading || position.hasVoted}
+                                                                                className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                {isLoading ? 'Processing...' : position.hasVoted ? '🔒 Reset Votes First' : `🔀 Merge #${mergeTarget.toString()} → #${position.tokenId.toString()}`}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Permanent Lock / Unlock */}
+                                                                {activeAction === 'permanent' && (
+                                                                    <div className="space-y-3">
+                                                                        {position.hasVoted && (
+                                                                            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                                                                                <div className="text-xs text-red-400">
+                                                                                    ⚠️ This veNFT has voted this epoch. You must reset your votes before you can unlock it. Go to the Vote tab and click "Reset Votes".
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        {position.isPermanent ? (
+                                                                            <>
+                                                                                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                                                                    <div className="text-xs text-amber-400">
+                                                                                        ✨ This is a permanent lock with maximum voting power. You can unlock it to a 4-year time lock if you want to eventually withdraw.
+                                                                                    </div>
+                                                                                </div>
+                                                                                <button
+                                                                                    onClick={() => handleUnlockPermanent(position.tokenId)}
+                                                                                    disabled={isLoading || position.hasVoted}
+                                                                                    className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-orange-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                >
+                                                                                    {isLoading ? 'Processing...' : position.hasVoted ? '🔒 Reset Votes First' : '🔓 Unlock to 4-Year Lock'}
+                                                                                </button>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                                                                                    <div className="text-xs text-purple-300">
+                                                                                        💎 Permanent lock gives you maximum voting power forever. Your tokens will be locked until you unlock (which converts to a 4-year lock).
+                                                                                    </div>
+                                                                                </div>
+                                                                                <button
+                                                                                    onClick={() => handleLockPermanent(position.tokenId)}
+                                                                                    disabled={isLoading}
+                                                                                    className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-violet-500 text-white disabled:opacity-50"
+                                                                                >
+                                                                                    {isLoading ? 'Processing...' : '∞ Lock Permanently'}
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* No action selected */}
+                                                                {!activeAction && (
+                                                                    <div className="text-center py-4 text-gray-500 text-sm">
+                                                                        Select an action above to manage your veNFT
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                            {mergeTarget && (
-                                                                <button
-                                                                    onClick={() => handleMerge(mergeTarget, position.tokenId)}
-                                                                    disabled={isLoading}
-                                                                    className="w-full mt-2 py-2 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition disabled:opacity-50"
-                                                                >
-                                                                    🔀 Merge #{mergeTarget.toString()} → #{position.tokenId.toString()}
-                                                                </button>
-                                                            )}
-                                                        </div>
+                                                        </>
                                                     )}
                                                 </div>
-                                            )}
-
-
-
-                                            {/* Withdraw Button for Expired */}
-                                            {isExpired && (
-                                                <button
-                                                    onClick={() => handleWithdraw(position.tokenId)}
-                                                    className="w-full mt-2 py-2 text-xs rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 font-medium"
-                                                >
-                                                    🔓 Withdraw WIND
-                                                </button>
                                             )}
                                         </div>
                                     );
@@ -895,471 +1039,477 @@ export default function VotePage() {
             )}
 
             {/* Vote Tab */}
-            {activeTab === 'vote' && (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                    {!isConnected ? (
-                        <EmptyState
-                            icon="🔗"
-                            title="Connect Your Wallet"
-                            description="Connect your wallet to vote on pool rewards"
-                        />
-                    ) : gauges.length === 0 ? (
-                        <EmptyState
-                            icon="🗳️"
-                            title="No Pools Available"
-                            description="No pools with reward distribution found yet. Check back soon!"
-                        />
-                    ) : (
-                        <>
-                            {/* Banner for users without veNFT */}
-                            {positions.length === 0 && (
-                                <div className="mb-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <p className="text-xs text-gray-300">Lock WIND to vote on pools</p>
-                                        <button
-                                            onClick={() => setActiveTab('lock')}
-                                            className="px-3 py-1 text-[10px] rounded bg-primary text-white font-medium"
-                                        >
-                                            Lock
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* NFT Selector - only show if user has positions */}
-                            {positions.length > 0 && (
-                                <div className="glass-card p-3 mb-3">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <label className="text-xs text-gray-400">Voting with:</label>
-                                    </div>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {positions.map((pos) => (
+            {
+                activeTab === 'vote' && (
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                        {!isConnected ? (
+                            <EmptyState
+                                icon="🔗"
+                                title="Connect Your Wallet"
+                                description="Connect your wallet to vote on pool rewards"
+                            />
+                        ) : gauges.length === 0 ? (
+                            <EmptyState
+                                icon="🗳️"
+                                title="No Pools Available"
+                                description="No pools with reward distribution found yet. Check back soon!"
+                            />
+                        ) : (
+                            <>
+                                {/* Banner for users without veNFT */}
+                                {positions.length === 0 && (
+                                    <div className="mb-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-xs text-gray-300">Lock WIND to vote on pools</p>
                                             <button
-                                                key={pos.tokenId.toString()}
-                                                onClick={() => setSelectedVeNFT(pos.tokenId)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs transition ${selectedVeNFT === pos.tokenId
-                                                    ? 'bg-primary text-white'
-                                                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                                                    }`}
+                                                onClick={() => setActiveTab('lock')}
+                                                className="px-3 py-1 text-[10px] rounded bg-primary text-white font-medium"
                                             >
-                                                #{pos.tokenId.toString()} ({parseFloat(formatUnits(pos.votingPower, 18)).toFixed(0)} veWIND)
+                                                Lock
                                             </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Pools List */}
-                            <div className="glass-card overflow-hidden">
-                                <div className="p-3 border-b border-white/5 flex justify-between items-center">
-                                    <span className="font-semibold text-sm">Pools ({gauges.length})</span>
-                                    <span className="text-xs text-gray-400">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} votes</span>
-                                </div>
-
-                                {/* Loading State */}
-                                {isLoadingGauges && (
-                                    <div className="p-6 text-center text-gray-400 text-sm">
-                                        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                                        Loading...
+                                        </div>
                                     </div>
                                 )}
 
-                                {/* Pools - Compact Mobile Layout */}
-                                <div className="divide-y divide-white/5">
-                                    {/* Sort: Active gauges (with gauge address) first, then by isAlive */}
-                                    {[...gauges].sort((a, b) => {
-                                        // First priority: has gauge address
-                                        if (a.gauge && !b.gauge) return -1;
-                                        if (!a.gauge && b.gauge) return 1;
-                                        // Second priority: isAlive
-                                        if (a.isAlive && !b.isAlive) return -1;
-                                        if (!a.isAlive && b.isAlive) return 1;
-                                        return 0;
-                                    }).map((gauge) => (
-                                        <div key={gauge.pool} className="p-2 sm:p-3">
-                                            {/* Row 1: Pool info + share */}
-                                            <div className="flex items-center justify-between gap-2 mb-2">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <div className="relative w-10 h-6 flex-shrink-0">
-                                                        {getTokenLogo(gauge.token0) ? (
-                                                            <img src={getTokenLogo(gauge.token0)} alt={gauge.symbol0} className="absolute left-0 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
-                                                        ) : (
-                                                            <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                                {gauge.symbol0.slice(0, 2)}
-                                                            </div>
-                                                        )}
-                                                        {getTokenLogo(gauge.token1) ? (
-                                                            <img src={getTokenLogo(gauge.token1)} alt={gauge.symbol1} className="absolute left-3 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
-                                                        ) : (
-                                                            <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
-                                                                {gauge.symbol1.slice(0, 2)}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="font-semibold text-sm truncate">{gauge.symbol0}/{gauge.symbol1}</span>
-                                                            <span className={`text-[8px] px-1 py-0.5 rounded ${gauge.poolType === 'CL' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-primary/20 text-primary'}`}>
-                                                                {gauge.poolType}
-                                                            </span>
-                                                            {!gauge.isAlive && (
-                                                                <span className="text-[8px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Off</span>
-                                                            )}
-                                                        </div>
-                                                        {/* Pool Fees Display */}
-                                                        <div className="text-[10px] flex items-center gap-1 mt-0.5">
-                                                            <span className="text-gray-400">💰 Fees:</span>
-                                                            {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
-                                                                <span className="text-green-400">
-                                                                    {gauge.rewardTokens.map((reward, idx) => (
-                                                                        <span key={reward.address}>
-                                                                            {parseFloat(formatUnits(reward.amount, reward.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {reward.symbol}
-                                                                            {idx < gauge.rewardTokens.length - 1 && ' + '}
-                                                                        </span>
-                                                                    ))}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-gray-500">No fees yet this epoch</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right flex-shrink-0">
-                                                    <div className="text-xs font-bold text-primary">{gauge.weightPercent.toFixed(1)}%</div>
-                                                    <div className="text-[10px] text-gray-400">{parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                                                </div>
-                                            </div>
-
-                                            {/* Row 2: Vote controls or status */}
-                                            <div className="flex items-center justify-between gap-2">
-                                                {/* Already voted indicator */}
-                                                {existingVotes[gauge.pool.toLowerCase()] && existingVotes[gauge.pool.toLowerCase()] > BigInt(0) && (
-                                                    <span className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-400 flex items-center gap-1">
-                                                        ✓ Voted ({parseFloat(formatUnits(existingVotes[gauge.pool.toLowerCase()], 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })})
-                                                    </span>
-                                                )}
-
-                                                {!gauge.gauge ? (
-                                                    /* No gauge exists yet - show Coming Soon */
-                                                    <span className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
-                                                        🚧 Voting Coming Soon
-                                                    </span>
-                                                ) : positions.length > 0 ? (
-                                                    <>
-                                                        <div className="flex gap-1">
-                                                            {[100, 50, 25].map((pct) => (
-                                                                <button
-                                                                    key={pct}
-                                                                    onClick={() => updateVoteWeight(gauge.pool, pct)}
-                                                                    disabled={!selectedVeNFT || !gauge.isAlive}
-                                                                    className={`px-2 py-1 text-[10px] rounded transition ${voteWeights[gauge.pool] === pct
-                                                                        ? 'bg-primary text-white'
-                                                                        : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                                                                        } disabled:opacity-40`}
-                                                                >
-                                                                    {pct}%
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            placeholder="0"
-                                                            value={voteWeights[gauge.pool] || ''}
-                                                            onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
-                                                            disabled={!selectedVeNFT || !gauge.isAlive}
-                                                            className="w-14 py-1 px-2 rounded bg-white/5 text-center text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
-                                                        />
-                                                        {voteWeights[gauge.pool] > 0 && (
-                                                            <span className="text-[10px] text-cyan-400 min-w-[60px] text-right">
-                                                                ≈{getActualVotePower(voteWeights[gauge.pool]).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                                            </span>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <span className={`text-[10px] px-2 py-1 rounded ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                                                        {gauge.isAlive ? '✓ Active' : '✗ Inactive'}
-                                                    </span>
-                                                )}
-
-                                                {/* Add Incentive button */}
-                                                {gauge.gauge && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            console.log('Opening incentive modal for pool:', gauge.pool, gauge.symbol0, gauge.symbol1);
-                                                            setIncentivePool({ pool: gauge.pool, symbol0: gauge.symbol0, symbol1: gauge.symbol1 });
-                                                        }}
-                                                        className="px-2 py-1 text-[10px] rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition flex items-center gap-1"
-                                                    >
-                                                        💎 Add Incentive
-                                                    </button>
-                                                )}
-                                            </div>
+                                {/* NFT Selector - only show if user has positions */}
+                                {positions.length > 0 && (
+                                    <div className="glass-card p-3 mb-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-xs text-gray-400">Voting with:</label>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Vote Summary + Submit - Compact */}
-                            {positions.length > 0 && (
-                                <div className="p-3 bg-primary/5 border-t border-primary/20">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <div className="text-xs">
-                                            <span className="text-gray-400">Pools: </span>
-                                            <span className="font-bold text-white">{Object.values(voteWeights).filter(w => w > 0).length}</span>
-                                            <span className="text-gray-400 mx-2">|</span>
-                                            <span className="text-gray-400">Power: </span>
-                                            <span className="font-bold text-primary">{selectedVotingPower.toLocaleString(undefined, { maximumFractionDigits: 2 })} veWIND</span>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={handleVoteForAll}
-                                                disabled={!selectedVeNFT}
-                                                className="px-3 py-1.5 text-[10px] rounded bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 hover:from-blue-500/30 hover:to-cyan-500/30 transition disabled:opacity-50"
-                                            >
-                                                ⚡ Vote All
-                                            </button>
-                                            {selectedVeNFT && (
+                                        <div className="flex gap-2 flex-wrap">
+                                            {positions.map((pos) => (
                                                 <button
-                                                    onClick={handleResetVotes}
-                                                    disabled={isVoting}
-                                                    className="px-3 py-1.5 text-[10px] rounded bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+                                                    key={pos.tokenId.toString()}
+                                                    onClick={() => setSelectedVeNFT(pos.tokenId)}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs transition ${selectedVeNFT === pos.tokenId
+                                                        ? 'bg-primary text-white'
+                                                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                        }`}
                                                 >
-                                                    Reset
+                                                    #{pos.tokenId.toString()} ({parseFloat(formatUnits(pos.votingPower, 18)).toFixed(0)} veWIND)
                                                 </button>
-                                            )}
-                                            <button
-                                                onClick={handleVote}
-                                                disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
-                                                className="px-4 py-1.5 text-xs font-bold rounded bg-gradient-to-r from-primary to-secondary text-white disabled:opacity-50"
-                                            >
-                                                {isVoting ? '...' : 'Vote'}
-                                            </button>
+                                            ))}
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </motion.div>
-            )}
+                                )}
 
-            {/* Rewards Tab */}
-            {activeTab === 'rewards' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    {!isConnected ? (
-                        <div className="glass-card p-4 text-center">
-                            <p className="text-sm text-gray-400">Connect wallet to view rewards</p>
-                        </div>
-                    ) : positions.length === 0 ? (
-                        <div className="glass-card p-4 text-center">
-                            <p className="text-gray-400 text-sm mb-3">No veNFTs - Lock WIND to earn rewards</p>
-                            <button onClick={() => setActiveTab('lock')} className="btn-primary px-4 py-2 text-xs rounded-lg">Lock WIND</button>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="glass-card p-3 sm:p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-semibold">Rebase Rewards</h3>
-                                    <span className="text-xs text-gray-400">Protects voting power</span>
-                                </div>
-                                <div className="space-y-2">
-                                    {positions.map((position) => (
-                                        <div key={position.tokenId.toString()} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
-                                            <div className="min-w-0">
-                                                <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
-                                                <div className="font-bold text-sm text-green-400">
-                                                    {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} WIND
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => handleClaimRebases(position.tokenId)}
-                                                disabled={isLoading || position.claimable === BigInt(0)}
-                                                className="px-3 py-1.5 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-40"
-                                            >
-                                                Claim
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                                {/* Pools List */}
+                                <div className="glass-card overflow-hidden">
+                                    <div className="p-3 border-b border-white/5 flex justify-between items-center">
+                                        <span className="font-semibold text-sm">Pools ({gauges.length})</span>
+                                        <span className="text-xs text-gray-400">{parseFloat(formatUnits(totalWeight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })} votes</span>
+                                    </div>
 
-                            {/* Voting Fee Rewards - Personal Claimable */}
-                            <div className="glass-card p-3 sm:p-4 mt-3">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-semibold">Voting Rewards</h3>
-                                    <span className="text-xs text-gray-400">
-                                        {isLoadingVotingRewards ? 'Loading...' : 'Your claimable fees'}
-                                    </span>
-                                </div>
-                                {positions.map((position) => {
-                                    const tokenIdStr = position.tokenId.toString();
-                                    const positionRewards = votingRewards[tokenIdStr] || {};
-                                    const hasRewards = Object.keys(positionRewards).some(pool =>
-                                        Object.keys(positionRewards[pool] || {}).length > 0
-                                    );
-
-                                    if (!hasRewards) return null;
-
-                                    return (
-                                        <div key={tokenIdStr} className="mb-3">
-                                            <div className="text-xs text-gray-400 mb-2">veNFT #{tokenIdStr}</div>
-                                            <div className="space-y-2">
-                                                {Object.entries(positionRewards).map(([poolAddress, tokens]) => {
-                                                    if (Object.keys(tokens).length === 0) return null;
-                                                    const gauge = gauges.find(g => g.pool === poolAddress);
-                                                    if (!gauge) return null;
-
-                                                    return (
-                                                        <div key={poolAddress} className="p-2 rounded-lg bg-white/5 border border-white/10">
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-xs font-medium">{gauge.symbol0}/{gauge.symbol1}</span>
-                                                                </div>
-                                                                <button
-                                                                    onClick={() => handleClaimVotingRewards(
-                                                                        position.tokenId,
-                                                                        gauge.feeReward as Address,
-                                                                        Object.keys(tokens) as Address[]
-                                                                    )}
-                                                                    disabled={isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}`}
-                                                                    className="px-2 py-1 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
-                                                                >
-                                                                    {isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}` ? '...' : 'Claim'}
-                                                                </button>
-                                                            </div>
-                                                            <div className="text-xs text-green-400">
-                                                                {Object.entries(tokens).map(([tokenAddr, amount], idx) => {
-                                                                    const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === tokenAddr.toLowerCase());
-                                                                    const decimals = token?.decimals || 18;
-                                                                    const symbol = token?.symbol || tokenAddr.slice(0, 6);
-                                                                    return (
-                                                                        <span key={tokenAddr}>
-                                                                            {parseFloat(formatUnits(amount, decimals)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {symbol}
-                                                                            {idx < Object.keys(tokens).length - 1 && ' + '}
-                                                                        </span>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                                {!isLoadingVotingRewards && Object.keys(votingRewards).every(tid =>
-                                    Object.keys(votingRewards[tid] || {}).every(pool =>
-                                        Object.keys(votingRewards[tid][pool] || {}).length === 0
-                                    )
-                                ) && (
-                                        <div className="text-center text-gray-500 text-xs py-4">
-                                            <div className="text-2xl mb-2">📊</div>
-                                            <div>No voting rewards to claim yet</div>
-                                            <div className="text-[10px] mt-1">Vote for pools to earn trading fees</div>
+                                    {/* Loading State */}
+                                    {isLoadingGauges && (
+                                        <div className="p-6 text-center text-gray-400 text-sm">
+                                            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                                            Loading...
                                         </div>
                                     )}
-                            </div>
-                        </>
-                    )}
-                </motion.div>
-            )}
 
-            {/* Incentive Modal */}
-            {incentivePool && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <motion.div
-                        className="glass-card p-4 sm:p-6 max-w-md w-full"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                    >
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold">Add Incentive</h3>
-                            <button
-                                onClick={() => {
-                                    setIncentivePool(null);
-                                    setIncentiveToken(null);
-                                    setIncentiveAmount('');
-                                }}
-                                className="text-gray-400 hover:text-white"
-                            >
-                                ✕
-                            </button>
-                        </div>
+                                    {/* Pools - Compact Mobile Layout */}
+                                    <div className="divide-y divide-white/5">
+                                        {/* Sort: Active gauges (with gauge address) first, then by isAlive */}
+                                        {[...gauges].sort((a, b) => {
+                                            // First priority: has gauge address
+                                            if (a.gauge && !b.gauge) return -1;
+                                            if (!a.gauge && b.gauge) return 1;
+                                            // Second priority: isAlive
+                                            if (a.isAlive && !b.isAlive) return -1;
+                                            if (!a.isAlive && b.isAlive) return 1;
+                                            return 0;
+                                        }).map((gauge) => (
+                                            <div key={gauge.pool} className="p-2 sm:p-3">
+                                                {/* Row 1: Pool info + share */}
+                                                <div className="flex items-center justify-between gap-2 mb-2">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <div className="relative w-10 h-6 flex-shrink-0">
+                                                            {getTokenLogo(gauge.token0) ? (
+                                                                <img src={getTokenLogo(gauge.token0)} alt={gauge.symbol0} className="absolute left-0 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                            ) : (
+                                                                <div className="absolute left-0 w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                    {gauge.symbol0.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                            {getTokenLogo(gauge.token1) ? (
+                                                                <img src={getTokenLogo(gauge.token1)} alt={gauge.symbol1} className="absolute left-3 w-6 h-6 rounded-full border border-[var(--bg-primary)]" />
+                                                            ) : (
+                                                                <div className="absolute left-3 w-6 h-6 rounded-full bg-secondary/30 flex items-center justify-center text-[10px] font-bold border border-[var(--bg-primary)]">
+                                                                    {gauge.symbol1.slice(0, 2)}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="font-semibold text-sm truncate">{gauge.symbol0}/{gauge.symbol1}</span>
+                                                                <span className={`text-[8px] px-1 py-0.5 rounded ${gauge.poolType === 'CL' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-primary/20 text-primary'}`}>
+                                                                    {gauge.poolType}
+                                                                </span>
+                                                                {!gauge.isAlive && (
+                                                                    <span className="text-[8px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Off</span>
+                                                                )}
+                                                            </div>
+                                                            {/* Pool Fees Display */}
+                                                            <div className="text-[10px] flex items-center gap-1 mt-0.5">
+                                                                <span className="text-gray-400">💰 Fees:</span>
+                                                                {gauge.rewardTokens && gauge.rewardTokens.length > 0 ? (
+                                                                    <span className="text-green-400">
+                                                                        {gauge.rewardTokens.map((reward, idx) => (
+                                                                            <span key={reward.address}>
+                                                                                {parseFloat(formatUnits(reward.amount, reward.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {reward.symbol}
+                                                                                {idx < gauge.rewardTokens.length - 1 && ' + '}
+                                                                            </span>
+                                                                        ))}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-gray-500">No fees yet this epoch</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0">
+                                                        <div className="text-xs font-bold text-primary">{gauge.weightPercent.toFixed(1)}%</div>
+                                                        <div className="text-[10px] text-gray-400">{parseFloat(formatUnits(gauge.weight, 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                                    </div>
+                                                </div>
 
-                        <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
-                            <div className="text-xs text-gray-400 mb-1">Pool</div>
-                            <div className="font-semibold">{incentivePool.symbol0}/{incentivePool.symbol1}</div>
-                        </div>
+                                                {/* Row 2: Vote controls or status */}
+                                                <div className="flex items-center justify-between gap-2">
+                                                    {/* Already voted indicator */}
+                                                    {existingVotes[gauge.pool.toLowerCase()] && existingVotes[gauge.pool.toLowerCase()] > BigInt(0) && (
+                                                        <span className="text-[10px] px-2 py-1 rounded bg-green-500/20 text-green-400 flex items-center gap-1">
+                                                            ✓ Voted ({parseFloat(formatUnits(existingVotes[gauge.pool.toLowerCase()], 18)).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                                                        </span>
+                                                    )}
 
-                        <div className="mb-4">
-                            <label className="text-xs text-gray-400 mb-2 block">Select Token</label>
-                            <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
-                                {DEFAULT_TOKEN_LIST.slice(0, 12).map((token) => (
-                                    <button
-                                        key={token.address}
-                                        onClick={() => setIncentiveToken(token)}
-                                        className={`p-2 rounded-lg flex flex-col items-center gap-1 transition ${incentiveToken?.address === token.address
-                                            ? 'bg-purple-500/30 border-purple-500 border'
-                                            : 'bg-white/5 hover:bg-white/10 border border-transparent'
-                                            }`}
-                                    >
-                                        {token.logoURI ? (
-                                            <img src={token.logoURI} alt={token.symbol} className="w-6 h-6 rounded-full" />
-                                        ) : (
-                                            <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
-                                                {token.symbol.slice(0, 2)}
+                                                    {!gauge.gauge ? (
+                                                        /* No gauge exists yet - show Coming Soon */
+                                                        <span className="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 flex items-center gap-1">
+                                                            🚧 Voting Coming Soon
+                                                        </span>
+                                                    ) : positions.length > 0 ? (
+                                                        <>
+                                                            <div className="flex gap-1">
+                                                                {[100, 50, 25].map((pct) => (
+                                                                    <button
+                                                                        key={pct}
+                                                                        onClick={() => updateVoteWeight(gauge.pool, pct)}
+                                                                        disabled={!selectedVeNFT || !gauge.isAlive}
+                                                                        className={`px-2 py-1 text-[10px] rounded transition ${voteWeights[gauge.pool] === pct
+                                                                            ? 'bg-primary text-white'
+                                                                            : 'bg-white/5 hover:bg-white/10 text-gray-400'
+                                                                            } disabled:opacity-40`}
+                                                                    >
+                                                                        {pct}%
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                placeholder="0"
+                                                                value={voteWeights[gauge.pool] || ''}
+                                                                onChange={(e) => updateVoteWeight(gauge.pool, parseInt(e.target.value) || 0)}
+                                                                disabled={!selectedVeNFT || !gauge.isAlive}
+                                                                className="w-14 py-1 px-2 rounded bg-white/5 text-center text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
+                                                            />
+                                                            {voteWeights[gauge.pool] > 0 && (
+                                                                <span className="text-[10px] text-cyan-400 min-w-[60px] text-right">
+                                                                    ≈{getActualVotePower(voteWeights[gauge.pool]).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                                                </span>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <span className={`text-[10px] px-2 py-1 rounded ${gauge.isAlive ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                                            {gauge.isAlive ? '✓ Active' : '✗ Inactive'}
+                                                        </span>
+                                                    )}
+
+                                                    {/* Add Incentive button */}
+                                                    {gauge.gauge && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('Opening incentive modal for pool:', gauge.pool, gauge.symbol0, gauge.symbol1);
+                                                                setIncentivePool({ pool: gauge.pool, symbol0: gauge.symbol0, symbol1: gauge.symbol1 });
+                                                            }}
+                                                            className="px-2 py-1 text-[10px] rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition flex items-center gap-1"
+                                                        >
+                                                            💎 Add Incentive
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        )}
-                                        <span className="text-[10px] font-medium">{token.symbol}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {incentiveToken && (
-                            <div className="mb-4">
-                                <label className="text-xs text-gray-400 mb-2 block">Amount</label>
-                                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="text"
-                                            value={incentiveAmount}
-                                            onChange={(e) => setIncentiveAmount(e.target.value)}
-                                            placeholder="0.0"
-                                            className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
-                                        />
-                                        <span className="text-sm text-gray-400">{incentiveToken.symbol}</span>
+                                        ))}
                                     </div>
                                 </div>
-                            </div>
+
+                                {/* Vote Summary + Submit - Compact */}
+                                {positions.length > 0 && (
+                                    <div className="p-3 bg-primary/5 border-t border-primary/20">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="text-xs">
+                                                <span className="text-gray-400">Pools: </span>
+                                                <span className="font-bold text-white">{Object.values(voteWeights).filter(w => w > 0).length}</span>
+                                                <span className="text-gray-400 mx-2">|</span>
+                                                <span className="text-gray-400">Power: </span>
+                                                <span className="font-bold text-primary">{selectedVotingPower.toLocaleString(undefined, { maximumFractionDigits: 2 })} veWIND</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={handleVoteForAll}
+                                                    disabled={!selectedVeNFT}
+                                                    className="px-3 py-1.5 text-[10px] rounded bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 hover:from-blue-500/30 hover:to-cyan-500/30 transition disabled:opacity-50"
+                                                >
+                                                    ⚡ Vote All
+                                                </button>
+                                                {selectedVeNFT && (
+                                                    <button
+                                                        onClick={handleResetVotes}
+                                                        disabled={isVoting}
+                                                        className="px-3 py-1.5 text-[10px] rounded bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={handleVote}
+                                                    disabled={!selectedVeNFT || totalVoteWeight === 0 || isVoting}
+                                                    className="px-4 py-1.5 text-xs font-bold rounded bg-gradient-to-r from-primary to-secondary text-white disabled:opacity-50"
+                                                >
+                                                    {isVoting ? '...' : 'Vote'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
-
-                        <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                            <div className="text-xs text-purple-300">
-                                💡 Incentives reward voters who vote for this pool. They are distributed proportionally based on vote weight.
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={handleAddIncentive}
-                            disabled={!incentiveToken || !incentiveAmount || parseFloat(incentiveAmount) <= 0 || isAddingIncentive}
-                            className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50"
-                        >
-                            {isAddingIncentive ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    Adding Incentive...
-                                </span>
-                            ) : (
-                                '🎁 Add Incentive'
-                            )}
-                        </button>
                     </motion.div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {/* Rewards Tab */}
+            {
+                activeTab === 'rewards' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        {!isConnected ? (
+                            <div className="glass-card p-4 text-center">
+                                <p className="text-sm text-gray-400">Connect wallet to view rewards</p>
+                            </div>
+                        ) : positions.length === 0 ? (
+                            <div className="glass-card p-4 text-center">
+                                <p className="text-gray-400 text-sm mb-3">No veNFTs - Lock WIND to earn rewards</p>
+                                <button onClick={() => setActiveTab('lock')} className="btn-primary px-4 py-2 text-xs rounded-lg">Lock WIND</button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="glass-card p-3 sm:p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-semibold">Rebase Rewards</h3>
+                                        <span className="text-xs text-gray-400">Protects voting power</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {positions.map((position) => (
+                                            <div key={position.tokenId.toString()} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10">
+                                                <div className="min-w-0">
+                                                    <div className="text-xs text-gray-400">#{position.tokenId.toString()}</div>
+                                                    <div className="font-bold text-sm text-green-400">
+                                                        {parseFloat(formatUnits(position.claimable, 18)).toFixed(4)} WIND
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleClaimRebases(position.tokenId)}
+                                                    disabled={isLoading || position.claimable === BigInt(0)}
+                                                    className="px-3 py-1.5 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-40"
+                                                >
+                                                    Claim
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Voting Fee Rewards - Personal Claimable */}
+                                <div className="glass-card p-3 sm:p-4 mt-3">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-semibold">Voting Rewards</h3>
+                                        <span className="text-xs text-gray-400">
+                                            {isLoadingVotingRewards ? 'Loading...' : 'Your claimable fees'}
+                                        </span>
+                                    </div>
+                                    {positions.map((position) => {
+                                        const tokenIdStr = position.tokenId.toString();
+                                        const positionRewards = votingRewards[tokenIdStr] || {};
+                                        const hasRewards = Object.keys(positionRewards).some(pool =>
+                                            Object.keys(positionRewards[pool] || {}).length > 0
+                                        );
+
+                                        if (!hasRewards) return null;
+
+                                        return (
+                                            <div key={tokenIdStr} className="mb-3">
+                                                <div className="text-xs text-gray-400 mb-2">veNFT #{tokenIdStr}</div>
+                                                <div className="space-y-2">
+                                                    {Object.entries(positionRewards).map(([poolAddress, tokens]) => {
+                                                        if (Object.keys(tokens).length === 0) return null;
+                                                        const gauge = gauges.find(g => g.pool === poolAddress);
+                                                        if (!gauge) return null;
+
+                                                        return (
+                                                            <div key={poolAddress} className="p-2 rounded-lg bg-white/5 border border-white/10">
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-medium">{gauge.symbol0}/{gauge.symbol1}</span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleClaimVotingRewards(
+                                                                            position.tokenId,
+                                                                            gauge.feeReward as Address,
+                                                                            Object.keys(tokens) as Address[]
+                                                                        )}
+                                                                        disabled={isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}`}
+                                                                        className="px-2 py-1 text-[10px] font-medium rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition disabled:opacity-50"
+                                                                    >
+                                                                        {isClaimingVotingRewards === `${position.tokenId}-${gauge.feeReward}` ? '...' : 'Claim'}
+                                                                    </button>
+                                                                </div>
+                                                                <div className="text-xs text-green-400">
+                                                                    {Object.entries(tokens).map(([tokenAddr, amount], idx) => {
+                                                                        const token = DEFAULT_TOKEN_LIST.find(t => t.address.toLowerCase() === tokenAddr.toLowerCase());
+                                                                        const decimals = token?.decimals || 18;
+                                                                        const symbol = token?.symbol || tokenAddr.slice(0, 6);
+                                                                        return (
+                                                                            <span key={tokenAddr}>
+                                                                                {parseFloat(formatUnits(amount, decimals)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {symbol}
+                                                                                {idx < Object.keys(tokens).length - 1 && ' + '}
+                                                                            </span>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {!isLoadingVotingRewards && Object.keys(votingRewards).every(tid =>
+                                        Object.keys(votingRewards[tid] || {}).every(pool =>
+                                            Object.keys(votingRewards[tid][pool] || {}).length === 0
+                                        )
+                                    ) && (
+                                            <div className="text-center text-gray-500 text-xs py-4">
+                                                <div className="text-2xl mb-2">📊</div>
+                                                <div>No voting rewards to claim yet</div>
+                                                <div className="text-[10px] mt-1">Vote for pools to earn trading fees</div>
+                                            </div>
+                                        )}
+                                </div>
+                            </>
+                        )}
+                    </motion.div>
+                )
+            }
+
+            {/* Incentive Modal */}
+            {
+                incentivePool && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            className="glass-card p-4 sm:p-6 max-w-md w-full"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-bold">Add Incentive</h3>
+                                <button
+                                    onClick={() => {
+                                        setIncentivePool(null);
+                                        setIncentiveToken(null);
+                                        setIncentiveAmount('');
+                                    }}
+                                    className="text-gray-400 hover:text-white"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div className="text-xs text-gray-400 mb-1">Pool</div>
+                                <div className="font-semibold">{incentivePool.symbol0}/{incentivePool.symbol1}</div>
+                            </div>
+
+                            <div className="mb-4">
+                                <label className="text-xs text-gray-400 mb-2 block">Select Token</label>
+                                <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                                    {DEFAULT_TOKEN_LIST.slice(0, 12).map((token) => (
+                                        <button
+                                            key={token.address}
+                                            onClick={() => setIncentiveToken(token)}
+                                            className={`p-2 rounded-lg flex flex-col items-center gap-1 transition ${incentiveToken?.address === token.address
+                                                ? 'bg-purple-500/30 border-purple-500 border'
+                                                : 'bg-white/5 hover:bg-white/10 border border-transparent'
+                                                }`}
+                                        >
+                                            {token.logoURI ? (
+                                                <img src={token.logoURI} alt={token.symbol} className="w-6 h-6 rounded-full" />
+                                            ) : (
+                                                <div className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-[10px] font-bold">
+                                                    {token.symbol.slice(0, 2)}
+                                                </div>
+                                            )}
+                                            <span className="text-[10px] font-medium">{token.symbol}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {incentiveToken && (
+                                <div className="mb-4">
+                                    <label className="text-xs text-gray-400 mb-2 block">Amount</label>
+                                    <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={incentiveAmount}
+                                                onChange={(e) => setIncentiveAmount(e.target.value)}
+                                                placeholder="0.0"
+                                                className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
+                                            />
+                                            <span className="text-sm text-gray-400">{incentiveToken.symbol}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mb-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                <div className="text-xs text-purple-300">
+                                    💡 Incentives reward voters who vote for this pool. They are distributed proportionally based on vote weight.
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleAddIncentive}
+                                disabled={!incentiveToken || !incentiveAmount || parseFloat(incentiveAmount) <= 0 || isAddingIncentive}
+                                className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50"
+                            >
+                                {isAddingIncentive ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Adding Incentive...
+                                    </span>
+                                ) : (
+                                    '🎁 Add Incentive'
+                                )}
+                            </button>
+                        </motion.div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

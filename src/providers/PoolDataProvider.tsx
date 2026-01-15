@@ -222,6 +222,7 @@ export interface VeNFT {
     isPermanent: boolean;    // permanent lock flag
     votingPower: bigint;
     claimable: bigint;       // claimable rebases
+    hasVoted: boolean;       // whether veNFT has voted this epoch (blocks unlock/merge)
 }
 
 interface PoolDataContextType {
@@ -1369,6 +1370,20 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     })
                 }).then(r => r.json());
 
+                // Get voted status - voted(uint256) selector 0x8fbb38ff
+                const votedResult = await fetch(getPrimaryRpc(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0', id: 1,
+                        method: 'eth_call',
+                        params: [{
+                            to: V2_CONTRACTS.VotingEscrow,
+                            data: `0x8fbb38ff${tokenId.toString(16).padStart(64, '0')}`
+                        }, 'latest']
+                    })
+                }).then(r => r.json());
+
                 if (lockedResult.result) {
                     const data = lockedResult.result.slice(2);
                     const amount = BigInt('0x' + data.slice(0, 64));
@@ -1376,8 +1391,9 @@ export function PoolDataProvider({ children }: { children: ReactNode }) {
                     const isPermanent = (data.slice(128, 192) || '0') !== '0'.repeat(64);
                     const votingPower = vpResult.result ? BigInt(vpResult.result) : BigInt(0);
                     const claimable = claimableResult.result ? BigInt(claimableResult.result) : BigInt(0);
+                    const hasVoted = votedResult.result ? BigInt(votedResult.result) !== BigInt(0) : false;
 
-                    nfts.push({ tokenId, amount, end, isPermanent, votingPower, claimable });
+                    nfts.push({ tokenId, amount, end, isPermanent, votingPower, claimable, hasVoted });
                 }
             }
         } catch (err) {

@@ -26,6 +26,7 @@ export interface VeWINDPosition {
     isPermanent: boolean;
     votingPower: bigint;
     claimable: bigint;
+    hasVoted: boolean;
 }
 
 export function useVeWIND() {
@@ -44,6 +45,7 @@ export function useVeWIND() {
         isPermanent: nft.isPermanent,
         votingPower: nft.votingPower,
         claimable: nft.claimable,
+        hasVoted: nft.hasVoted,
     }));
 
     const { writeContractAsync } = useWriteContract();
@@ -244,6 +246,64 @@ export function useVeWIND() {
         }
     }, [address, writeContractAsync, refetchVeNFTs]);
 
+    // Lock permanently for maximum voting power
+    const lockPermanent = useCallback(async (tokenId: bigint) => {
+        if (!address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.VotingEscrow as Address,
+                abi: VOTING_ESCROW_ABI,
+                functionName: 'lockPermanent',
+                args: [tokenId],
+            });
+
+            setIsLoading(false);
+            refetchVeNFTs();
+            return { hash };
+        } catch (err: any) {
+            console.error('Lock permanent error:', err);
+            setError(err.message || 'Failed to lock permanently');
+            setIsLoading(false);
+            return null;
+        }
+    }, [address, writeContractAsync, refetchVeNFTs]);
+
+    // Unlock permanent lock (converts back to 4 year time-lock)
+    const unlockPermanent = useCallback(async (tokenId: bigint) => {
+        if (!address) {
+            setError('Wallet not connected');
+            return null;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const hash = await writeContractAsync({
+                address: V2_CONTRACTS.VotingEscrow as Address,
+                abi: VOTING_ESCROW_ABI,
+                functionName: 'unlockPermanent',
+                args: [tokenId],
+            });
+
+            setIsLoading(false);
+            refetchVeNFTs();
+            return { hash };
+        } catch (err: any) {
+            console.error('Unlock permanent error:', err);
+            setError(err.message || 'Failed to unlock permanent lock');
+            setIsLoading(false);
+            return null;
+        }
+    }, [address, writeContractAsync, refetchVeNFTs]);
+
     // Delegate veNFT for ProtocolGovernor voting
     // This delegates the veNFT's voting power to itself so it can vote on governance proposals
     const delegateForGovernance = useCallback(async (tokenId: bigint) => {
@@ -292,6 +352,8 @@ export function useVeWIND() {
         withdraw,
         claimRebases,
         merge,
+        lockPermanent,
+        unlockPermanent,
         delegateForGovernance,
         isLoading: isLoading || veNFTsLoading,
         error,
