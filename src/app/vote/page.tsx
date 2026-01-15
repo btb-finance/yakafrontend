@@ -790,7 +790,7 @@ export default function VotePage() {
                                                                 {position.isPermanent ? (
                                                                     <span className="text-amber-400">✨ Permanent Lock</span>
                                                                 ) : isExpired ? (
-                                                                    <span className="text-yellow-400">🔓 Unlocked - Ready to withdraw</span>
+                                                                    <span className="text-yellow-400">Unlocked - Ready to withdraw</span>
                                                                 ) : (
                                                                     <span>Unlocks {endDate.toLocaleDateString()}</span>
                                                                 )}
@@ -823,7 +823,7 @@ export default function VotePage() {
                                                                 onClick={() => handleWithdraw(position.tokenId)}
                                                                 className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:opacity-90 transition"
                                                             >
-                                                                🔓 Withdraw {parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND
+                                                                Withdraw {parseFloat(formatUnits(position.amount, 18)).toLocaleString()} WIND
                                                             </button>
                                                         </div>
                                                     ) : (
@@ -834,7 +834,7 @@ export default function VotePage() {
                                                                     onClick={() => setActiveAction(activeAction === 'add' ? null : 'add')}
                                                                     className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'add' ? 'bg-green-500/20 text-green-400 border-b-2 border-green-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                                                 >
-                                                                    ➕ Add WIND
+                                                                    + Add WIND
                                                                 </button>
                                                                 {!position.isPermanent && (
                                                                     <button
@@ -849,14 +849,14 @@ export default function VotePage() {
                                                                         onClick={() => setActiveAction(activeAction === 'merge' ? null : 'merge')}
                                                                         className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'merge' ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                                                     >
-                                                                        🔀 Merge
+                                                                        Merge
                                                                     </button>
                                                                 )}
                                                                 <button
                                                                     onClick={() => setActiveAction(activeAction === 'permanent' ? null : 'permanent')}
                                                                     className={`flex-1 py-2.5 text-xs font-medium transition-all ${activeAction === 'permanent' ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-400' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                                                 >
-                                                                    {position.isPermanent ? '🔓 Unlock' : '∞ Permanent'}
+                                                                    {position.isPermanent ? 'Unlock' : 'Permanent'}
                                                                 </button>
                                                             </div>
 
@@ -961,14 +961,14 @@ export default function VotePage() {
                                                                                                 <div className="text-left">
                                                                                                     <div className="font-bold text-sm">{parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND</div>
                                                                                                     <div className="text-xs text-gray-400">
-                                                                                                        {p.isPermanent ? '∞ Permanent' : new Date(Number(p.end) * 1000).toLocaleDateString()}
+                                                                                                        {p.isPermanent ? 'Permanent' : new Date(Number(p.end) * 1000).toLocaleDateString()}
                                                                                                     </div>
                                                                                                 </div>
                                                                                             </div>
                                                                                             {p.hasVoted ? (
-                                                                                                <div className="text-xs text-red-400">⚠️ Voted</div>
+                                                                                                <div className="text-xs text-red-400">Voted</div>
                                                                                             ) : mergeTarget === p.tokenId ? (
-                                                                                                <div className="text-purple-400 text-sm">✓</div>
+                                                                                                <div className="text-purple-400 text-sm font-bold">✓</div>
                                                                                             ) : null}
                                                                                         </button>
                                                                                         {p.hasVoted && (
@@ -980,7 +980,7 @@ export default function VotePage() {
                                                                                                 disabled={isVoting}
                                                                                                 className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50"
                                                                                             >
-                                                                                                {isVoting ? '...' : '🔄 Reset'}
+                                                                                                {isVoting ? '...' : 'Reset'}
                                                                                             </button>
                                                                                         )}
                                                                                     </div>
@@ -997,7 +997,7 @@ export default function VotePage() {
                                                                                 disabled={isLoading}
                                                                                 className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50"
                                                                             >
-                                                                                {isLoading ? 'Processing...' : `🔀 Merge #${mergeTarget.toString()} → #${position.tokenId.toString()}`}
+                                                                                {isLoading ? 'Processing...' : `Merge #${mergeTarget.toString()} into #${position.tokenId.toString()}`}
                                                                             </button>
                                                                         )}
                                                                     </div>
