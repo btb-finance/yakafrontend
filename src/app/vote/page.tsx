@@ -72,6 +72,7 @@ export default function VotePage() {
     // Lock management state
     const [managingNFT, setManagingNFT] = useState<bigint | null>(null);
     const [increaseAmountValue, setIncreaseAmountValue] = useState('');
+    const [isMaxAmount, setIsMaxAmount] = useState(false); // Track if MAX was clicked
     const [extendDuration, setExtendDuration] = useState<keyof typeof LOCK_DURATIONS>('4Y');
     const [mergeTarget, setMergeTarget] = useState<bigint | null>(null);
     const [activeAction, setActiveAction] = useState<'add' | 'extend' | 'merge' | 'permanent' | null>(null);
@@ -388,10 +389,13 @@ export default function VotePage() {
 
     const handleIncreaseAmount = async (tokenId: bigint) => {
         if (!increaseAmountValue || parseFloat(increaseAmountValue) <= 0) return;
-        const result = await increaseAmount(tokenId, increaseAmountValue);
+        // Use raw balance for full precision when MAX was clicked
+        const amountToAdd = isMaxAmount ? (rawYakaBalance || increaseAmountValue) : increaseAmountValue;
+        const result = await increaseAmount(tokenId, amountToAdd);
         if (result) {
             setTxHash(result.hash);
             setIncreaseAmountValue('');
+            setIsMaxAmount(false);
             setManagingNFT(null);
         }
     };
@@ -867,12 +871,22 @@ export default function VotePage() {
                                                                                 <input
                                                                                     type="text"
                                                                                     value={increaseAmountValue}
-                                                                                    onChange={(e) => setIncreaseAmountValue(e.target.value)}
+                                                                                    onChange={(e) => {
+                                                                                        // Allow numeric input with decimals
+                                                                                        const val = e.target.value;
+                                                                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                                                            setIncreaseAmountValue(val);
+                                                                                            setIsMaxAmount(false); // Reset when user types manually
+                                                                                        }
+                                                                                    }}
                                                                                     placeholder="0.0"
                                                                                     className="flex-1 min-w-0 bg-transparent text-lg font-bold outline-none placeholder-gray-600"
                                                                                 />
                                                                                 <button
-                                                                                    onClick={() => setIncreaseAmountValue(rawYakaBalance || '0')}
+                                                                                    onClick={() => {
+                                                                                        setIncreaseAmountValue(formattedYakaBalance || '0');
+                                                                                        setIsMaxAmount(true); // Track that MAX was clicked
+                                                                                    }}
                                                                                     className="px-3 py-1 text-xs font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30"
                                                                                 >
                                                                                     MAX
@@ -885,7 +899,7 @@ export default function VotePage() {
                                                                             disabled={isLoading || !increaseAmountValue || parseFloat(increaseAmountValue) <= 0}
                                                                             className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-green-500 to-emerald-500 text-white disabled:opacity-50"
                                                                         >
-                                                                            {isLoading ? 'Processing...' : `Add ${increaseAmountValue || '0'} WIND`}
+                                                                            {isLoading ? 'Processing...' : `Add ${parseFloat(increaseAmountValue || '0').toLocaleString(undefined, { maximumFractionDigits: 4 })} WIND`}
                                                                         </button>
                                                                     </div>
                                                                 )}
