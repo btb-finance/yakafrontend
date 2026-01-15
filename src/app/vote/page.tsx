@@ -115,7 +115,7 @@ export default function VotePage() {
         addIncentive,
     } = useVoter();
 
-    const { balance: yakaBalance, raw: rawYakaBalance, formatted: formattedYakaBalance } = useTokenBalance(WIND);
+    const { balance: windBalance, raw: rawWindBalance, formatted: formattedWindBalance } = useTokenBalance(WIND);
 
     // Read epoch info from Minter
     const { data: activePeriod } = useReadContract({
@@ -390,7 +390,7 @@ export default function VotePage() {
     const handleIncreaseAmount = async (tokenId: bigint) => {
         if (!increaseAmountValue || parseFloat(increaseAmountValue) <= 0) return;
         // Use raw balance for full precision when MAX was clicked
-        const amountToAdd = isMaxAmount ? (rawYakaBalance || increaseAmountValue) : increaseAmountValue;
+        const amountToAdd = isMaxAmount ? (rawWindBalance || increaseAmountValue) : increaseAmountValue;
         const result = await increaseAmount(tokenId, amountToAdd);
         if (result) {
             setTxHash(result.hash);
@@ -617,7 +617,7 @@ export default function VotePage() {
             <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className="glass-card p-2 sm:p-3 text-center">
                     <div className="text-[10px] text-gray-400">WIND Balance</div>
-                    <div className="text-sm sm:text-lg font-bold">{formattedYakaBalance || '0'}</div>
+                    <div className="text-sm sm:text-lg font-bold">{formattedWindBalance || '0'}</div>
                 </div>
                 <div className="glass-card p-2 sm:p-3 text-center">
                     <div className="text-[10px] text-gray-400">veNFTs</div>
@@ -687,7 +687,7 @@ export default function VotePage() {
                         <div className="mb-3">
                             <div className="flex items-center justify-between mb-1">
                                 <label className="text-xs text-gray-400">Amount</label>
-                                <span className="text-[10px] text-gray-400">Bal: {formattedYakaBalance || '0'}</span>
+                                <span className="text-[10px] text-gray-400">Bal: {formattedWindBalance || '0'}</span>
                             </div>
                             <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                                 <div className="flex items-center gap-2">
@@ -699,7 +699,7 @@ export default function VotePage() {
                                         className="flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600"
                                     />
                                     <button
-                                        onClick={() => setLockAmount(rawYakaBalance || '0')}
+                                        onClick={() => setLockAmount(rawWindBalance || '0')}
                                         className="px-2 py-1 text-[10px] font-medium rounded bg-white/10 hover:bg-white/20 text-primary"
                                     >
                                         MAX
@@ -884,7 +884,7 @@ export default function VotePage() {
                                                                                 />
                                                                                 <button
                                                                                     onClick={() => {
-                                                                                        setIncreaseAmountValue(formattedYakaBalance || '0');
+                                                                                        setIncreaseAmountValue(formattedWindBalance || '0');
                                                                                         setIsMaxAmount(true); // Track that MAX was clicked
                                                                                     }}
                                                                                     className="px-3 py-1 text-xs font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30"
@@ -893,7 +893,7 @@ export default function VotePage() {
                                                                                 </button>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="text-xs text-gray-500">Balance: {formattedYakaBalance} WIND</div>
+                                                                        <div className="text-xs text-gray-500">Balance: {formattedWindBalance} WIND</div>
                                                                         <button
                                                                             onClick={() => handleIncreaseAmount(position.tokenId)}
                                                                             disabled={isLoading || !increaseAmountValue || parseFloat(increaseAmountValue) <= 0}

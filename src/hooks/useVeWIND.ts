@@ -63,7 +63,7 @@ export function useVeWIND() {
         try {
             const amountWei = parseUnits(amount, 18);
 
-            // Approve YAKA
+            // Approve WIND
             await writeContractAsync({
                 address: V2_CONTRACTS.YAKA as Address,
                 abi: ERC20_ABI,
@@ -103,7 +103,7 @@ export function useVeWIND() {
         try {
             const amountWei = parseUnits(amount, 18);
 
-            // Approve YAKA
+            // Approve WIND
             await writeContractAsync({
                 address: V2_CONTRACTS.YAKA as Address,
                 abi: ERC20_ABI,
