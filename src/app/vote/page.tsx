@@ -452,11 +452,16 @@ export default function VotePage() {
         setIsVoting(false);
     };
 
-    const handleResetVotes = async () => {
-        if (!selectedVeNFT) return;
+    const handleResetVotes = async (tokenId?: bigint) => {
+        const targetTokenId = tokenId || selectedVeNFT;
+        if (!targetTokenId) return;
         setIsVoting(true);
-        const result = await resetVotes(selectedVeNFT);
-        if (result) setTxHash(result.hash);
+        const result = await resetVotes(targetTokenId);
+        if (result) {
+            setTxHash(result.hash);
+            // Refetch veNFT data to update hasVoted status
+            refetch();
+        }
         setIsVoting(false);
     };
 
@@ -916,58 +921,69 @@ export default function VotePage() {
                                                                 {/* Merge */}
                                                                 {activeAction === 'merge' && positions.length > 1 && (
                                                                     <div className="space-y-3">
-                                                                        {position.hasVoted && (
-                                                                            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                                                                                <div className="text-xs text-red-400">
-                                                                                    ⚠️ This veNFT has voted this epoch. You must reset your votes before you can merge it.
-                                                                                </div>
-                                                                            </div>
-                                                                        )}
                                                                         <div className="text-xs text-gray-400">
                                                                             Combine another veNFT into this one. The merged NFT will be burned.
                                                                         </div>
                                                                         <div className="text-xs font-medium text-white mb-2">Select veNFT to merge:</div>
                                                                         <div className="space-y-2">
                                                                             {positions
-                                                                                .filter(p => p.tokenId !== position.tokenId && !p.hasVoted)
+                                                                                .filter(p => p.tokenId !== position.tokenId)
                                                                                 .map(p => (
-                                                                                    <button
-                                                                                        key={p.tokenId.toString()}
-                                                                                        onClick={() => setMergeTarget(mergeTarget === p.tokenId ? null : p.tokenId)}
-                                                                                        className={`w-full p-3 rounded-xl flex items-center justify-between transition-all ${mergeTarget === p.tokenId
-                                                                                            ? 'bg-purple-500/20 border-2 border-purple-500'
-                                                                                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                                                                                            }`}
-                                                                                    >
-                                                                                        <div className="flex items-center gap-2">
-                                                                                            <div className="w-8 h-8 rounded-full bg-purple-500/30 flex items-center justify-center text-xs font-bold">
-                                                                                                #{p.tokenId.toString()}
-                                                                                            </div>
-                                                                                            <div className="text-left">
-                                                                                                <div className="font-bold text-sm">{parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND</div>
-                                                                                                <div className="text-xs text-gray-400">
-                                                                                                    {p.isPermanent ? '∞ Permanent' : new Date(Number(p.end) * 1000).toLocaleDateString()}
+                                                                                    <div key={p.tokenId.toString()} className="relative">
+                                                                                        <button
+                                                                                            onClick={() => !p.hasVoted && setMergeTarget(mergeTarget === p.tokenId ? null : p.tokenId)}
+                                                                                            disabled={p.hasVoted}
+                                                                                            className={`w-full p-3 rounded-xl flex items-center justify-between transition-all ${mergeTarget === p.tokenId
+                                                                                                ? 'bg-purple-500/20 border-2 border-purple-500'
+                                                                                                : p.hasVoted
+                                                                                                    ? 'bg-red-500/5 border-2 border-red-500/20 opacity-70'
+                                                                                                    : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                                                                                                }`}
+                                                                                        >
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <div className={`w-8 h-8 rounded-full ${p.hasVoted ? 'bg-red-500/30' : 'bg-purple-500/30'} flex items-center justify-center text-xs font-bold`}>
+                                                                                                    #{p.tokenId.toString()}
+                                                                                                </div>
+                                                                                                <div className="text-left">
+                                                                                                    <div className="font-bold text-sm">{parseFloat(formatUnits(p.amount, 18)).toLocaleString()} WIND</div>
+                                                                                                    <div className="text-xs text-gray-400">
+                                                                                                        {p.isPermanent ? '∞ Permanent' : new Date(Number(p.end) * 1000).toLocaleDateString()}
+                                                                                                    </div>
                                                                                                 </div>
                                                                                             </div>
-                                                                                        </div>
-                                                                                        {mergeTarget === p.tokenId && (
-                                                                                            <div className="text-purple-400 text-sm">✓</div>
+                                                                                            {p.hasVoted ? (
+                                                                                                <div className="text-xs text-red-400">⚠️ Voted</div>
+                                                                                            ) : mergeTarget === p.tokenId ? (
+                                                                                                <div className="text-purple-400 text-sm">✓</div>
+                                                                                            ) : null}
+                                                                                        </button>
+                                                                                        {p.hasVoted && (
+                                                                                            <button
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    handleResetVotes(p.tokenId);
+                                                                                                }}
+                                                                                                disabled={isVoting}
+                                                                                                className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50"
+                                                                                            >
+                                                                                                {isVoting ? '...' : '🔄 Reset'}
+                                                                                            </button>
                                                                                         )}
-                                                                                    </button>
+                                                                                    </div>
                                                                                 ))}
-                                                                            {positions.filter(p => p.tokenId !== position.tokenId && !p.hasVoted).length === 0 && (
+                                                                            {positions.filter(p => p.tokenId !== position.tokenId).length === 0 && (
                                                                                 <div className="text-xs text-gray-500 text-center py-3">
-                                                                                    No veNFTs available to merge. Other veNFTs may have already voted this epoch.
+                                                                                    No other veNFTs to merge with.
                                                                                 </div>
                                                                             )}
                                                                         </div>
                                                                         {mergeTarget && (
                                                                             <button
                                                                                 onClick={() => handleMerge(mergeTarget, position.tokenId)}
-                                                                                disabled={isLoading || position.hasVoted}
-                                                                                className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                disabled={isLoading}
+                                                                                className="w-full py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white disabled:opacity-50"
                                                                             >
-                                                                                {isLoading ? 'Processing...' : position.hasVoted ? '🔒 Reset Votes First' : `🔀 Merge #${mergeTarget.toString()} → #${position.tokenId.toString()}`}
+                                                                                {isLoading ? 'Processing...' : `🔀 Merge #${mergeTarget.toString()} → #${position.tokenId.toString()}`}
                                                                             </button>
                                                                         )}
                                                                     </div>
@@ -978,8 +994,17 @@ export default function VotePage() {
                                                                     <div className="space-y-3">
                                                                         {position.hasVoted && (
                                                                             <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                                                                                <div className="text-xs text-red-400">
-                                                                                    ⚠️ This veNFT has voted this epoch. You must reset your votes before you can unlock it. Go to the Vote tab and click "Reset Votes".
+                                                                                <div className="flex items-center justify-between gap-2">
+                                                                                    <div className="text-xs text-red-400">
+                                                                                        ⚠️ This veNFT has voted this epoch. Reset votes first to unlock.
+                                                                                    </div>
+                                                                                    <button
+                                                                                        onClick={() => handleResetVotes(position.tokenId)}
+                                                                                        disabled={isVoting}
+                                                                                        className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition disabled:opacity-50 whitespace-nowrap"
+                                                                                    >
+                                                                                        {isVoting ? '...' : '🔄 Reset Votes'}
+                                                                                    </button>
                                                                                 </div>
                                                                             </div>
                                                                         )}
@@ -1268,7 +1293,7 @@ export default function VotePage() {
                                                 </button>
                                                 {selectedVeNFT && (
                                                     <button
-                                                        onClick={handleResetVotes}
+                                                        onClick={() => handleResetVotes()}
                                                         disabled={isVoting}
                                                         className="px-3 py-1.5 text-[10px] rounded bg-white/10 hover:bg-white/20 transition disabled:opacity-50"
                                                     >

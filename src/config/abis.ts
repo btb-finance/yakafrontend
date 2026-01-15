@@ -690,6 +690,13 @@ export const VOTING_ESCROW_ABI = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        name: 'voted',
+        outputs: [{ name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
     // Write functions
     {
         inputs: [
