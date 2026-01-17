@@ -5,17 +5,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount } from 'wagmi';
 import { useWriteContract } from '@/hooks/useWriteContract';
 import { parseUnits, Address, formatUnits } from 'viem';
-import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC } from '@/config/tokens';
+import { Token, DEFAULT_TOKEN_LIST, SEI, WSEI, USDC, USDT0 } from '@/config/tokens';
 import { CL_CONTRACTS, V2_CONTRACTS } from '@/config/contracts';
 import { TokenSelector } from '@/components/common/TokenSelector';
 import { useLiquidity } from '@/hooks/useLiquidity';
-import { useTokenBalance } from '@/hooks/useToken';
+import { useTokenBalance, useTokenAllowance } from '@/hooks/useToken';
 import { NFT_POSITION_MANAGER_ABI, ERC20_ABI } from '@/config/abis';
 import { getPrimaryRpc } from '@/utils/rpc';
 import { usePoolData } from '@/providers/PoolDataProvider';
 import { calculatePoolAPR, formatAPR } from '@/utils/aprCalculator';
 import { GAUGE_LIST } from '@/config/gauges';
 import { isStablecoinPair, tickToStablecoinPrice } from '@/config/stablecoinTicks';
+import { useToast } from '@/providers/ToastProvider';
+import { haptic } from '@/hooks/useHaptic';
 import {
     calculateOptimalAmounts,
     getRequiredTokens,
@@ -26,6 +28,28 @@ import {
 
 type PoolType = 'v2' | 'cl';
 type TxStep = 'idle' | 'approving0' | 'approving1' | 'minting' | 'approving_nft' | 'staking' | 'done' | 'error';
+type ActiveTab = 'regular' | 'zap';
+
+// StablecoinZap contract address and ABI
+const STABLECOIN_ZAP_ADDRESS = '0x8dfbAC3C691BEACD54949bBd43FF8bBe869e8930' as Address;
+
+const STABLECOIN_ZAP_ABI = [
+    {
+        type: 'function',
+        name: 'zap',
+        inputs: [
+            { name: 'inputToken', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+            { name: 'slippageBps', type: 'uint256' },
+            { name: 'minLiquidity', type: 'uint128' }
+        ],
+        outputs: [
+            { name: 'tokenId', type: 'uint256' },
+            { name: 'liquidity', type: 'uint128' }
+        ],
+        stateMutability: 'nonpayable'
+    }
+] as const;
 
 interface PoolConfig {
     token0?: Token;
@@ -78,12 +102,38 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
     // Auto-stake state
     const [autoStake, setAutoStake] = useState(true); // Default to enabled
 
+    // Zap tab state (for stablecoin pairs)
+    const [activeTab, setActiveTab] = useState<ActiveTab>('regular');
+    const [zapAmount, setZapAmount] = useState('');
+    const [selectedZapToken, setSelectedZapToken] = useState<'USDC' | 'USDT0'>('USDC');
+    const [isApproving, setIsApproving] = useState(false);
+    const [isZapping, setIsZapping] = useState(false);
+
     // Hooks
     const { addLiquidity, isLoading, error } = useLiquidity();
     const { raw: rawBalanceA, formatted: balanceA } = useTokenBalance(tokenA);
     const { raw: rawBalanceB, formatted: balanceB } = useTokenBalance(tokenB);
     const { writeContractAsync } = useWriteContract();
     const { poolRewards, windPrice, seiPrice, allPools } = usePoolData();
+    const toast = useToast();
+
+    // Zap token and balance
+    const zapToken = selectedZapToken === 'USDC' ? USDC : USDT0;
+    const { raw: rawZapBalance, rawBigInt: zapBalanceBigInt, formatted: zapBalance, refetch: refetchZapBalance } = useTokenBalance(zapToken);
+    const { allowance: zapAllowance, refetch: refetchZapAllowance } = useTokenAllowance(zapToken, STABLECOIN_ZAP_ADDRESS);
+
+    // Parse zap amount and check conditions
+    const parsedZapAmount = zapAmount ? parseUnits(zapAmount, zapToken.decimals) : BigInt(0);
+    const needsZapApproval = zapAllowance !== undefined && parsedZapAmount > zapAllowance;
+    const hasInsufficientZapBalance = zapBalanceBigInt !== undefined && parsedZapAmount > zapBalanceBigInt;
+
+    // Check if current pool is USDC/USDT0 stablecoin pool eligible for zap
+    const isStablecoinZapPool = (() => {
+        if (!tokenA || !tokenB) return false;
+        const symbols = [tokenA.symbol?.toUpperCase(), tokenB.symbol?.toUpperCase()];
+        return (symbols.includes('USDC') && symbols.includes('USDT0')) ||
+            (symbols.includes('USDC') && symbols.includes('USDT'));
+    })();
 
     // Find gauge for current pool configuration
     const getPoolGauge = useCallback(() => {
@@ -789,6 +839,76 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
         }
     };
 
+    // Handle zap approval
+    const handleZapApprove = async () => {
+        if (!address) return;
+
+        setIsApproving(true);
+        haptic('medium');
+
+        try {
+            await writeContractAsync({
+                address: zapToken.address as Address,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [STABLECOIN_ZAP_ADDRESS, parsedZapAmount],
+            });
+
+            toast.info('Approval submitted...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            await refetchZapAllowance();
+
+            toast.success(`${selectedZapToken} approved!`);
+            haptic('success');
+        } catch (err: any) {
+            console.error('Approval failed:', err);
+            toast.error(err.shortMessage || 'Approval failed');
+            haptic('error');
+        } finally {
+            setIsApproving(false);
+        }
+    };
+
+    // Handle zap execution
+    const handleZap = async () => {
+        if (!address || parsedZapAmount === BigInt(0)) return;
+
+        setIsZapping(true);
+        haptic('medium');
+
+        try {
+            await writeContractAsync({
+                address: STABLECOIN_ZAP_ADDRESS,
+                abi: STABLECOIN_ZAP_ABI,
+                functionName: 'zap',
+                args: [
+                    zapToken.address as Address,
+                    parsedZapAmount,
+                    BigInt(50), // 0.5% slippage
+                    BigInt(0),  // min liquidity (we accept any)
+                ],
+            });
+
+            toast.info('Zap submitted! Creating LP position...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            toast.success('LP position created! Check your portfolio.');
+            haptic('success');
+
+            setZapAmount('');
+            refetchZapBalance();
+            onClose();
+        } catch (err: any) {
+            console.error('Zap failed:', err);
+            toast.error(err.shortMessage || 'Zap failed');
+            haptic('error');
+        } finally {
+            setIsZapping(false);
+        }
+    };
+
+    const isZapLoading = isApproving || isZapping;
+
     // Check if we're in the middle of a CL transaction
     const isCLInProgress = txProgress !== 'idle' && txProgress !== 'done' && txProgress !== 'error';
 
@@ -804,6 +924,10 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
     // Check if pool config is pre-defined (clicking Add LP on existing pool)
     const isPoolPreConfigured = !!(initialPool?.token0 && initialPool?.token1);
+
+    // Only show zap tab when on a stablecoin pool
+    const showZapTab = isPoolPreConfigured && isStablecoinZapPool;
+    const isZapActive = showZapTab && activeTab === 'zap';
 
     return (
         <>
@@ -919,6 +1043,116 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 )}
 
+                                {/* Tab Selector for Stablecoin Pools */}
+                                {showZapTab && (
+                                    <div className="flex gap-2 p-1 bg-white/5 rounded-xl">
+                                        <button
+                                            onClick={() => setActiveTab('regular')}
+                                            className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${activeTab === 'regular'
+                                                ? 'bg-gradient-to-r from-primary/30 to-secondary/30 text-white border border-primary/40'
+                                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                                }`}
+                                        >
+                                            📊 Regular LP
+                                        </button>
+                                        <button
+                                            onClick={() => setActiveTab('zap')}
+                                            className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${activeTab === 'zap'
+                                                ? 'bg-gradient-to-r from-indigo-500/30 to-purple-500/30 text-white border border-indigo-400/40'
+                                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                                }`}
+                                        >
+                                            ⚡ Zap (1 Token)
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Zap Content - Only shown when zap tab is active */}
+                                {isZapActive && (
+                                    <div className="space-y-4">
+                                        {/* Zap Explanation */}
+                                        <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-lg">⚡</span>
+                                                <span className="font-medium text-sm text-indigo-300">One-Click LP</span>
+                                            </div>
+                                            <p className="text-xs text-gray-400">
+                                                Deposit a single stablecoin - we&apos;ll swap 50% and create your LP position automatically.
+                                            </p>
+                                        </div>
+
+                                        {/* Token Selection */}
+                                        <div>
+                                            <label className="text-sm text-gray-400 mb-2 block font-medium">Select Token</label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setSelectedZapToken('USDC')}
+                                                    className={`flex-1 py-3 px-4 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${selectedZapToken === 'USDC'
+                                                        ? 'bg-indigo-500 text-white'
+                                                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    {USDC.logoURI && <img src={USDC.logoURI} alt="" className="w-5 h-5 rounded-full" />}
+                                                    USDC
+                                                </button>
+                                                <button
+                                                    onClick={() => setSelectedZapToken('USDT0')}
+                                                    className={`flex-1 py-3 px-4 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${selectedZapToken === 'USDT0'
+                                                        ? 'bg-indigo-500 text-white'
+                                                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    {USDT0.logoURI && <img src={USDT0.logoURI} alt="" className="w-5 h-5 rounded-full" />}
+                                                    USDT0
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Amount Input */}
+                                        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-sm text-gray-400">Amount</span>
+                                                <span className="text-sm text-gray-400">
+                                                    Balance: {zapBalance ? parseFloat(zapBalance).toFixed(2) : '0.00'} {selectedZapToken}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    value={zapAmount}
+                                                    onChange={(e) => setZapAmount(e.target.value)}
+                                                    placeholder="0.00"
+                                                    className="flex-1 bg-transparent text-2xl font-bold text-white outline-none"
+                                                    disabled={isZapLoading}
+                                                />
+                                                <button
+                                                    onClick={() => rawZapBalance && setZapAmount(rawZapBalance)}
+                                                    className="px-3 py-1.5 text-xs font-medium bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors"
+                                                    disabled={isZapLoading}
+                                                >
+                                                    MAX
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Zap Info */}
+                                        <div className="bg-white/5 rounded-lg p-3 space-y-1 border border-white/10">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-400">Tick Range</span>
+                                                <span className="text-white">±0.5% (Tight)</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-400">Slippage</span>
+                                                <span className="text-white">0.5%</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-400">Action</span>
+                                                <span className="text-indigo-400">Swap 50% + Add LP</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Pool Type Selection - only show when creating new pool */}
                                 {!isPoolPreConfigured && (
                                     <div>
@@ -1014,7 +1248,7 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                 )}
 
                                 {/* CL Price Range */}
-                                {poolType === 'cl' && (
+                                {poolType === 'cl' && !isZapActive && (
                                     <div className="space-y-3">
                                         {/* New Pool - Initial Price Input (only if no pool exists) */}
                                         {!poolExists && (
@@ -1349,115 +1583,118 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
                                     </div>
                                 )}
 
-                                <div className="space-y-0.5">
-                                    {/* Token A */}
-                                    <div className={`p-3 rounded-lg border ${depositTokenAForOneSided ? 'bg-green-500/5 border-green-500/30' : depositTokenBForOneSided ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <label className="text-xs text-gray-400">
-                                                {depositTokenAForOneSided ? (
-                                                    <span className="text-green-400">You Deposit</span>
-                                                ) : depositTokenBForOneSided ? (
-                                                    <span className="text-gray-500">Not needed (0)</span>
-                                                ) : 'You Deposit'}
-                                            </label>
-                                            <span className="text-[10px] text-gray-400">
-                                                Bal: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={amountA}
-                                                onChange={(e) => !depositTokenBForOneSided && setAmountA(e.target.value)}
-                                                readOnly={depositTokenBForOneSided}
-                                                placeholder={depositTokenBForOneSided ? '0' : '0.0'}
-                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${depositTokenBForOneSided ? 'text-gray-400' : ''}`}
-                                            />
-                                            <button
-                                                onClick={() => setSelectorOpen('A')}
-                                                className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
-                                            >
-                                                {tokenA && tokenA.logoURI && (
-                                                    <img src={tokenA.logoURI} alt="" className="w-5 h-5 rounded-full" />
-                                                )}
-                                                <span className="font-semibold text-sm">{tokenA?.symbol || 'Select'}</span>
-                                            </button>
-                                        </div>
-                                        {/* Quick percentage buttons - only show when it's the deposit token */}
-                                        {rawBalanceA && parseFloat(rawBalanceA) > 0 && !depositTokenBForOneSided && (
-                                            <div className="flex gap-1 mt-2">
-                                                {[25, 50, 75, 100].map(pct => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => setAmountA((parseFloat(rawBalanceA) * pct / 100).toString())}
-                                                        className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                                                    >
-                                                        {pct === 100 ? 'MAX' : `${pct}%`}
-                                                    </button>
-                                                ))}
+                                {/* Token Inputs - Hide when zap is active */}
+                                {!isZapActive && (
+                                    <div className="space-y-0.5">
+                                        {/* Token A */}
+                                        <div className={`p-3 rounded-lg border ${depositTokenAForOneSided ? 'bg-green-500/5 border-green-500/30' : depositTokenBForOneSided ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-xs text-gray-400">
+                                                    {depositTokenAForOneSided ? (
+                                                        <span className="text-green-400">You Deposit</span>
+                                                    ) : depositTokenBForOneSided ? (
+                                                        <span className="text-gray-500">Not needed (0)</span>
+                                                    ) : 'You Deposit'}
+                                                </label>
+                                                <span className="text-[10px] text-gray-400">
+                                                    Bal: {balanceA ? parseFloat(balanceA).toFixed(4) : '--'}
+                                                </span>
                                             </div>
-                                        )}
-                                    </div>
-
-
-
-                                    {/* Token B */}
-                                    <div className={`p-3 rounded-lg border ${depositTokenBForOneSided ? 'bg-green-500/5 border-green-500/30' : 'bg-white/5 border-white/10'}`}>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <label className="text-xs text-gray-400">
-                                                {depositTokenBForOneSided ? (
-                                                    <span className="text-green-400">You Deposit</span>
-                                                ) : poolType === 'cl' ? (
-                                                    depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
-                                                ) : 'You Deposit'}
-                                            </label>
-                                            <button
-                                                onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
-                                                className="text-[10px] text-gray-400 hover:text-primary transition-colors"
-                                            >
-                                                Bal: {balanceB || '--'}
-                                            </button>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={amountB}
-                                                onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
-                                                readOnly={poolType === 'cl' && !depositTokenBForOneSided}
-                                                placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
-                                                className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
-                                            />
-                                            <button
-                                                onClick={() => setSelectorOpen('B')}
-                                                className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
-                                            >
-                                                {tokenB && tokenB.logoURI && (
-                                                    <img src={tokenB.logoURI} alt="" className="w-5 h-5 rounded-full" />
-                                                )}
-                                                <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
-                                            </button>
-                                        </div>
-                                        {/* Quick percentage buttons - only show when it's the deposit token */}
-                                        {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
-                                            <div className="flex gap-1 mt-2">
-                                                {[25, 50, 75, 100].map(pct => (
-                                                    <button
-                                                        key={pct}
-                                                        onClick={() => setAmountB((parseFloat(rawBalanceB) * pct / 100).toString())}
-                                                        className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                                                    >
-                                                        {pct === 100 ? 'MAX' : `${pct}%`}
-                                                    </button>
-                                                ))}
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={amountA}
+                                                    onChange={(e) => !depositTokenBForOneSided && setAmountA(e.target.value)}
+                                                    readOnly={depositTokenBForOneSided}
+                                                    placeholder={depositTokenBForOneSided ? '0' : '0.0'}
+                                                    className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${depositTokenBForOneSided ? 'text-gray-400' : ''}`}
+                                                />
+                                                <button
+                                                    onClick={() => setSelectorOpen('A')}
+                                                    className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
+                                                >
+                                                    {tokenA && tokenA.logoURI && (
+                                                        <img src={tokenA.logoURI} alt="" className="w-5 h-5 rounded-full" />
+                                                    )}
+                                                    <span className="font-semibold text-sm">{tokenA?.symbol || 'Select'}</span>
+                                                </button>
                                             </div>
-                                        )}
+                                            {/* Quick percentage buttons - only show when it's the deposit token */}
+                                            {rawBalanceA && parseFloat(rawBalanceA) > 0 && !depositTokenBForOneSided && (
+                                                <div className="flex gap-1 mt-2">
+                                                    {[25, 50, 75, 100].map(pct => (
+                                                        <button
+                                                            key={pct}
+                                                            onClick={() => setAmountA((parseFloat(rawBalanceA) * pct / 100).toString())}
+                                                            className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                                        >
+                                                            {pct === 100 ? 'MAX' : `${pct}%`}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+
+
+                                        {/* Token B */}
+                                        <div className={`p-3 rounded-lg border ${depositTokenBForOneSided ? 'bg-green-500/5 border-green-500/30' : 'bg-white/5 border-white/10'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-xs text-gray-400">
+                                                    {depositTokenBForOneSided ? (
+                                                        <span className="text-green-400">You Deposit</span>
+                                                    ) : poolType === 'cl' ? (
+                                                        depositTokenAForOneSided ? <span className="text-gray-500">Not needed (0)</span> : 'Auto-calc'
+                                                    ) : 'You Deposit'}
+                                                </label>
+                                                <button
+                                                    onClick={() => rawBalanceB && (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(rawBalanceB)}
+                                                    className="text-[10px] text-gray-400 hover:text-primary transition-colors"
+                                                >
+                                                    Bal: {balanceB || '--'}
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={amountB}
+                                                    onChange={(e) => (poolType !== 'cl' || depositTokenBForOneSided) && setAmountB(e.target.value)}
+                                                    readOnly={poolType === 'cl' && !depositTokenBForOneSided}
+                                                    placeholder={poolType === 'cl' ? (depositTokenBForOneSided ? '0.0' : 'Auto') : '0.0'}
+                                                    className={`flex-1 min-w-0 bg-transparent text-xl font-bold outline-none placeholder-gray-600 ${poolType === 'cl' && !depositTokenBForOneSided ? 'text-gray-400' : ''}`}
+                                                />
+                                                <button
+                                                    onClick={() => setSelectorOpen('B')}
+                                                    className="flex items-center gap-1.5 py-1.5 px-2 bg-white/10 hover:bg-white/15 rounded-lg transition-colors flex-shrink-0"
+                                                >
+                                                    {tokenB && tokenB.logoURI && (
+                                                        <img src={tokenB.logoURI} alt="" className="w-5 h-5 rounded-full" />
+                                                    )}
+                                                    <span className="font-semibold text-sm">{tokenB?.symbol || 'Select'}</span>
+                                                </button>
+                                            </div>
+                                            {/* Quick percentage buttons - only show when it's the deposit token */}
+                                            {rawBalanceB && parseFloat(rawBalanceB) > 0 && depositTokenBForOneSided && (
+                                                <div className="flex gap-1 mt-2">
+                                                    {[25, 50, 75, 100].map(pct => (
+                                                        <button
+                                                            key={pct}
+                                                            onClick={() => setAmountB((parseFloat(rawBalanceB) * pct / 100).toString())}
+                                                            className="flex-1 py-1 text-[10px] font-medium rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                                                        >
+                                                            {pct === 100 ? 'MAX' : `${pct}%`}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* Auto-Stake Toggle - only show for pools with gauges */}
-                                {hasGauge && poolType === 'cl' && (
+                                {hasGauge && poolType === 'cl' && !isZapActive && (
                                     <div className="p-3 rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
                                         <label className="flex items-center justify-between cursor-pointer">
                                             <div className="flex items-center gap-2">
@@ -1514,33 +1751,83 @@ export function AddLiquidityModal({ isOpen, onClose, initialPool }: AddLiquidity
 
                             {/* Sticky Footer with Action Button */}
                             <div className={mobileStyles.footer}>
-                                <motion.button
-                                    onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
-                                    disabled={!canAdd || isLoading || isCLInProgress}
-                                    className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${canAdd && !isLoading && !isCLInProgress
-                                        ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
-                                        : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                                        }`}
-                                    whileTap={canAdd ? { scale: 0.98 } : {}}
-                                >
-                                    {isLoading || isCLInProgress ? (
-                                        <span className="flex items-center justify-center gap-3">
-                                            <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                            </svg>
-                                            Adding Liquidity...
-                                        </span>
-                                    ) : !isConnected ? (
-                                        '🔗 Connect Wallet'
-                                    ) : !tokenA || !tokenB ? (
-                                        'Select Tokens'
-                                    ) : !amountA || (parseFloat(amountA) <= 0 && parseFloat(amountB || '0') <= 0) ? (
-                                        'Enter Amount'
+                                {isZapActive ? (
+                                    /* Zap Footer Buttons */
+                                    !isConnected ? (
+                                        <button
+                                            className="w-full py-4 rounded-2xl font-bold text-lg bg-gray-700 text-gray-400 cursor-not-allowed"
+                                            disabled
+                                        >
+                                            🔗 Connect Wallet
+                                        </button>
+                                    ) : hasInsufficientZapBalance ? (
+                                        <button
+                                            className="w-full py-4 rounded-2xl font-bold text-lg bg-red-500/20 text-red-400 cursor-not-allowed"
+                                            disabled
+                                        >
+                                            Insufficient Balance
+                                        </button>
+                                    ) : needsZapApproval ? (
+                                        <motion.button
+                                            onClick={handleZapApprove}
+                                            disabled={isZapLoading || parsedZapAmount === BigInt(0)}
+                                            className="w-full py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
+                                            whileTap={{ scale: 0.98 }}
+                                        >
+                                            {isApproving ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <span className="animate-spin">⏳</span> Approving...
+                                                </span>
+                                            ) : (
+                                                `Approve ${selectedZapToken}`
+                                            )}
+                                        </motion.button>
                                     ) : (
-                                        <>Add Liquidity</>
-                                    )}
-                                </motion.button>
+                                        <motion.button
+                                            onClick={handleZap}
+                                            disabled={isZapLoading || parsedZapAmount === BigInt(0)}
+                                            className="w-full py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
+                                            whileTap={{ scale: 0.98 }}
+                                        >
+                                            {isZapping ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <span className="animate-spin">⚡</span> Zapping...
+                                                </span>
+                                            ) : (
+                                                '⚡ Zap into LP'
+                                            )}
+                                        </motion.button>
+                                    )
+                                ) : (
+                                    /* Regular LP Footer Button */
+                                    <motion.button
+                                        onClick={poolType === 'cl' ? handleAddCLLiquidity : handleAddLiquidity}
+                                        disabled={!canAdd || isLoading || isCLInProgress}
+                                        className={`w-full py-4 rounded-2xl font-bold text-lg transition-all shadow-xl ${canAdd && !isLoading && !isCLInProgress
+                                            ? 'bg-gradient-to-r from-primary via-purple-500 to-secondary text-white shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 active:scale-[0.98]'
+                                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                            }`}
+                                        whileTap={canAdd ? { scale: 0.98 } : {}}
+                                    >
+                                        {isLoading || isCLInProgress ? (
+                                            <span className="flex items-center justify-center gap-3">
+                                                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                </svg>
+                                                Adding Liquidity...
+                                            </span>
+                                        ) : !isConnected ? (
+                                            '🔗 Connect Wallet'
+                                        ) : !tokenA || !tokenB ? (
+                                            'Select Tokens'
+                                        ) : !amountA || (parseFloat(amountA) <= 0 && parseFloat(amountB || '0') <= 0) ? (
+                                            'Enter Amount'
+                                        ) : (
+                                            <>Add Liquidity</>
+                                        )}
+                                    </motion.button>
+                                )}
                             </div>
                         </motion.div>
                     </motion.div>

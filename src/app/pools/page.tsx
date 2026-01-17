@@ -229,6 +229,8 @@ export default function PoolsPage() {
                 </motion.button>
             </motion.div>
 
+            {/* Zap functionality now integrated into AddLiquidityModal as a tab */}
+
             {/* Filters Row - Compact */}
             <motion.div
                 className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 mb-4 sm:mb-8"
